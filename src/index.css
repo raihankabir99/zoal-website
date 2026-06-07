@@ -1,0 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syncopate:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Syncopate", "Inter", sans-serif;
+  
+  --color-gold-50: #fefbeb;
+  --color-gold-100: #fef3c7;
+  --color-gold-200: #fde58a;
+  --color-gold-300: #fcd34d;
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+  --color-gold-700: #b45309;
+  --color-gold-800: #92400e;
+  --color-gold-900: #78350f;
+  --color-gold-pure: #D4AF37;
+  --color-gold-light: #F3E5AB;
+  --color-gold-dark: #AA7C11;
+}
+
+/* Custom Base Styles */
+html {
+  scroll-behavior: smooth;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: #000000;
+  overflow-x: hidden;
+}
+
+/* Custom Utilities for Premium Look */
+@layer utilities {
+  .text-stroke-white {
+    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.85);
+    color: transparent;
+  }
+  .text-stroke-gold {
+    -webkit-text-stroke: 1px rgba(212, 175, 55, 0.85);
+    color: transparent;
+  }
+  .text-glow-gold {
+    text-shadow: 0 0 10px rgba(212, 175, 55, 0.4), 0 0 20px rgba(212, 175, 55, 0.2);
+  }
+  .border-glow-gold {
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.15);
+  }
+  .bg-glass {
+    background-color: rgba(10, 10, 10, 0.75);
+    backdrop-filter: blur(16px);
+  }
+  .bg-glass-heavy {
+    background-color: rgba(5, 5, 5, 0.9);
+    backdrop-filter: blur(24px);
+  }
+}
+
+/* Custom gold ambient background glows */
+.gold-glow-orb {
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+.gold-glow-orb-sm {
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.05) 0%, rgba(0, 0, 0, 0) 50%);
+}
+
+/* Modern Minimalist Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222222;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #D4AF37;
+}
+
+/* Heading letter spacings */
+.heading-premium {
+  font-family: var(--font-display);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+.heading-sub {
+  font-family: var(--font-sans);
+  letter-spacing: 0.1em;
+}
+
+/* Slowly zooms images on scroll using modern CSS Scroll-driven Animations with smooth Transitions */
+@keyframes slowScrollZoom {
+  0% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1.14);
+  }
+}
+
+.scroll-zoom-effect {
+  transition: transform 1.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slowScrollZoom linear both;
+  animation-timeline: view(block);
+  animation-range: entry 5% exit 95%;
+  will-change: transform;
+}
+
+/* Add tactile micro-interaction hover state */
+.scroll-zoom-effect:hover {
+  transform: scale(1.1);
+  transition-duration: 0.8s;
+}
