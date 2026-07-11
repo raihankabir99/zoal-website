@@ -10,8 +10,8 @@ export const PRODUCTS: Product[] = [
     price: 45,
     category: 'coffee',
     images: [
-      'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/coffee-saffron-latte.jpg',
+      '/src/assets/images/coffee-saffron-latte-detail.jpg'
     ],
     specifications: {
       'Serving Profile': 'Hot or Shaken over Swiss Ice Spheres',
@@ -36,7 +36,7 @@ export const PRODUCTS: Product[] = [
     price: 38,
     category: 'coffee',
     images: [
-      'https://images.unsplash.com/photo-151097252790b-af4f42d91015?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/coffee-cold-brew.jpg'
     ],
     specifications: {
       'Steep Time': '24-hour slow maturation',
@@ -57,7 +57,7 @@ export const PRODUCTS: Product[] = [
     price: 32,
     category: 'coffee',
     images: [
-      'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/coffee-rose-tea.jpg'
     ],
     specifications: {
       'Origin': 'Taif Rose Valley & Kashmir Plains',
@@ -71,7 +71,7 @@ export const PRODUCTS: Product[] = [
     reviews: []
   },
 
-  // 2. SUDAN BAKERY & TRADITIONAL FOODS ('bakery')
+  // 2. SUDAN BAKERY & SNACKS ('bakery')
   {
     id: 'b1',
     name: 'Premium House Traditional Hoboz Bread',
@@ -80,7 +80,7 @@ export const PRODUCTS: Product[] = [
     price: 15,
     category: 'bakery',
     images: [
-      'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/bakery-hoboz.jpg'
     ],
     specifications: {
       'Sourdough Starter': 'Classic Traditional Wild Culture',
@@ -104,7 +104,7 @@ export const PRODUCTS: Product[] = [
     price: 65,
     category: 'bakery',
     images: [
-      'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/bakery-ghoriba.jpg'
     ],
     specifications: {
       'Butter Quality': '100% Traditional pure clarified ghee',
@@ -125,7 +125,7 @@ export const PRODUCTS: Product[] = [
     price: 35,
     category: 'bakery',
     images: [
-      'https://images.unsplash.com/photo-1548907040-4d42b52125f0?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/bakery-sambuxa.jpg'
     ],
     specifications: {
       'Knead': 'Ultra-thin hand-rolled layered dough',
@@ -148,7 +148,7 @@ export const PRODUCTS: Product[] = [
     price: 75,
     category: 'market',
     images: [
-      'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=800'
+      '/images/market_grocery_official_1781633042972.jpg'
     ],
     specifications: {
       'Production': 'Handpicked & Sun-dried in traditional burlap',
@@ -171,7 +171,7 @@ export const PRODUCTS: Product[] = [
     price: 95,
     category: 'market',
     images: [
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'
+      '/images/market_grocery_official_1781633042972.jpg'
     ],
     specifications: {
       'Acacia Species': 'Acacia Senegal (Hashab Grade A)',
@@ -185,16 +185,16 @@ export const PRODUCTS: Product[] = [
     reviews: []
   },
 
-  // 4. SUDAN FASHION & TEXTILES ('fashion')
+  // 4. PREMIUM COLLECTIONS ('fashion')
   {
     id: 'f1',
-    name: 'Al-Shati Hand-Woven Sudanese Toob',
-    description: 'Indulge in absolute luxury. A traditional hand-woven women’s Toob dress made from exquisite, ultra-lightweight cotton blended with custom-spun gold silk fibers.',
+    name: 'Imported Authentic Sudanese Toob',
+    description: 'Indulge in absolute luxury. A traditional imported women’s Toob dress made from exquisite, ultra-lightweight cotton blended with custom-spun gold silk fibers.',
     subDescription: 'Timeless Sudanese women’s wear crafted for formal celebrations.',
     price: 1850,
     category: 'fashion',
     images: [
-      'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/fashion-sudanese-toob.jpg'
     ],
     specifications: {
       'Fabric Composition': '70% Giza Cotton / 30% Metallic Silk',
@@ -202,7 +202,7 @@ export const PRODUCTS: Product[] = [
       'Length': 'Standard 4.5 meters luxury drape',
       'Care': 'Bespoke custom dry laundering only'
     },
-    story: 'The traditional Toob represents Sudanese design sovereignty. Our atelier hand-weaves each drape slowly over two weeks, blending soft cotton fiber with reflective golden threads to catch the evening lights spectacularly.',
+    story: 'The traditional Toob represents Sudanese design sovereignty. We import these exquisite drapes directly from the finest artisans in Sudan where they are woven over two weeks, blending soft cotton fiber with reflective golden threads to catch the evening lights spectacularly.',
     rating: 5.0,
     inventory: 10,
     popular: true,
@@ -218,60 +218,60 @@ export const PRODUCTS: Product[] = [
     price: 1450,
     category: 'fashion',
     images: [
-      'https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/fashion-silk-abaya.jpg'
     ],
     specifications: {
       'Silk Weight': '22-Momme heavy luxury drape',
       'Embroidery': 'Traditional gold thread embroidery',
       'Included Accessories': 'Mulberry silk veil & gold satin dustbag'
     },
-    story: 'By weaving traditional Arabic calligraphy geometries into structured silk panels, this Abaya represents the intersection of classical modesty with ultra-modern architectural symmetry.',
+    story: 'Imported directly from specialized artisans, this Abaya features woven traditional Arabic calligraphy geometries into structured silk panels, representing the intersection of classical modesty with ultra-modern architectural symmetry.',
     rating: 4.9,
     inventory: 15,
     popular: false,
     reviews: []
   },
 
-  // 5. POTS & HOUSEHOLD COLLECTION ('pots')
+  // 5. THOBES COLLECTION ('thobes')
   {
     id: 'p1',
-    name: 'Hand-Carved Oasis Sandstone Flower Pot',
-    description: 'An architectural planter carved out of continuous natural sandstone blocks from Saudi valleys. Beautiful organic banding patterns.',
-    subDescription: 'Heavy-set minimalist container for design-conscious organic interiors.',
+    name: 'Luxury Sudanese White Thobe',
+    description: 'A premium, pristine white traditional Thobe crafted from the finest breathable cotton.',
+    subDescription: 'Classic, crisp white Thobe featuring elegant drape and refined finishing.',
     price: 490,
-    category: 'pots',
+    category: 'thobes',
     images: [
-      'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/thobes-white-luxury.jpg'
     ],
     specifications: {
-      'Weight': '4.8 kg solid rock',
-      'Treatment': 'Water-resistant interior hydrophobic glaze scaling',
-      'Dimensions': 'h 24cm / d 18cm'
+      'Fabric': '100% Premium Breathable Cotton',
+      'Detailing': 'Reinforced seams, structured collar',
+      'Length': 'Customizable measurements'
     },
-    story: 'Carved individually by our master stone artisans in Al-Ahsa, this sandstone pot combines raw earth textures with precise circular geometry. No two pots share the same sand-depositation banding.',
+    story: 'Designed to embody the pinnacle of Sudanese traditional menswear, this Thobe blends heritage craft with unparalleled luxury fabrics, offering both immaculate presentation and complete daytime comfort.',
     rating: 5.0,
     inventory: 20,
     popular: true,
     reviews: [
-      { id: 'r6', reviewerName: 'Norah Dammam', rating: 5, date: '2026-05-27', comment: 'Heavy, earthy, and incredibly elegant under foyer lighting.' }
+      { id: 'r6', reviewerName: 'Norah Dammam', rating: 5, date: '2026-05-27', comment: 'Extremely soft and feels exceptionally premium.' }
     ]
   },
   {
     id: 'p2',
-    name: 'Brutalist Mud Terracotta Garden Urn',
-    description: 'A large, rustic fired mud garden pot with natural porous breathing walls to optimize root oxygenation and soil health.',
-    subDescription: 'Traditional kiln-baked clay pot for outdoor terraces and courtyard gardens.',
+    name: 'Modern Heritage Men\'s Thobe',
+    description: 'A contemporary take on traditional wear, featuring subtle modern tailoring elements.',
+    subDescription: 'Traditional silhouette updated with sophisticated sharp lines.',
     price: 320,
-    category: 'pots',
+    category: 'thobes',
     images: [
-      'https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&q=80&w=800'
+      '/src/assets/images/thobes-heritage-modern.jpg'
     ],
     specifications: {
-      'Clay Base': 'Traditional brown rich mountain clay',
-      'Baking process': 'Wood-kiln smoke-tempered finish',
-      'Porosity': 'High natural respiration'
+      'Fabric Blend': 'Cotton-Linen mix for effortless drape',
+      'Stitching': 'Tonal embroidery',
+      'Weight': 'Lightweight'
     },
-    story: 'Fired in traditional pits at extremely high temperatures, this Terracotta Garden Urn features beautiful, random soot kisses and an organic tactile texture that ages beautifully over years of watering.',
+    story: 'Woven for elegance, this modern iteration pays homage to ancestral lines while introducing subtle structural enhancements suitable for today\'s formal occasions.',
     rating: 4.8,
     inventory: 25,
     popular: false,
@@ -283,11 +283,11 @@ export const BRANCHES: Branch[] = [
   {
     id: 'b-dammam',
     name: 'ZOAL Al Hofuf Flagship Lounge',
-    address: '9H9F+57J, Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361',
-    phone: '+966 13 833 9001',
+    address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+    phone: '+966 56 769 9315',
     hours: '08:00 AM - Midnight (Fri/Sat: till 01:00 AM)',
-    description: 'Our award-winning flagship showroom features glass structures, a specialty Espresso theater, raw sandstone columns, Sudanese textile showcases, and beautiful terracotta botanical displays.',
-    image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=800',
+    description: 'Our award-winning flagship showroom features glass structures, a specialty Espresso theater, raw sandstone columns, Sudanese premium collections showcases, and beautiful terracotta botanical displays.',
+    image: '/src/assets/images/branch-al-hofuf.jpg',
     coordinates: { lat: 25.367976, lng: 49.573064 }
   }
 ];
@@ -302,7 +302,7 @@ export const ARTICLES: Article[] = [
     date: 'June 1, 2026',
     author: 'Majid Bin Khalid',
     readTime: '5 min read',
-    image: 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=800'
+    image: '/src/assets/images/blog-saffron-ritual.jpg'
   },
   {
     id: 'art2',
@@ -313,18 +313,18 @@ export const ARTICLES: Article[] = [
     date: 'May 20, 2026',
     author: 'Chef Charles Vagner',
     readTime: '7 min read',
-    image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&q=80&w=800'
+    image: '/src/assets/images/blog-baking-physics.jpg'
   },
   {
     id: 'art3',
     title: 'Woven Legacies: The Craft of the Hand-Turned Sudanese Toob',
-    category: 'Textiles & Fashion',
-    excerpt: 'Discover the meticulous details that turn fine organic cotton and gold silk fibers into iconic drapes.',
-    content: "Traditional apparel is more than garment work; it is written poetry in movement. The traditional Toob dress drapes with heavy tactile depth, wrapping the silhouette in elegant ripples. Sourcing fine long-staple cotton and gold-wrapped wires allows us to weave beautiful geometric borders directly onto the loom surfaces. At our Al-Shati workshop, local seamstresses carefully turn each border to align with original calligraphic geometry, ensuring that each formal dress serves as a mobile work of art.",
+    category: 'Premium Collections',
+    excerpt: 'Discover the meticulous details of fine organic cotton and gold silk fibers in our imported iconic drapes.',
+    content: "Traditional apparel is more than garment work; it is written poetry in movement. The traditional Toob dress drapes with heavy tactile depth, wrapping the silhouette in elegant ripples. We source imported garments featuring fine long-staple cotton and gold-wrapped wires that form beautiful geometric borders directly onto the loom surfaces. At our retail location, we ensure each imported formal dress serves as a mobile work of art.",
     date: 'May 10, 2026',
     author: 'Amal S. Al Saud',
     readTime: '6 min read',
-    image: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=800'
+    image: '/src/assets/images/blog-woven-legacies.jpg'
   }
 ];
 
@@ -348,8 +348,8 @@ export const SEED_MOCK_ORDERS: Order[] = [
     total: 165.25,
     status: 'Preparing',
     customerName: 'Ahmad Al-Ghamdi',
-    email: 'ahmad@example.sa',
-    phone: '+966 50 123 4567',
+    email: 'alzoal3003@gmail.com',
+    phone: '+966 56 769 9315',
     address: 'Al Shati District, Dammam, KSA',
     paymentMethod: 'Apple Pay',
     trackingNumber: 'ZOAL-DAM-10928'
@@ -358,7 +358,7 @@ export const SEED_MOCK_ORDERS: Order[] = [
     id: 'ZL-9543',
     date: '2026-06-03',
     items: [
-      { productId: 'f1', name: 'Al-Shati Hand-Woven Sudanese Toob', price: 1850, quantity: 1, selectedOption: 'Bespoke weave' }
+      { productId: 'f1', name: 'Imported Authentic Sudanese Toob', price: 1850, quantity: 1, selectedOption: 'Premium Presentation Box' }
     ],
     subtotal: 1850,
     shipping: 0,
@@ -366,8 +366,8 @@ export const SEED_MOCK_ORDERS: Order[] = [
     total: 1850.00,
     status: 'Completed',
     customerName: 'Yasmine Al-Sudairy',
-    email: 'yasmine.s@lux.sa',
-    phone: '+966 55 987 6543',
+    email: 'alzoal3003@gmail.com',
+    phone: '+966 56 769 9315',
     address: 'Al Belt Area, Khobar, KSA',
     paymentMethod: 'Mada Debit Card',
     trackingNumber: 'ZOAL-DAM-09724'

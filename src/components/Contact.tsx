@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Phone, Clock, MessageSquare, Landmark, Send, CheckCircle2 } from 'lucide-react';
+import { Mail, Phone, Clock, MessageSquare, Landmark, Send, CheckCircle2, MapPin } from 'lucide-react';
 
 export default function Contact() {
   const [name, setName] = useState('');
@@ -23,13 +23,13 @@ export default function Contact() {
   };
 
   return (
-    <div className="bg-black text-white min-h-screen pt-28 pb-20">
+    <div className="bg-black text-white min-h-screen pt-[80px] sm:pt-[84px] md:pt-[88px] lg:pt-[92px] pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Title */}
         <div className="text-center mb-16">
           <span className="text-[10px] tracking-[0.4em] text-gold-pure uppercase font-display block mb-3">
-            Atelier Consultations
+            Contact Us
           </span>
           <h1 className="text-3xl sm:text-5xl font-bold tracking-[0.25em] uppercase font-display">
             Inquire Privately
@@ -44,7 +44,7 @@ export default function Contact() {
             
             <div className="space-y-2">
               <h3 className="text-white text-base font-display uppercase tracking-widest font-semibold">
-                ZOAL Group Registry
+                ZOAL Registry
               </h3>
               <p className="text-zinc-500 text-xs leading-relaxed max-w-sm">
                 Our customer relationship officers are online around the clock. Your inquiries are handled in absolute privacy.
@@ -56,45 +56,61 @@ export default function Contact() {
               <div className="p-5 flex items-start gap-4">
                 <Mail className="w-5 h-5 text-gold-pure mt-0.5" />
                 <div>
-                  <h4 className="text-white font-medium">Bespoke Relations Mail Channel</h4>
-                  <p className="text-zinc-500 mt-1">curator@zoalgroup.sa</p>
-                  <p className="text-[10px] text-zinc-600 mt-0.5">Corporate business registrations and franchise opportunities.</p>
+                  <h4 className="text-white font-medium">Email Address</h4>
+                  <p className="text-zinc-500 mt-1"><a href="mailto:alzoal3003@gmail.com" className="hover:text-gold-pure transition-colors" dir="ltr">alzoal3003@gmail.com</a></p>
+                  <p className="text-[10px] text-zinc-600 mt-0.5">For general inquiries, customer support, business partnerships, and franchise opportunities.</p>
                 </div>
               </div>
 
               <div className="p-5 flex items-start gap-4">
                 <Phone className="w-5 h-5 text-gold-pure mt-0.5" />
                 <div>
-                  <h4 className="text-white font-medium">Direct Telephone Axis</h4>
-                  <p className="text-zinc-500 mt-1">+966 13 833 9001 · Dammam HQ</p>
-                  <p className="text-zinc-500 mt-0.5">+966 50 833 9001 · Direct WhatsApp Mobile</p>
+                  <h4 className="text-white font-medium">Phone & WhatsApp</h4>
+                  <p className="text-zinc-500 mt-1 mb-1" dir="ltr">📞 +966 56 769 9315</p>
+                  <p className="text-zinc-500">
+                    💬 WhatsApp: <a href="https://wa.me/966567699315" target="_blank" rel="noopener noreferrer" className="hover:text-gold-pure transition-colors" dir="ltr">+966 56 769 9315</a> · Direct WhatsApp Mobile
+                  </p>
                 </div>
               </div>
 
               <div className="p-5 flex items-start gap-4">
                 <Clock className="w-5 h-5 text-[#D4AF37] mt-0.5" />
                 <div>
-                  <h4 className="text-white font-medium">Flagship Working Hours</h4>
-                  <p className="text-zinc-500 mt-1">Daily: 08:00 AM - Midnight</p>
+                  <h4 className="text-white font-medium">Store Hours</h4>
+                  <p className="text-zinc-500 mt-1">Daily: 08:00 AM – 12:00 AM</p>
+                </div>
+              </div>
+
+              <div className="p-5 flex items-start gap-4">
+                <MapPin className="w-5 h-5 text-[#D4AF37] mt-0.5" />
+                <div>
+                  <h4 className="text-white font-medium">Location</h4>
+                  <p className="text-zinc-500 mt-1">Al Hofuf, Saudi Arabia</p>
                 </div>
               </div>
 
             </div>
 
             {/* Direct WhatsApp trigger banner */}
-            <div className="p-5 border border-emerald-500/25 bg-emerald-950/5 rounded-xs space-y-3">
+            <div className="p-5 border border-emerald-500/25 bg-emerald-950/5 rounded-sm space-y-3">
               <div className="flex items-center space-x-2 text-emerald-400">
-                <MessageSquare className="w-5 h-5" />
-                <span className="text-xs font-display font-semibold uppercase tracking-wider">Fast WhatsApp Concierge</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+                <span className="text-xs font-display font-semibold uppercase tracking-wider">Connect on WhatsApp</span>
               </div>
-              <p className="text-[10.5px] text-zinc-400">Prefer chat? Connect with our boutique managers instantly to request delivery availability or specialized allergen inquiries.</p>
+              <p className="text-[10.5px] text-zinc-400">Reach our team directly for product inquiries, orders, delivery information, and customer assistance.</p>
+              <ul className="text-[10px] text-zinc-500 space-y-1">
+                <li>• Available during business hours.</li>
+                <li>• Fast, friendly, and personalized support.</li>
+              </ul>
               <button
                 onClick={() => {
-                  window.open('https://wa.me/966508339001', '_blank');
+                  window.open('https://wa.me/966567699315', '_blank');
                 }}
-                className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-black font-display font-bold text-[9px] uppercase tracking-widest rounded-xs transition-colors cursor-pointer"
+                className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-black font-display font-bold text-[9px] uppercase tracking-widest rounded-sm transition-colors cursor-pointer w-fit mt-2"
               >
-                Launch Concierge Chat
+                Chat with us
               </button>
             </div>
 
@@ -141,7 +157,7 @@ export default function Contact() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="abdullah@zoal.sa"
+                      placeholder="alzoal3003@gmail.com"
                       className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white focus:outline-none focus:border-gold-pure/35"
                     />
                   </div>
@@ -154,7 +170,7 @@ export default function Contact() {
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+966 50 123 4567"
+                    placeholder="+966 56 769 9315"
                     className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white focus:outline-none focus:border-gold-pure/35"
                   />
                 </div>

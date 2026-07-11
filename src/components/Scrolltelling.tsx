@@ -1,27 +1,94 @@
-import React, { useState } from 'react';
-import { Coffee, Cookie, Award, Shirt, Home, Sparkles, ChevronRight, RefreshCw, Layers } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { motion } from 'motion/react';
+import { SafeImage, useGlobalImages } from '../imageRegistry';
+import { BusinessCategory } from '../types';
 
-export default function Scrolltelling() {
-  const [activeTab, setActiveTab] = useState<'coffee' | 'bakery' | 'market' | 'fashion' | 'pots'>('coffee');
+interface ScrolltellingProps {
+  setCurrentPage?: (page: string) => void;
+  setSelectedCategoryFilter?: (category: string) => void;
+}
+
+export default function Scrolltelling({ setCurrentPage, setSelectedCategoryFilter }: ScrolltellingProps) {
+  const { t } = useTranslation();
+  const globalImages = useGlobalImages();
   
-  // Stages states
-  const [coffeeStage, setCoffeeStage] = useState(0); // 0: beans, 1: roasted, 2: espresso, 3: luxury cup
-  const [bakeryStage, setBakeryStage] = useState(0); // 0: starter, 1: lamination, 2: oven
-  const [marketStage, setMarketStage] = useState(0); // 0: sourcing, 1: gum arabic, 2: curated
+  const dynamicCategoryImages = React.useMemo(() => {
+    const getLatestForCategory = (cat: string, fallback: string) => {
+      const filtered = globalImages.filter((img) => img.category === cat);
+      // Prioritize store custom uploaded ones, then brand defaults
+      const custom = filtered.find((img) => img.source === 'store upload');
+      if (custom) return custom.url;
+      const defaultImg = filtered.find((img) => img.source === 'brand default');
+      return defaultImg ? defaultImg.url : fallback;
+    };
 
-  const tabs = [
-    { id: 'coffee', name: 'ZOAL Coffee Cafe', icon: Coffee },
-    { id: 'bakery', name: 'Sudan Bakery', icon: Cookie },
-    { id: 'market', name: 'Sudan Market', icon: Sparkles },
-    { id: 'fashion', name: 'Sudan Fashion', icon: Shirt },
-    { id: 'pots', name: 'Pots Collection', icon: Home },
-  ] as const;
+    return {
+      coffee: getLatestForCategory('coffee', '/src/assets/images/scroll-coffee-stage-3.jpg'),
+      bakery: getLatestForCategory('bakery', '/src/assets/images/scroll-bakery.jpg'),
+      market: getLatestForCategory('market', '/images/market_grocery_official_1781633042972.jpg'),
+      fashion: getLatestForCategory('fashion', '/src/assets/images/scroll-fashion.jpg'),
+      thobes: getLatestForCategory('thobes', '/src/assets/images/thobes.jpg'),
+    };
+  }, [globalImages]);
+
+  const handleCategoryClick = (id: string) => {
+    if (setSelectedCategoryFilter) {
+      setSelectedCategoryFilter(id);
+    }
+    if (setCurrentPage) {
+      setCurrentPage('store');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const categories = [
+    {
+      id: 'coffee',
+      tag: t('scroll.c_t_sub', { defaultValue: 'COFFEE HOUSE' }),
+      title: t('scroll.c_t', { defaultValue: 'Crafted for Every Moment' }),
+      desc: t('scroll.c_d', { defaultValue: 'Premium specialty coffee made from carefully selected beans, delivering rich flavor, refined quality, and the true spirit of Arabian hospitality in every cup.' }),
+      img: dynamicCategoryImages.coffee,
+      cta: t('scroll.cta_coffee', { defaultValue: 'EXPLORE COFFEE HOUSE' })
+    },
+    {
+      id: 'bakery',
+      tag: t('scroll.b_t_sub', { defaultValue: 'BAKERY & SNACKS' }),
+      title: t('scroll.b_t', { defaultValue: 'Crafted with Heritage Baked to Perfection' }),
+      desc: t('scroll.b_d', { defaultValue: 'From authentic Hoboz bread to handcrafted pastries, premium biscuits, and traditional sweets—every creation reflects timeless recipes and exceptional quality.' }),
+      img: dynamicCategoryImages.bakery,
+      cta: t('scroll.cta_bakery', { defaultValue: 'EXPLORE BAKERY' })
+    },
+    {
+      id: 'market',
+      tag: t('scroll.m_t_sub', { defaultValue: 'MARKET & GROCERY' }),
+      title: t('scroll.m_t', { defaultValue: 'Fresh Essentials Every Day' }),
+      desc: t('scroll.m_d', { defaultValue: 'Discover premium groceries, fresh ingredients, daily essentials, beverages, snacks, and household products carefully selected for quality and convenience.' }),
+      img: dynamicCategoryImages.market,
+      cta: t('scroll.cta_market', { defaultValue: 'EXPLORE MARKET' })
+    },
+    {
+      id: 'fashion',
+      tag: t('scroll.f_t_sub', { defaultValue: 'PREMIUM COLLECTIONS' }),
+      title: t('scroll.f_t', { defaultValue: 'Fashion & Beauty' }),
+      desc: t('scroll.f_d', { defaultValue: "Discover Sudanese fashion, elegant women's wear, abayas, modest wear, traditional men's attire, cosmetics, perfumes, and carefully selected beauty essentials for every occasion." }),
+      img: dynamicCategoryImages.fashion,
+      cta: t('scroll.cta_fashion', { defaultValue: 'EXPLORE COLLECTION' })
+    },
+    {
+      id: 'thobes',
+      tag: t('scroll.t_t_sub', { defaultValue: "THOBES & MEN'S WEAR" }),
+      title: t('scroll.t_t', { defaultValue: 'Timeless Sudanese Style' }),
+      desc: t('scroll.t_d', { defaultValue: "Discover authentic Sudanese thobes and traditional men's attire, carefully selected for comfort, quality, and timeless elegance." }),
+      img: dynamicCategoryImages.thobes,
+      cta: t('scroll.cta_thobes', { defaultValue: 'SHOP THOBES' })
+    }
+  ];
 
   return (
     <div id="scrollstory-anchor" className="relative bg-black py-24 border-t border-b border-white/5 overflow-hidden">
       
-      {/* Decorative large branding backdrop */}
+      {/* Decorative large branding backdrops */}
       <div className="absolute right-[-10%] top-[10%] text-[15vw] font-display font-extrabold text-white/[0.01] pointer-events-none select-none tracking-widest">
         HERITAGE
       </div>
@@ -37,371 +104,86 @@ export default function Scrolltelling() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center mb-16"
+          className="text-center mb-16 sm:mb-24"
         >
           <p className="text-gold-pure text-[10px] tracking-[0.40em] uppercase font-display mb-3">
-            Interactive Experience
+            {t('scroll.subtitle', { defaultValue: 'EDITORIAL LOOKBOOK' })}
           </p>
-          <h2 className="text-2xl sm:text-4xl font-bold tracking-[0.25em] text-white font-display uppercase">
-            Crafting the Senses
+          <h2 className="text-2xl sm:text-4xl font-bold tracking-[0.25em] text-white font-display uppercase font-semibold">
+            {t('scroll.title', { defaultValue: 'Crafting the Senses' })}
           </h2>
           <div className="w-12 h-[1px] bg-gold-pure mx-auto mt-4" />
           <p className="text-zinc-500 text-xs tracking-widest uppercase mt-3">
-            Click stages to witness our rigorous preparation standards
+            {t('scroll.desc', { defaultValue: 'Explore our rigorous preparation standards and premium collections' })}
           </p>
         </motion.div>
 
-        {/* Storytelling Tabs */}
-        <motion.div 
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true }}
-          variants={{
-            hidden: { opacity: 0 },
-            show: {
-              opacity: 1,
-              transition: {
-                staggerChildren: 0.05
-              }
-            }
-          }}
-          className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-16"
-        >
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
+        {/* Categories Single Scroll Stack with Generous Editorial Spacing */}
+        <div className="space-y-[120px] md:space-y-[180px] max-w-6xl mx-auto">
+          {categories.map((item, index) => {
+            const isEven = index % 2 === 0;
             return (
-              <motion.button
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } }
-                }}
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                }}
-                className={`flex items-center space-x-2 px-4 py-3 sm:px-6 sm:py-3.5 rounded-sm border transition-all duration-500 cursor-pointer text-[10px] sm:text-xs font-display uppercase tracking-widest ${
-                  activeTab === tab.id
-                    ? 'border-gold-pure text-white bg-gold-pure/10 shadow-[0_0_15px_rgba(212,175,55,0.15)]'
-                    : 'border-white/5 text-zinc-500 bg-zinc-950/20 hover:border-gold-pure/40 hover:text-white'
-                }`}
+              <motion.div
+                key={item.id}
+                id={`editorial-${item.id}`}
+                initial={{ opacity: 0, y: 60, scale: 0.97 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, margin: "-120px" }}
+                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-16 lg:gap-24 items-center"
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.name}</span>
-              </motion.button>
+                {/* Image Showcase Box */}
+                <div className={`md:col-span-7 ${!isEven ? 'md:order-last' : ''}`}>
+                  <div className={`relative w-full rounded-sm overflow-hidden border border-white/5 bg-[#000] group ${
+                    item.id === 'market'
+                      ? 'aspect-[16/9]'
+                      : 'aspect-[16/10] sm:aspect-[4/3]'
+                  }`}>
+                    <SafeImage
+                      src={item.img}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-[1.2s] ease-out group-hover:scale-105"
+                      category={item.id as BusinessCategory}
+                      forceCover={true}
+                    />
+                    {/* Shadow overlay vignette */}
+                    <div className={`absolute inset-0 pointer-events-none ${
+                      item.id === 'market'
+                        ? 'bg-gradient-to-t from-black/20 via-transparent to-transparent'
+                        : 'bg-gradient-to-t from-black/50 via-transparent to-transparent'
+                    }`} />
+                  </div>
+                </div>
+
+                {/* Text Editorial Box */}
+                <div className="md:col-span-5 flex flex-col justify-center space-y-4 text-center md:text-left">
+                  <span className="text-gold-pure text-[10px] sm:text-[11px] font-mono tracking-[0.3em] uppercase block">
+                    {item.tag}
+                  </span>
+                  
+                  <h3 className="text-white text-xl sm:text-2xl lg:text-3xl font-display uppercase tracking-widest font-semibold leading-tight">
+                    {item.title}
+                  </h3>
+                  
+                  <p className="text-zinc-400 text-xs sm:text-sm font-sans font-light leading-relaxed tracking-wider max-w-md mx-auto md:mx-0">
+                    {item.desc}
+                  </p>
+
+                  <div className="pt-4">
+                    <motion.button
+                      whileHover={{ scale: 1.02, borderColor: '#D4AF37' }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleCategoryClick(item.id)}
+                      className="cursor-pointer inline-flex items-center space-x-2 border border-white/10 hover:text-gold-pure text-white text-[10px] uppercase font-mono tracking-widest px-6 py-3.5 transition-all duration-300 rounded-xs group bg-[#040404] hover:bg-black"
+                    >
+                      <span>{item.cta}</span>
+                      <span className="transform transition-transform duration-300 group-hover:translate-x-1 font-sans">→</span>
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
             );
           })}
-        </motion.div>
-
-        {/* Narrative Interactive Showcase Platform */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-zinc-950/30 border border-white/5 rounded-sm p-6 sm:p-12 relative">
-          
-          <div className="absolute top-4 right-4 text-[9px] font-mono text-zinc-500 tracking-widest">
-            STORY ENGINE v1.4
-          </div>
-
-          {/* Visual Canvas Display (Lefthand Side - columns 1 to 7) */}
-          <motion.div 
-            initial={{ opacity: 0, x: -70 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="lg:col-span-7 flex flex-col justify-center items-center min-h-[320px] sm:min-h-[460px] bg-black/40 rounded-sm border border-white/5 p-4 sm:p-8 relative overflow-hidden group"
-          >
-            
-            {/* Ambient Background glow reflecting state */}
-            <div className="absolute inset-0 gold-glow-orb-sm opacity-50 pointer-events-none" />
-
-            {/* Render Coffee Story */}
-            {activeTab === 'coffee' && (
-              <div className="w-full flex flex-col items-center justify-center text-center space-y-6">
-                
-                <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center rounded-full bg-zinc-900/40 p-4 border border-white/5 overflow-hidden shadow-2xl">
-                  
-                  {coffeeStage === 0 && (
-                    <div className="absolute inset-4 rounded-full border border-dashed border-emerald-500/20 animate-spin" style={{ animationDuration: '30s' }}>
-                      <div className="w-4 h-4 rounded-full bg-emerald-500 absolute top-2 left-10 blur-xs" />
-                      <div className="w-3 h-3 rounded-full bg-emerald-600/80 absolute bottom-5 right-8" />
-                    </div>
-                  )}
-
-                  {coffeeStage === 1 && (
-                    <div className="absolute inset-4 rounded-full border border-dashed border-amber-800/40 animate-spin" style={{ animationDuration: '20s' }}>
-                      <div className="w-4 h-4 rounded-full bg-amber-900 absolute top-4 right-12 blur-xs animate-pulse" />
-                      <div className="w-5 h-5 rounded-full bg-yellow-950/90 absolute bottom-10 left-4" />
-                    </div>
-                  )}
-
-                  {coffeeStage === 2 && (
-                    <div className="absolute top-12 bottom-12 left-[50%] -translate-x-[50%] w-0.5 bg-gradient-to-b from-coffee to-transparent animate-pulse" />
-                  )}
-
-                  <img
-                    src={
-                      coffeeStage === 0 ? 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=400' : // green beans
-                      coffeeStage === 1 ? 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=400' : // roasted rich beans
-                      coffeeStage === 2 ? 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=80&w=400' : // espresso pouring
-                      'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=400' // luxury cup
-                    }
-                    alt="Coffee Story Stage"
-                    className="w-full h-full object-cover rounded-full mix-blend-lighten transition-transform duration-700 max-w-[200px] h-[200px]"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-widest text-gold-pure font-mono">Stage {coffeeStage + 1} of 4</span>
-                  <h3 className="text-white text-base sm:text-lg font-display uppercase tracking-widest">
-                    {coffeeStage === 0 && 'I. Organic Mountain Cherries'}
-                    {coffeeStage === 1 && 'II. Strict Thermal Crack Roasting'}
-                    {coffeeStage === 2 && 'III. High-Pressure Golden Extraction'}
-                    {coffeeStage === 3 && 'IV. Edible Saffron Gold Cup'}
-                  </h3>
-                  <p className="text-zinc-500 text-xs max-w-md mx-auto">
-                    {coffeeStage === 0 && 'Handpicked at 2200m slopes in Yemen, only raw beans meeting our size 19 density index are signed and imported.'}
-                    {coffeeStage === 1 && 'Fired using low nitrogen roasting air signature, neutralizing sour notes while caramelizing complex core fruit sugars.'}
-                    {coffeeStage === 2 && 'Extracted at 93.5°C with pressure lines that pull maximum herbal essences into thick espresso oil.'}
-                    {coffeeStage === 3 && 'Finished with premium organic saffron stems and 24-karat gold embellishments. Royal hospitality re-envisioned.'}
-                  </p>
-                </div>
-
-              </div>
-            )}
-
-            {/* Render Sudan Bakery Story */}
-            {activeTab === 'bakery' && (
-              <div className="w-full flex flex-col items-center justify-center text-center space-y-6">
-                
-                <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center rounded-sm bg-zinc-900/20 border border-white/5 p-4 shadow-2xl overflow-hidden animate-fade-in">
-                  <img
-                    src={
-                      bakeryStage === 0 ? 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=400' : // Ghoriba cookies / flour
-                      bakeryStage === 1 ? 'https://images.unsplash.com/photo-1548907040-4d42b52125f0?auto=format&fit=crop&q=80&w=400' : // rolling/dough/snack
-                      'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=400' // fresh bread / Hoboz
-                    }
-                    alt="Bakery Story"
-                    className="w-full h-full object-cover rounded-sm transition-transform duration-700 hover:scale-105"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-widest text-gold-pure font-mono">Stage {bakeryStage + 1} of 3</span>
-                  <h3 className="text-white text-base sm:text-lg font-display uppercase tracking-widest">
-                    {bakeryStage === 0 && 'I. Natural Wild Ferment Culture'}
-                    {bakeryStage === 1 && 'II. Traditional Kneading & Glazing'}
-                    {bakeryStage === 2 && 'III. High-Heat Stone Deck Blistering'}
-                  </h3>
-                  <p className="text-zinc-500 text-xs max-w-sm mx-auto flex flex-col">
-                    {bakeryStage === 0 && 'We cultivate our 8-year legacy sourdough strains to generate the distinct traditional aroma and fluffiness.'}
-                    {bakeryStage === 1 && 'Each Sudanese Ghoriba cookie and Hoboz dough is kneaded with clarified ghee, spices, and fresh cardamoms.'}
-                    {bakeryStage === 2 && 'Stone baking at 420°C triggers quick steam bubbles, generating perfectly blistered, elastic pocket bread.'}
-                  </p>
-                </div>
-
-              </div>
-            )}
-
-            {/* Render Sudan Market Story */}
-            {activeTab === 'market' && (
-              <div className="w-full flex flex-col items-center justify-center text-center space-y-6">
-                
-                <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center rounded-sm bg-zinc-900/20 border border-white/5 p-4 shadow-2xl overflow-hidden animate-fade-in">
-                  <img
-                    src={
-                      marketStage === 0 ? 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=400' : // Hibiscus / Karkadeh
-                      marketStage === 1 ? 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400' : // grains/market sorting
-                      'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=400' // spices/jars pack
-                    }
-                    alt="Market Story"
-                    className="w-full h-full object-cover rounded-sm transition-transform duration-700 hover:scale-105"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-widest text-gold-pure font-mono">Stage {marketStage + 1} of 3</span>
-                  <h3 className="text-white text-base sm:text-lg font-display uppercase tracking-widest">
-                    {marketStage === 0 && 'I. Organic Kordofan Calyces'}
-                    {marketStage === 1 && 'II. Acacia Senegal Resin Sifting'}
-                    {marketStage === 2 && 'III. Air-Tight Heritage Presentation'}
-                  </h3>
-                  <p className="text-zinc-500 text-xs max-w-sm mx-auto flex flex-col">
-                    {marketStage === 0 && 'We select sun-dried burgundy hibiscus calyces prized across traditional hospitality gatherings.'}
-                    {marketStage === 1 && 'Prism-like golden Gum Arabic crystals are cleared of bark and impurities to preserve full bio-activity.'}
-                    {marketStage === 2 && 'All groceries are sealed inside hermetic containers to lock in complete nutritional excellence.'}
-                  </p>
-                </div>
-
-              </div>
-            )}
-
-            {/* Render Sudan Fashion Story */}
-            {activeTab === 'fashion' && (
-              <div className="w-full flex flex-col items-center justify-center text-center space-y-6">
-                
-                <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center rounded-sm bg-zinc-900/20 border border-white/5 p-4 shadow-2xl overflow-hidden animate-fade-in">
-                  <img
-                    src="https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=400"
-                    alt="Sudan Traditional Clothing"
-                    className="w-full h-full object-cover rounded-sm transition-transform duration-700 hover:scale-105"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-widest text-gold-pure font-mono">ZOAL ATELIER FASHION SHOWCASE</span>
-                  <h3 className="text-white text-base sm:text-lg font-display uppercase tracking-widest">
-                    Heritage Custom-Woven Toobs
-                  </h3>
-                  <p className="text-zinc-500 text-xs max-w-sm mx-auto">
-                    Merging fine long-staple cotton and gold silk fibers over slow two-week loom cycles to capture the evening lighting beautifully.
-                  </p>
-                </div>
-
-              </div>
-            )}
-
-            {/* Render Pots Story */}
-            {activeTab === 'pots' && (
-              <div className="w-full flex flex-col items-center justify-center text-center space-y-6">
-                
-                <div className="relative w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center rounded-sm bg-zinc-900/20 border border-white/5 p-4 shadow-2xl overflow-hidden animate-fade-in">
-                  <img
-                    src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=400"
-                    alt="Solid Oasis Sandstone Pots"
-                    className="w-full h-full object-cover rounded-sm transition-transform duration-700 hover:scale-105"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-widest text-gold-pure font-mono">SANDSTONE & CERAMIC COLLECTION</span>
-                  <h3 className="text-white text-base sm:text-lg font-display uppercase tracking-widest">
-                    Carved Oasis Flower Pots
-                  </h3>
-                  <p className="text-zinc-500 text-xs max-w-sm mx-auto">
-                    Individually carved sandstone containers showcasing organic geologic strata patterns paired with waterproof inner glazes.
-                  </p>
-                </div>
-
-              </div>
-            )}
-
-          </motion.div>
-
-          {/* Interactive Control Deck (Righthand Side - columns 8 to 12) */}
-          <motion.div 
-            initial={{ opacity: 0, x: 70 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="lg:col-span-5 space-y-8 lg:pl-6"
-          >
-            
-            <div>
-              <span className="text-gold-pure text-[9px] uppercase tracking-widest block mb-1">ZOAL Standards</span>
-              <h3 className="text-white text-xl sm:text-2xl font-display uppercase tracking-widest leading-snug">
-                The Heritage Pipeline
-              </h3>
-              <p className="text-zinc-400 text-xs leading-relaxed mt-4">
-                We believe that true luxury lies in absolute transparency of craft. Select any category pillar, then toggle the sequence buttons below to watch the physical materials assemble into fine consumer art.
-              </p>
-            </div>
-
-            {/* Interactive Control Toggles */}
-            <div className="p-6 bg-black/60 border border-white/5 rounded-sm space-y-6">
-              
-              {activeTab === 'coffee' && (
-                <div className="space-y-4">
-                  <div className="text-xs uppercase tracking-widest text-zinc-400">Coffee Craft Controller</div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[0, 1, 2, 3].map((step) => (
-                      <button
-                        key={step}
-                        onClick={() => setCoffeeStage(step)}
-                        className={`py-3 text-[10px] uppercase tracking-widest font-mono text-center rounded-xs transition-all cursor-pointer ${
-                          coffeeStage === step
-                            ? 'bg-gold-pure text-black font-bold'
-                            : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'
-                        }`}
-                      >
-                        S{step + 1}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setCoffeeStage((prev) => (prev + 1) % 4)}
-                    className="w-full py-3.5 bg-white/5 hover:bg-gold-pure/10 text-white hover:text-gold-pure border border-white/5 hover:border-gold-pure/35 rounded-sm text-[10px] uppercase font-display tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>Advance Stage</span>
-                    <ChevronRight className="w-4.5 h-4.5" />
-                  </button>
-                </div>
-              )}
-
-              {activeTab === 'bakery' && (
-                <div className="space-y-4">
-                  <div className="text-xs uppercase tracking-widest text-zinc-400">Bakery Craft Controller</div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[0, 1, 2].map((step) => (
-                      <button
-                        key={step}
-                        onClick={() => setBakeryStage(step)}
-                        className={`py-3 text-[10px] uppercase tracking-widest font-mono text-center rounded-xs transition-all cursor-pointer ${
-                          bakeryStage === step
-                            ? 'bg-gold-pure text-black font-bold'
-                            : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'
-                        }`}
-                      >
-                        S{step + 1}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setBakeryStage((prev) => (prev + 1) % 3)}
-                    className="w-full py-3.5 bg-white/5 hover:bg-gold-pure/10 text-white hover:text-gold-pure border border-white/5 hover:border-gold-pure/35 rounded-sm text-[10px] uppercase font-display tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>Blend & Fire</span>
-                    <RefreshCw className="w-4.5 h-4.5" />
-                  </button>
-                </div>
-              )}
-
-              {activeTab === 'market' && (
-                <div className="space-y-4">
-                  <div className="text-xs uppercase tracking-widest text-zinc-400">Market Sifting Controller</div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[0, 1, 2].map((step) => (
-                      <button
-                        key={step}
-                        onClick={() => setMarketStage(step)}
-                        className={`py-3 text-[10px] uppercase tracking-widest font-mono text-center rounded-xs transition-all cursor-pointer ${
-                          marketStage === step
-                            ? 'bg-gold-pure text-[#000000] font-bold'
-                            : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white'
-                        }`}
-                      >
-                        S{step + 1}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setMarketStage((prev) => (prev + 1) % 3)}
-                    className="w-full py-3.5 bg-white/5 hover:bg-gold-pure/10 text-white hover:text-gold-pure border border-white/5 hover:border-gold-pure/35 rounded-sm text-[10px] uppercase font-display tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>Select Grade</span>
-                    <ChevronRight className="w-4.5 h-4.5" />
-                  </button>
-                </div>
-              )}
-
-              {['fashion', 'pots'].includes(activeTab) && (
-                <div className="p-4 border border-gold-pure/10 rounded-sm bg-gold-pure/5 text-center space-y-2 animate-fade-in">
-                  <Sparkles className="w-5 h-5 text-gold-pure mx-auto animate-pulse" />
-                  <p className="text-white text-[11px] font-display uppercase tracking-wider">Atelier Assembly Active</p>
-                  <p className="text-zinc-500 text-[10px]">These collections are built in highly exclusive capsule counts, undergoing absolute inspection before client dispatch.</p>
-                </div>
-              )}
-
-            </div>
-
-          </motion.div>
-
         </div>
 
       </div>

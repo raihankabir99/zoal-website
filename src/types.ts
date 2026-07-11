@@ -1,4 +1,4 @@
-export type BusinessCategory = 'coffee' | 'bakery' | 'market' | 'fashion' | 'pots';
+export type BusinessCategory = 'coffee' | 'bakery' | 'market' | 'fashion' | 'thobes';
 
 export interface Review {
   id: string;

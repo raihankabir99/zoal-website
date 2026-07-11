@@ -2,28 +2,33 @@ import React from 'react';
 import { Award, Compass, Heart, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 import ScrollZoomImage from './ScrollZoomImage';
+import BranchLocation from './BranchLocation';
+import { useTranslation } from 'react-i18next';
+import logoImg from '../assets/images/zoal_logo_fixed_1780848794781.png';
 
 export default function About() {
+  const { t } = useTranslation();
+  
   const values = [
     {
-      title: 'Our Sovereign Mission',
-      desc: 'To reinvent Arabian hospitality through modern, meticulous minimalist engineering guidelines, ensuring every physical asset carries storytelling depth.',
+      title: t('about.mission'),
+      desc: t('about.mission_text'),
       icon: Compass
     },
     {
-      title: 'Design Aesthetics',
-      desc: 'Treating food, fragrance, and couture fabrics as architectural elements, balancing raw materials (sandstone, suede, unroasted Geisha seeds) with clean math.',
+      title: t('about.vision'),
+      desc: t('about.vision_text'),
       icon: Eye
     },
     {
-      title: 'Heritage Integrity',
-      desc: 'Deeply committed to Saudi Arabian high culture, generating growth pathways for local artists, roasters, and weavers at Al Hofuf and Dammam centers.',
+      title: t('about.history'),
+      desc: t('about.history_text'),
       icon: Award
     }
   ];
 
   return (
-    <div className="bg-black text-white min-h-screen pt-28 pb-20 overflow-hidden relative">
+    <div className="bg-black text-white min-h-screen pt-[80px] sm:pt-[84px] md:pt-[88px] lg:pt-[92px] pb-20 overflow-hidden relative">
       
       {/* Dynamic Glow orb */}
       <div className="absolute top-[20%] right-[-10%] w-[400px] h-[400px] gold-glow-orb opacity-10 pointer-events-none" />
@@ -38,22 +43,18 @@ export default function About() {
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           className="text-center mb-16 flex flex-col items-center justify-center"
         >
-          <img
-            src="/src/assets/images/zoal_logo_cropped.png"
-            alt="ZOAL Crest"
-            className="w-24 h-24 sm:w-28 sm:h-28 mb-6 select-none animate-pulse pointer-events-none"
-            style={{
-              objectFit: 'contain',
-              background: 'transparent',
-              overflow: 'visible',
-            }}
-            referrerPolicy="no-referrer"
-          />
+          <div className="w-24 h-24 sm:w-28 sm:h-28 mb-6 rounded-full overflow-hidden flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(212,175,55,0.15)] ring-1 ring-gold-pure/20 bg-black">
+            <img
+              src={logoImg}
+              alt="ZOAL Crest"
+              className="w-[145%] h-[145%] max-w-[145%] object-cover select-none animate-pulse pointer-events-none"
+            />
+          </div>
           <span className="text-[10px] tracking-[0.4em] text-gold-pure uppercase font-display block mb-3">
-            Atelier Foundations
+            Our Heritage
           </span>
           <h1 className="text-3xl sm:text-5xl font-bold tracking-[0.25em] uppercase font-display">
-            The Story of ZOAL
+            {t('about.title', { defaultValue: 'The Story of ZOAL' })}
           </h1>
           <div className="w-12 h-[1px] bg-gold-pure mx-auto mt-4" />
         </motion.div>
@@ -68,19 +69,31 @@ export default function About() {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             className="lg:col-span-6 space-y-6"
           >
-            <h3 className="text-white text-lg sm:text-xl font-display uppercase tracking-widest leading-snug">
-              Bridging Millennial Tradition with Minimalist Symmetries
+            <h3 className="text-gold-pure text-lg sm:text-xl font-display uppercase tracking-widest leading-snug">
+              {t('about.subtitle', { defaultValue: 'Bridging Tradition with Contemporary Elegance' })}
             </h3>
             <p className="text-zinc-300 text-xs leading-relaxed tracking-wider text-justify">
-              Established in Al Shati, Dammam, ZOAL Group started with a simple belief: commerce is generic, while luxury is a narrative connection to origin. We treat single-origin Yemen coffee, organic Taif rose water creams, and hand-embroidered Italian suede vests under uniform design parameters.
+              Nestled in the heart of Al Hofuf, Saudi Arabia, ZOAL was founded on a singular, profound belief: commerce must transcend mere transactions, becoming a meaningful dialogue between culture, heritage, and uncompromising craftsmanship.
             </p>
             <p className="text-zinc-300 text-xs leading-relaxed tracking-wider text-justify">
-              Our spaces are built with absolute glass transparency, enabling consumers to witness roasting cracks or dough fermentation matrices firsthand. We reject synthetic dyes, artificial sugars, and mass manufacturing, preserving physical weight and micro-fidelity.
+              Inspired by the rich, interwoven traditions of Sudan and the Arabian region, ZOAL has blossomed into a premier lifestyle destination. Here, the essence of authentic cultural identity and modern elegance converge to create a sanctuary of community and refined taste under one roof.
             </p>
-            <div className="p-4 border border-gold-pure/10 bg-gold-pure/5 rounded-xs">
-              <span className="text-[9px] uppercase tracking-widest font-mono text-gold-pure font-bold block mb-1">Corporate Standard</span>
-              <p className="text-zinc-400 text-[10.5px]">ISO 22000, SFDA Certified, and SASO hospitality rankings matched.</p>
-            </div>
+            <p className="text-zinc-300 text-xs leading-relaxed tracking-wider text-justify mb-2">
+              Across our curated spaces, visitors are invited to explore a tapestry of elevated experiences:
+            </p>
+            <ul className="text-zinc-300 text-[11px] leading-relaxed tracking-wider space-y-3 list-none pl-1 font-sans">
+              <li className="flex items-start"><span className="text-gold-pure mr-2 text-[10px] leading-none mt-1">✦</span> <span>A <strong className="text-white font-medium">Specialty Coffee House</strong> serving nuanced Arabic, Sudanese, and regional coffees that honor the ancient rituals of roasting.</span></li>
+              <li className="flex items-start"><span className="text-gold-pure mr-2 text-[10px] leading-none mt-1">✦</span> <span>A <strong className="text-white font-medium">Grocery Market</strong> offering a carefully sourced selection of Sudanese essentials, heritage ingredients, and premium international goods.</span></li>
+              <li className="flex items-start"><span className="text-gold-pure mr-2 text-[10px] leading-none mt-1">✦</span> <span>A <strong className="text-white font-medium">Modern Café</strong> presenting thoughtfully prepared fresh meals, beverages, and daily culinary specialties.</span></li>
+              <li className="flex items-start"><span className="text-gold-pure mr-2 text-[10px] leading-none mt-1">✦</span> <span>A <strong className="text-white font-medium">Traditional Bakery</strong> preserving age-old recipes through artisanal breads, delicate sweets, biscuits, and pastries.</span></li>
+              <li className="flex items-start"><span className="text-gold-pure mr-2 text-[10px] leading-none mt-1">✦</span> <span>A <strong className="text-white font-medium">Clothing & Tailoring Store</strong> celebrating sartorial elegance with bespoke thobes, Sudanese garments, women's wear, children's clothing, fabrics, hijabs, scarves, and traditional attire.</span></li>
+            </ul>
+            <p className="text-zinc-300 text-xs leading-relaxed tracking-wider text-justify mt-4">
+              Every facet of ZOAL is united by an unwavering commitment to authenticity, absolute transparency, and meticulous attention to detail. We champion pure ingredients, masterful artisanship, and products that deeply honor their origins.
+            </p>
+            <p className="text-zinc-300 text-xs leading-relaxed tracking-wider text-justify">
+              Far beyond a retail destination, ZOAL is a vibrant expression of hospitality, culture, and contemporary lifestyle. We seamlessly weave the timeless traditions of yesterday with the elevated aspirations of tomorrow, ensuring that community, craftsmanship, and heritage continue to thrive beautifully in the heart of Al Hofuf.
+            </p>
           </motion.div>
 
           <motion.div 
@@ -91,7 +104,7 @@ export default function About() {
             className="lg:col-span-6 rounded-sm overflow-hidden border border-white/5 bg-zinc-950/40 p-4 relative aspect-video"
           >
             <ScrollZoomImage
-              src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800"
+              src="/src/assets/images/about-hq.jpg"
               alt="ZOAL Design Boardroom"
               className="w-full h-full object-cover"
               containerClassName="w-full h-full overflow-hidden relative rounded-xs"
@@ -143,7 +156,7 @@ export default function About() {
             transition={{ duration: 0.6 }}
             className="text-white text-sm font-display uppercase tracking-widest block text-center mb-12"
           >
-            ATELIER ACHIEVEMENTS
+            Business Highlights
           </motion.h3>
           
           <motion.div 
@@ -169,9 +182,9 @@ export default function About() {
               }}
               className="p-6 bg-zinc-950/20 border border-white/5 rounded-xs"
             >
-              <span className="text-4xl font-mono text-gold-pure font-bold block">2023</span>
-              <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Dammam Foundation</h4>
-              <p className="text-zinc-500 text-[10px] mt-1">Acquired our whole-bean roasting laboratory license in the Eastern Province.</p>
+              <span className="text-3xl sm:text-4xl font-mono text-gold-pure font-bold block">2025</span>
+              <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Foundation of ZOAL</h4>
+              <p className="text-zinc-500 text-[10px] mt-1">ZOAL began in Al Hofuf with a vision of bringing authentic Sudanese and Arabian products to the local community through a clothing store and grocery market focused on quality, heritage, and everyday essentials.</p>
             </motion.div>
 
             <motion.div 
@@ -181,9 +194,9 @@ export default function About() {
               }}
               className="p-6 bg-zinc-950/20 border border-white/5 rounded-xs"
             >
-              <span className="text-4xl font-mono text-gold-pure font-bold block">2024</span>
-              <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">SASO Quality Award</h4>
-              <p className="text-zinc-500 text-[10px] mt-1">Awarded Best Boutique Roastery and Luxury Culinary Standard in Dammam.</p>
+              <span className="text-3xl sm:text-4xl font-mono text-gold-pure font-bold block">Late 2025</span>
+              <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Coffee & Bakery Launch</h4>
+              <p className="text-zinc-500 text-[10px] mt-1">Expanded into hospitality with the introduction of a specialty coffee café and traditional bakery, serving Arabic coffee, Sudanese favorites, fresh breads, pastries, and handcrafted baked goods.</p>
             </motion.div>
 
             <motion.div 
@@ -193,13 +206,15 @@ export default function About() {
               }}
               className="p-6 bg-zinc-950/20 border border-white/5 rounded-xs"
             >
-              <span className="text-4xl font-mono text-gold-pure font-bold block">2025</span>
-              <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Couture Expansion</h4>
-              <p className="text-zinc-500 text-[10px] mt-1">Inaugurated Al Hofuf Flagship Lounge at Abu Bakr As Siddiq Rd and launched Suede embroidery lines.</p>
+              <span className="text-3xl sm:text-4xl font-mono text-gold-pure font-bold block">2026</span>
+              <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Hospitality Expansion</h4>
+              <p className="text-zinc-500 text-[10px] mt-1">Extended the ZOAL experience into accommodation and guest services, creating welcoming spaces that combine comfort, culture, and traditional Arabian hospitality.</p>
             </motion.div>
 
           </motion.div>
         </div>
+        
+        <BranchLocation />
 
       </div>
     </div>

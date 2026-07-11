@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Trash2, ArrowRight, ShieldCheck, Ticket, Sparkles, MoveRight } from 'lucide-react';
+import { ShoppingBag, Trash2, ArrowRight, ShieldCheck, MoveRight } from 'lucide-react';
 import { CartItem } from '../types';
-import { COUPONS } from '../data';
+import { useTranslation } from 'react-i18next';
+import { SafeImage } from '../imageRegistry';
+import { formatCurrency } from '../utils';
 
 interface CartProps {
   cart: CartItem[];
@@ -24,48 +26,28 @@ export default function Cart({
   setDiscountPercent,
   setCurrentPage,
 }: CartProps) {
-  const [promoInput, setPromoInput] = useState(couponCode);
-  const [promoMsg, setPromoMsg] = useState('');
+  const { t, i18n } = useTranslation();
 
   // Computations
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const shippingFee = subtotal > 350 || subtotal === 0 ? 0 : 35;
-  const discountAmt = parseFloat((subtotal * (discountPercent / 100)).toFixed(2));
-  const finalTotal = parseFloat((subtotal - discountAmt + shippingFee).toFixed(2));
-
-  const handleApplyCoupon = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanInput = promoInput.trim().toUpperCase();
-    const match = COUPONS.find((c) => c.code === cleanInput);
-    if (match) {
-      setDiscountPercent(match.discountPercent);
-      setCouponCode(match.code);
-      setPromoMsg(match.msg);
-    } else {
-      setPromoMsg('Invalid luxury privilege code');
-      setDiscountPercent(0);
-      setCouponCode('');
-    }
-  };
+  const finalTotal = parseFloat((subtotal + shippingFee).toFixed(2));
 
   if (cart.length === 0) {
     return (
-      <div className="bg-black text-white min-h-screen pt-36 pb-20 flex items-center justify-center">
+      <div className="bg-black text-white min-h-screen pt-[96px] sm:pt-[100px] md:pt-[104px] lg:pt-[108px] pb-20 flex items-center justify-center">
         <div className="max-w-md w-full mx-auto px-6 text-center space-y-6">
           <div className="w-16 h-16 rounded-full bg-zinc-950/20 border border-gold-pure/20 flex items-center justify-center mx-auto text-gold-pure animate-pulse">
             <ShoppingBag className="w-7 h-7" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-display uppercase tracking-widest text-white">Your Basket is Ethereally Empty</h2>
-            <p className="text-zinc-500 text-xs leading-relaxed">
-              Explore our boutique coffee, couture garments, and natural sandstone fragrances to secure exceptional offerings.
-            </p>
+            <h2 className="text-xl font-display uppercase tracking-widest text-white">{t('cart.empty', { defaultValue: 'Your Basket is Ethereally Empty' })}</h2>
           </div>
           <button
             onClick={() => setCurrentPage('store')}
             className="w-full py-4 bg-gradient-to-r from-gold-dark to-gold-pure text-black font-display font-semibold uppercase tracking-widest text-[10px] rounded-sm transition-transform hover:scale-[1.02] cursor-pointer"
           >
-            Browse Collections
+            {t('cart.continue', { defaultValue: 'Browse Collections' })}
           </button>
         </div>
       </div>
@@ -73,13 +55,12 @@ export default function Cart({
   }
 
   return (
-    <div className="bg-black text-white min-h-screen pt-28 pb-20">
+    <div className="bg-black text-white min-h-screen pt-[80px] sm:pt-[84px] md:pt-[88px] lg:pt-[92px] pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Title */}
         <div className="border-b border-white/5 pb-6 mb-10">
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-wider font-display uppercase text-white">Your Shopping Basket</h1>
-          <p className="text-zinc-500 text-xs uppercase tracking-widest mt-1">Review your curated selections before final order placement</p>
+          <h1 className="text-2xl sm:text-4xl font-semibold tracking-wider font-display uppercase text-white">{t('cart.title')}</h1>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -93,17 +74,17 @@ export default function Cart({
               >
                 
                 {/* Thumb Image & titles */}
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-4 rtl:space-x-reverse">
                   <div className="w-20 h-20 bg-zinc-950 rounded-xs overflow-hidden border border-white/5 shrink-0">
-                    <img src={item.product.images[0]} alt={item.product.name} className="w-full h-full object-cover" />
+                    <SafeImage src={item.product.images[0]} alt={item.product.category === 'thobes' ? "ZOAL THOBES & MEN'S WEAR" : (i18n.language === 'ar' ? t(`products.${item.product.id}.name`, { defaultValue: item.product.name }) : item.product.name)} className={item.product.category === 'market' ? "w-full h-full object-contain" : "w-full h-full object-cover"} containerClassName="w-full h-full relative" category={item.product.category} />
                   </div>
                   <div>
-                    <span className="text-[8px] uppercase tracking-widest text-gold-pure block">{item.product.category.replace('_', ' ')}</span>
-                    <h3 className="text-white text-xs font-display uppercase tracking-wider font-semibold mt-0.5">{item.product.name}</h3>
+                    <span className="text-[8px] uppercase tracking-widest text-gold-pure block">{t(`store.category.${item.product.category}`, { defaultValue: item.product.category.replace('_', ' ') })}</span>
+                    <h3 className="text-white text-xs font-display uppercase tracking-wider font-semibold mt-0.5">{i18n.language === 'ar' ? t(`products.${item.product.id}.name`, { defaultValue: item.product.name }) : item.product.name}</h3>
                     {item.selectedOption && (
                       <span className="text-[10px] text-zinc-500 block font-sans">Option: {item.selectedOption}</span>
                     )}
-                    <span className="text-[10.5px] font-mono text-gold-pure block mt-1">{item.product.price} SAR</span>
+                    <span className="text-[10.5px] font-mono text-gold-pure block mt-1">{formatCurrency(item.product.price)} {t('app.sar')}</span>
                   </div>
                 </div>
 
@@ -128,8 +109,8 @@ export default function Cart({
                   </div>
 
                   {/* Combined Value */}
-                  <div className="text-right hidden md:block">
-                    <span className="text-xs font-mono text-white font-medium">{item.product.price * item.quantity} SAR</span>
+                  <div className="text-right rtl:text-left hidden md:block">
+                    <span className="text-xs font-mono text-white font-medium">{formatCurrency(item.product.price * item.quantity)} {t('app.sar')}</span>
                   </div>
 
                   {/* Trash cleaner */}
@@ -143,6 +124,7 @@ export default function Cart({
                 </div>
 
               </div>
+
             ))}
 
             {/* Quick privileges guidelines */}
@@ -156,65 +138,24 @@ export default function Cart({
           {/* Pricing computations sidebar (columns 9 to 12) */}
           <div className="lg:col-span-4 bg-zinc-950 border border-white/5 p-6 rounded-sm space-y-6">
             
-            <h3 className="text-white text-sm font-display uppercase tracking-widest border-b border-white/5 pb-3">Summation Register</h3>
+            <h3 className="text-white text-sm font-display uppercase tracking-widest border-b border-white/5 pb-3">{t('checkout.summary', { defaultValue: 'ORDER SUMMARY' })}</h3>
 
-            {/* Coupon Code Panel */}
-            <form onSubmit={handleApplyCoupon} className="space-y-2">
-              <label className="text-[9px] text-zinc-400 uppercase tracking-widest block flex items-center gap-1">
-                <Ticket className="w-3 h-3 text-gold-pure" /> Elite Voucher Code:
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoInput}
-                  onChange={(e) => setPromoInput(e.target.value)}
-                  placeholder="e.g. ZOALGOLD, DAMMAMLX"
-                  className="flex-grow bg-black border border-white/5 rounded-xs p-2.5 text-xs focus:outline-none focus:border-gold-pure/35 text-white placeholder-zinc-600 uppercase font-mono"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-zinc-800 hover:bg-gold-pure hover:text-black font-display font-bold text-[9px] uppercase tracking-widest rounded-xs transition-colors cursor-pointer"
-                >
-                  Verify
-                </button>
-              </div>
+            {/* Price lines */}
+            <div className="space-y-4 pt-4 text-sm font-sans mb-6">
               
-              {promoMsg && (
-                <div className="flex items-center space-x-1.5 text-gold-pure text-[10px] font-mono mt-2 animate-pulse">
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span>{promoMsg}</span>
-                </div>
-              )}
-              <span className="text-[8px] text-zinc-600 block leading-tight">Try ZOALGOLD (15% OFF) or SAUDIHERITAGE (20% OFF)</span>
-            </form>
-
-            {/* Invoices detail elements */}
-            <div className="space-y-3 border-t border-white/5 pt-4 text-xs font-sans">
-              
-              <div className="flex justify-between text-zinc-400">
-                <span>Basket Subtotal</span>
-                <span>{subtotal.toFixed(2)} SAR</span>
+              <div className="flex justify-between text-zinc-300">
+                <span>{t('cart.subtotal')}</span>
+                <span className="font-mono">{formatCurrency(subtotal)} {t('app.sar')}</span>
               </div>
 
-              {discountPercent > 0 && (
-                <div className="flex justify-between text-gold-pure font-mono">
-                  <span>Privilege Rebate ({discountPercent}%)</span>
-                  <span>-{discountAmt.toFixed(2)} SAR</span>
-                </div>
-              )}
-
-              <div className="flex justify-between text-zinc-400">
-                <span>VIP Courier Shipping</span>
-                <span>{shippingFee === 0 ? 'COMPLIMENTARY' : `${shippingFee.toFixed(2)} SAR`}</span>
+              <div className="flex justify-between text-zinc-300">
+                <span>{t('cart.shipping')}</span>
+                <span className="font-mono">{shippingFee === 0 ? 'Free' : `${formatCurrency(shippingFee)} ${t('app.sar')}`}</span>
               </div>
 
-              {shippingFee > 0 && (
-                <p className="text-[9px] text-zinc-600 italic">Add {(350 - subtotal).toFixed(2)} SAR more of items to unlock free premium shipping.</p>
-              )}
-
-              <div className="border-t border-white/10 pt-4 flex justify-between text-sm uppercase font-display font-semibold text-white tracking-wider">
-                <span>Sovereign Total</span>
-                <span className="text-gold-pure">{finalTotal.toFixed(2)} SAR</span>
+              <div className="border-t border-white/10 pt-5 mt-2 flex justify-between text-lg uppercase font-display font-medium text-white tracking-wider">
+                <span>{t('cart.total')}</span>
+                <span className="text-gold-pure font-mono font-bold rtl:text-left">{formatCurrency(finalTotal)} {t('app.sar')}</span>
               </div>
 
             </div>
@@ -225,10 +166,10 @@ export default function Cart({
                 setCurrentPage('checkout');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="w-full py-4 bg-gradient-to-r from-gold-dark via-gold-pure to-gold-light text-black font-display font-bold uppercase tracking-widest text-[10.5px] rounded-sm transition-transform hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer shadow-[0_4px_15px_rgba(212,175,55,0.15)]"
+              className="w-full py-5 bg-gold-pure hover:bg-gold-light text-black font-display font-bold uppercase tracking-widest text-xs rounded-sm transition-transform hover:scale-[1.02] flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_20px_rgba(212,175,55,0.3)]"
             >
-              <span>Proceed to Checkout VIP</span>
-              <MoveRight className="w-4 h-4 animate-pulse" />
+              <span>{t('cart.checkout')}</span>
+              <MoveRight className="w-5 h-5 animate-pulse rtl:rotate-180" />
             </button>
 
           </div>
