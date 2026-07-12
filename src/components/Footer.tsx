@@ -1,7 +1,22 @@
 import React, { useState } from 'react';
-import { Camera, MapPin, Phone, Mail, Instagram, Twitter, MessageCircle, X, Sparkles, Briefcase, Shield } from 'lucide-react';
+import { Camera, MapPin, Phone, Mail, Facebook, MessageCircle, X, Sparkles, Briefcase, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import logoImg from '../assets/images/zoal_logo_fixed_1780848794781.png';
+
+const Tiktok = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+);
 
 interface FooterProps {
   setCurrentPage: (page: string) => void;
@@ -58,13 +73,16 @@ export default function Footer({ setCurrentPage, setSelectedCategoryFilter }: Fo
               </p>
             </div>
             <div className="flex space-x-4 pt-2">
-              <a href="https://instagram.com" target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-gold-pure transition-colors">
-                <Instagram className="w-5 h-5 stroke-[1.5]" />
+              <a href="https://www.tiktok.com/@alzoal_?lang=en-GB" target="_blank" rel="noreferrer" title="ZOAL TikTok" className="text-zinc-500 hover:text-gold-pure transition-colors">
+                <Tiktok className="w-5 h-5 stroke-[1.5]" />
               </a>
-              <a href="https://twitter.com" target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-gold-pure transition-colors">
-                <Twitter className="w-5 h-5 stroke-[1.5]" />
+              <a href="https://www.tiktok.com/@alzool.alragi2024" target="_blank" rel="noreferrer" title="ALZOOL TikTok" className="text-zinc-500 hover:text-gold-pure transition-colors">
+                <Tiktok className="w-5 h-5 stroke-[1.5]" />
               </a>
-              <a href="https://wa.me/966567699315" target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-gold-pure transition-colors">
+              <a href="https://www.facebook.com/profile.php?id=61580938591764&rdid=zqWqmIyC6GOYvzu6&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2F1EWt5kFsBQ%2F#" target="_blank" rel="noreferrer" title="Facebook" className="text-zinc-500 hover:text-gold-pure transition-colors">
+                <Facebook className="w-5 h-5 stroke-[1.5]" />
+              </a>
+              <a href="https://wa.me/966567699315" target="_blank" rel="noreferrer" title="WhatsApp" className="text-zinc-500 hover:text-gold-pure transition-colors">
                 <MessageCircle className="w-5 h-5 stroke-[1.5]" />
               </a>
             </div>
