@@ -168,9 +168,9 @@ export default function Store({
     switch (category) {
       case 'coffee': return ['Whole Beans', 'Infused Ground', 'Fine Roasted Espresso'];
       case 'bakery': return ['Fresh Baked Daily Lot', 'Sealed Presentation Pack'];
-      case 'market': return ['Standard Burlap Bag', 'Hermetically Sealed Tin (+0.00 SAR)'];
-      case 'fashion': return ['Standard Fit drape (4.5m)', 'Premium Presentation Box (+0.00 SAR)'];
-      case 'thobes': return ['Standard Fit', 'Tailored Fit (+0.00 SAR)'];
+      case 'market': return ['Standard Burlap Bag', 'Hermetically Sealed Tin (+25.00 SAR)'];
+      case 'fashion': return ['Standard Fit drape (4.5m)', 'Premium Presentation Box (+350.00 SAR)'];
+      case 'thobes': return ['Standard Fit', 'Tailored Fit (+40.00 SAR)'];
       default: return ['Standard Luxury Pack'];
     }
   };

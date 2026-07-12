@@ -522,11 +522,18 @@ app.post('/api/auth/register', async (req, res) => {
       phone: phone.trim(),
       passwordHash: AuthDB.hashPassword(password),
       role: 'customer',
+      status: 'active',
       isVerified: false,
+      emailVerified: false,
+      phoneVerified: false,
+      avatar: null,
       verificationCode,
       resetCode: '',
       createdAt: new Date().toISOString(),
-      addresses: []
+      updatedAt: new Date().toISOString(),
+      addresses: [],
+      suspended: false,
+      permissions: []
     };
 
     users.push(newUser);
@@ -607,6 +614,10 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email/Phone and Password are required.' });
     }
 
+    const { browser, device } = parseUserAgent(req.headers['user-agent'] || '');
+    const country = 'Saudi Arabia';
+    const ip = req.ip || '127.0.0.1';
+
     const users = await AuthDB.readUsersAsync();
     const cleanCredential = emailOrPhone.trim().toLowerCase();
 
@@ -618,20 +629,29 @@ app.post('/api/auth/login', async (req, res) => {
     );
 
     if (!user) {
+      await AuthDB.logLoginHistoryAsync('unknown', ip, device, browser, country, 'failure');
       return res.status(401).json({ error: 'Invalid credentials. User not found.' });
     }
 
     const isPasswordCorrect = AuthDB.verifyPassword(password, user.passwordHash);
     if (!isPasswordCorrect) {
+      await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'failure');
       return res.status(401).json({ error: 'Invalid credentials. Password incorrect.' });
     }
 
-    if (!user.isVerified) {
+    if (user.status === 'suspended' || user.suspended) {
+      await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'failure');
+      return res.status(403).json({ error: 'This account has been suspended by the administrator.' });
+    }
+
+    const isVerified = user.emailVerified || user.isVerified;
+    if (!isVerified) {
+      await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'failure');
       return res.status(403).json({
         error: 'Email is not verified.',
         needsVerification: true,
         email: user.email,
-        verificationCode: user.verificationCode // Pass back so they can log in seamlessly in development
+        verificationCode: user.verificationCode || 'VERIFIED' // Pass back so they can log in seamlessly in development
       });
     }
 
@@ -650,7 +670,13 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     await AuthDB.writeSessionsAsync(sessions);
-    await AuthDB.logActivityAsync(user.id, user.email, 'LOGIN', req.ip || '', req.headers['user-agent'] || '');
+
+    // Save login timestamp
+    user.lastLogin = new Date().toISOString();
+    await AuthDB.writeUsersAsync(users);
+
+    await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'success');
+    await AuthDB.logActivityAsync(user.id, user.email, 'LOGIN', ip, req.headers['user-agent'] || '');
 
     return res.json({
       success: true,
@@ -664,8 +690,11 @@ app.post('/api/auth/login', async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         phone: user.phone,
         role: user.role,
-        isVerified: user.isVerified,
-        addresses: user.addresses || []
+        status: user.status || 'active',
+        avatar: user.avatar,
+        isVerified: true,
+        addresses: user.addresses || [],
+        permissions: user.permissions || []
       }
     });
   } catch (error) {
@@ -709,6 +738,10 @@ app.post('/api/auth/session', async (req, res) => {
       return res.status(401).json({ error: 'Associated account not found.' });
     }
 
+    if (user.status === 'suspended' || user.suspended) {
+      return res.status(403).json({ error: 'This account has been suspended by the administrator.' });
+    }
+
     return res.json({
       success: true,
       user: {
@@ -719,8 +752,11 @@ app.post('/api/auth/session', async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         phone: user.phone,
         role: user.role,
-        isVerified: user.isVerified,
-        addresses: user.addresses || []
+        status: user.status || 'active',
+        avatar: user.avatar,
+        isVerified: user.emailVerified || user.isVerified,
+        addresses: user.addresses || [],
+        permissions: user.permissions || []
       }
     });
   } catch (error) {
@@ -972,6 +1008,14 @@ app.post('/api/auth/logout', async (req, res) => {
 
       if (user) {
         await AuthDB.logActivityAsync(user.id, user.email, 'LOGOUT', req.ip || '', req.headers['user-agent'] || '');
+        // Update login history logout time
+        const historyList = await AuthDB.readLoginHistoryAsync();
+        const latestHistory = [...historyList]
+          .reverse()
+          .find(h => h.userId === user.id && h.logoutAt === null);
+        if (latestHistory) {
+          await AuthDB.logLogoutHistoryAsync(latestHistory.id);
+        }
       }
 
       sessions.splice(sessionIndex, 1);
@@ -987,25 +1031,8 @@ app.post('/api/auth/logout', async (req, res) => {
 // Fetch Activity Logs (Admin only)
 app.get('/api/auth/activity-logs', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No authorization token provided.' });
-    }
-
-    const token = authHeader.substring(7);
-    const sessions = await AuthDB.readSessionsAsync();
-    const session = sessions.find((s) => s.token === token);
-
-    if (!session) {
-      return res.status(401).json({ error: 'Invalid session token.' });
-    }
-
-    const users = await AuthDB.readUsersAsync();
-    const user = users.find((u) => u.id === session.userId);
-
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Administrative rights required.' });
-    }
+    const adminUser = await verifyUserWithPermission(req, res, 'system.logs');
+    if (!adminUser) return;
 
     const logs = await AuthDB.readLogsAsync();
     // Return sorted descending by timestamp
@@ -1218,6 +1245,327 @@ app.post('/api/supabase/sync', async (req, res) => {
   } catch (err: any) {
     console.error('Error during Supabase synchronization:', err);
     return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// -------------------------------------------------------------
+// SUPER ADMIN USER MANAGEMENT API ENDPOINTS
+// -------------------------------------------------------------
+
+function parseUserAgent(userAgentStr: string) {
+  const ua = userAgentStr || '';
+  let browser = 'Unknown Browser';
+  let device = 'Desktop';
+
+  if (ua.includes('Firefox')) browser = 'Firefox';
+  else if (ua.includes('Chrome')) browser = 'Chrome';
+  else if (ua.includes('Safari')) browser = 'Safari';
+  else if (ua.includes('Edge')) browser = 'Edge';
+  else if (ua.includes('Opera')) browser = 'Opera';
+
+  if (ua.includes('Mobi') || ua.includes('Android') || ua.includes('iPhone')) {
+    device = 'Mobile';
+  } else if (ua.includes('Tablet') || ua.includes('iPad')) {
+    device = 'Tablet';
+  }
+
+  return { browser, device };
+}
+
+async function verifyUserWithPermission(req: any, res: any, permissionId: string) {
+  const authHeader = req.headers['authorization'];
+  let token = '';
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  }
+  if (!token) {
+    res.status(401).json({ error: 'Session token required.' });
+    return null;
+  }
+  const sessions = await AuthDB.readSessionsAsync();
+  const session = sessions.find((s) => s.token === token);
+  if (!session) {
+    res.status(401).json({ error: 'Invalid session token.' });
+    return null;
+  }
+  const users = await AuthDB.readUsersAsync();
+  const user = users.find((u) => u.id === session.userId);
+  if (!user) {
+    res.status(401).json({ error: 'User account not found.' });
+    return null;
+  }
+  if (user.status === 'suspended' || user.suspended) {
+    res.status(403).json({ error: 'This account has been suspended by the administrator.' });
+    return null;
+  }
+  if (!AuthDB.hasPermission(user, permissionId)) {
+    res.status(403).json({ error: `Unauthorized. Requires permission: ${permissionId}` });
+    return null;
+  }
+  return user;
+}
+
+// Get all users
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const adminUser = await verifyUserWithPermission(req, res, 'users.view');
+    if (!adminUser) return;
+
+    const users = await AuthDB.readUsersAsync();
+    const safeUsers = users.map(u => ({
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email,
+      phone: u.phone,
+      role: u.role,
+      isVerified: u.emailVerified || u.isVerified,
+      createdAt: u.createdAt,
+      suspended: u.status === 'suspended' || !!u.suspended,
+      permissions: u.permissions || []
+    }));
+
+    return res.json(safeUsers);
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error retrieving users.' });
+  }
+});
+
+// Create Admin/Staff account
+app.post('/api/admin/users', async (req, res) => {
+  try {
+    const adminUser = await verifyUserWithPermission(req, res, 'users.create');
+    if (!adminUser) return;
+
+    const { firstName, lastName, email, phone, password, role, permissions } = req.body;
+
+    if (!firstName || !lastName || !email || !phone || !password || !role) {
+      return res.status(400).json({ error: 'All fields (firstName, lastName, email, phone, password, role) are required.' });
+    }
+
+    const users = await AuthDB.readUsersAsync();
+    if (users.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
+      return res.status(400).json({ error: 'A user with this email address already exists.' });
+    }
+
+    const newUser: any = {
+      id: `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      passwordHash: AuthDB.hashPassword(password),
+      role,
+      status: 'active',
+      emailVerified: true,
+      phoneVerified: true,
+      avatar: null,
+      verificationCode: 'VERIFIED',
+      resetCode: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      addresses: [],
+      suspended: false,
+      permissions: permissions || []
+    };
+
+    users.push(newUser);
+    await AuthDB.writeUsersAsync(users);
+
+    await AuthDB.logActivityAsync(
+      adminUser.id,
+      adminUser.email,
+      `USER_CREATED: ${newUser.email} (Role: ${newUser.role})`,
+      req.ip || '',
+      req.headers['user-agent'] || ''
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: `User ${newUser.email} created successfully.`,
+      user: {
+        id: newUser.id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        phone: newUser.phone,
+        role: newUser.role,
+        suspended: false,
+        permissions: newUser.permissions
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error creating user.' });
+  }
+});
+
+// Edit user details, role, suspended status, and permissions
+app.put('/api/admin/users/:id', async (req, res) => {
+  try {
+    const adminUser = await verifyUserWithPermission(req, res, 'users.edit');
+    if (!adminUser) return;
+
+    const { id } = req.params;
+    const { firstName, lastName, email, phone, role, suspended, permissions } = req.body;
+
+    const users = await AuthDB.readUsersAsync();
+    const userIndex = users.findIndex(u => u.id === id);
+
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const user = users[userIndex];
+
+    if (user.id === adminUser.id) {
+      if (suspended === true) {
+        return res.status(400).json({ error: 'You cannot suspend your own account.' });
+      }
+      if (role && role !== user.role) {
+        return res.status(400).json({ error: 'You cannot change your own role.' });
+      }
+    }
+
+    if (suspended !== undefined) {
+      if (!AuthDB.hasPermission(adminUser, 'users.suspend')) {
+        return res.status(403).json({ error: 'Unauthorized. Requires users.suspend permission.' });
+      }
+    }
+
+    if (firstName) user.firstName = firstName.trim();
+    if (lastName) user.lastName = lastName.trim();
+    if (email) user.email = email.trim().toLowerCase();
+    if (phone) user.phone = phone.trim();
+    if (role) user.role = role;
+    if (suspended !== undefined) {
+      user.suspended = !!suspended;
+      user.status = suspended ? 'suspended' : 'active';
+    }
+    if (permissions !== undefined) user.permissions = permissions;
+    user.updatedAt = new Date().toISOString();
+
+    await AuthDB.writeUsersAsync(users);
+
+    await AuthDB.logActivityAsync(
+      adminUser.id,
+      adminUser.email,
+      `USER_UPDATED: ${user.email}`,
+      req.ip || '',
+      req.headers['user-agent'] || ''
+    );
+
+    return res.json({
+      success: true,
+      message: 'User updated successfully.',
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        suspended: user.status === 'suspended' || !!user.suspended,
+        permissions: user.permissions || []
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error editing user.' });
+  }
+});
+
+// Delete user
+app.delete('/api/admin/users/:id', async (req, res) => {
+  try {
+    const adminUser = await verifyUserWithPermission(req, res, 'users.delete');
+    if (!adminUser) return;
+
+    const { id } = req.params;
+
+    if (id === adminUser.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    const users = await AuthDB.readUsersAsync();
+    const user = users.find(u => u.id === id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const filteredUsers = users.filter(u => u.id !== id);
+    await AuthDB.writeUsersAsync(filteredUsers);
+
+    await AuthDB.logActivityAsync(
+      adminUser.id,
+      adminUser.email,
+      `USER_DELETED: ${user.email}`,
+      req.ip || '',
+      req.headers['user-agent'] || ''
+    );
+
+    return res.json({
+      success: true,
+      message: 'User deleted successfully.'
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error deleting user.' });
+  }
+});
+
+// Reset user password
+app.post('/api/admin/users/:id/reset-password', async (req, res) => {
+  try {
+    const adminUser = await verifyUserWithPermission(req, res, 'users.edit');
+    if (!adminUser) return;
+
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const users = await AuthDB.readUsersAsync();
+    const userIndex = users.findIndex(u => u.id === id);
+
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const user = users[userIndex];
+    user.passwordHash = AuthDB.hashPassword(newPassword.trim());
+    user.updatedAt = new Date().toISOString();
+
+    await AuthDB.writeUsersAsync(users);
+
+    await AuthDB.logActivityAsync(
+      adminUser.id,
+      adminUser.email,
+      `PASSWORD_RESET: ${user.email}`,
+      req.ip || '',
+      req.headers['user-agent'] || ''
+    );
+
+    return res.json({
+      success: true,
+      message: `Password for user ${user.email} reset successfully.`
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error resetting password.' });
+  }
+});
+
+// Get login history
+app.get('/api/admin/login-history', async (req, res) => {
+  try {
+    const adminUser = await verifyUserWithPermission(req, res, 'system.logs');
+    if (!adminUser) return;
+
+    const history = await AuthDB.readLoginHistoryAsync();
+    const sortedHistory = [...history].sort((a, b) => new Date(b.loginAt).getTime() - new Date(a.loginAt).getTime());
+    return res.json(sortedHistory);
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error retrieving login history.' });
   }
 });
 
