@@ -54,16 +54,11 @@ CREATE TABLE IF NOT EXISTS zoal_users (
   phone TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT DEFAULT 'customer',
-  status TEXT DEFAULT 'active',
-  email_verified BOOLEAN DEFAULT FALSE,
-  phone_verified BOOLEAN DEFAULT FALSE,
-  avatar TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  last_login TIMESTAMPTZ,
-  addresses JSONB DEFAULT '[]'::jsonb,
+  is_verified BOOLEAN DEFAULT FALSE,
   verification_code TEXT,
-  reset_code TEXT
+  reset_code TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  addresses JSONB DEFAULT '[]'::jsonb
 );
 
 -- 2. Create Sessions Table
@@ -82,8 +77,7 @@ CREATE TABLE IF NOT EXISTS zoal_activity_logs (
   action TEXT NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   ip TEXT,
-  user_agent TEXT,
-  entity TEXT DEFAULT 'system'
+  user_agent TEXT
 );
 
 -- 4. Create Email Logs (Order Receipts) Table
@@ -102,56 +96,10 @@ CREATE TABLE IF NOT EXISTS zoal_email_logs (
   order_data JSONB DEFAULT '{}'::jsonb
 );
 
--- 5. Create Roles Table
-CREATE TABLE IF NOT EXISTS zoal_roles (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 6. Create Permissions Table
-CREATE TABLE IF NOT EXISTS zoal_permissions (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT
-);
-
--- 7. Create Role Permissions Table
-CREATE TABLE IF NOT EXISTS zoal_role_permissions (
-  role_id TEXT NOT NULL REFERENCES zoal_roles(id) ON DELETE CASCADE,
-  permission_id TEXT NOT NULL REFERENCES zoal_permissions(id) ON DELETE CASCADE,
-  PRIMARY KEY (role_id, permission_id)
-);
-
--- 8. Create User Permissions Table
-CREATE TABLE IF NOT EXISTS zoal_user_permissions (
-  user_id TEXT NOT NULL REFERENCES zoal_users(id) ON DELETE CASCADE,
-  permission_id TEXT NOT NULL REFERENCES zoal_permissions(id) ON DELETE CASCADE,
-  PRIMARY KEY (user_id, permission_id)
-);
-
--- 9. Create Login History Table
-CREATE TABLE IF NOT EXISTS zoal_login_history (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES zoal_users(id) ON DELETE CASCADE,
-  ip_address TEXT,
-  device TEXT,
-  browser TEXT,
-  country TEXT,
-  login_at TIMESTAMPTZ DEFAULT NOW(),
-  logout_at TIMESTAMPTZ,
-  status TEXT NOT NULL
-);
-
--- Disable RLS (Row Level Security) or allow all operations for ease of sandbox integration:
+-- Enable RLS (Row Level Security) and add basic public-access rules or keep simple for sandbox integration:
+-- For ease of applet development, you can disable RLS or allow all operations:
 ALTER TABLE zoal_users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE zoal_sessions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE zoal_activity_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE zoal_email_logs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE zoal_roles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE zoal_permissions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE zoal_role_permissions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE zoal_user_permissions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE zoal_login_history DISABLE ROW LEVEL SECURITY;
 `;

@@ -7,7 +7,7 @@ export const PRODUCTS: Product[] = [
     name: 'ZOAL Royal Saffron Gold Latte',
     description: 'Our signature espresso-infused cream beverage, micro-blended with first-grade golden saffron strands, cardamom, and subtle layers of organic honey.',
     subDescription: '100% Specialist Grade Arabica, traditional gold seal blend.',
-    price: 45,
+    price: 0,
     category: 'coffee',
     images: [
       '/src/assets/images/coffee-saffron-latte.jpg',
@@ -33,7 +33,7 @@ export const PRODUCTS: Product[] = [
     name: 'Obsidian Velvet Cold Brew',
     description: 'A slow-dripped cold extraction utilizing premium dark roasted beans, served over a dense house-made cream float and caramelized raw sugar crust.',
     subDescription: 'Cold-steeped over exactly 24 hours under nitrogen pressurization.',
-    price: 38,
+    price: 0,
     category: 'coffee',
     images: [
       '/src/assets/images/coffee-cold-brew.jpg'
@@ -54,7 +54,7 @@ export const PRODUCTS: Product[] = [
     name: 'ZOAL Taif Rose Saffron Tea',
     description: 'An ethereal steep of handpicked Taif rosebuds coupled with premier Kashmiri saffron strands and wild orange blossom oils.',
     subDescription: 'Organic herbal infusion for high-end hospitality gatherings.',
-    price: 32,
+    price: 0,
     category: 'coffee',
     images: [
       '/src/assets/images/coffee-rose-tea.jpg'
@@ -77,7 +77,7 @@ export const PRODUCTS: Product[] = [
     name: 'Premium House Traditional Hoboz Bread',
     description: 'Authentic Sudanese flatbread, stone-fired with real white sesame seed sprinklings. Soft, pillowy pockets engineered with traditional high-rise fermentation.',
     subDescription: 'Crafted fresh daily on our wood-burning stone deck hearths.',
-    price: 15,
+    price: 0,
     category: 'bakery',
     images: [
       '/src/assets/images/bakery-hoboz.jpg'
@@ -101,7 +101,7 @@ export const PRODUCTS: Product[] = [
     name: 'Golden Saffron Ghoriba Biscuits',
     description: 'Traditional melt-in-the-mouth Sudanese butter cookies decorated with whole cardamoms and delicate hints of premium saffron essence.',
     subDescription: 'Our signature heritage sweet treat baked from fine ghee.',
-    price: 65,
+    price: 0,
     category: 'bakery',
     images: [
       '/src/assets/images/bakery-ghoriba.jpg'
@@ -122,7 +122,7 @@ export const PRODUCTS: Product[] = [
     name: 'Spiced Savory Sudanese Sambuxas',
     description: 'Exquisite, light, triangular fried pastry skins stuffed with traditional green herbs, minced beef, and Sudanese spice formulations.',
     subDescription: 'Traditional crispy hot snack fired in small carefully-monitored batches.',
-    price: 35,
+    price: 0,
     category: 'bakery',
     images: [
       '/src/assets/images/bakery-sambuxa.jpg'
@@ -145,7 +145,7 @@ export const PRODUCTS: Product[] = [
     name: 'Heritage Organic Karkadeh Flowers',
     description: 'Pristine, sun-dried hibiscus calyces sourced straight from organic farms in Kordofan. Brews into a deep-crimson, vitamin-rich luxury tonic.',
     subDescription: '100% natural traditional Sudanese hibiscus blossoms.',
-    price: 75,
+    price: 0,
     category: 'market',
     images: [
       '/images/market_grocery_official_1781633042972.jpg'
@@ -168,7 +168,7 @@ export const PRODUCTS: Product[] = [
     name: 'Premium Hashab Gum Arabic Elixir',
     description: 'Raw, pristine golden crystal nodules of Acacia Senegal, sorted meticulously. Dissolves cleanly to support daily digestion, vitality, and traditional uses.',
     subDescription: 'Highly prized supreme pharmaceutical grade natural gum.',
-    price: 95,
+    price: 0,
     category: 'market',
     images: [
       '/images/market_grocery_official_1781633042972.jpg'
@@ -191,7 +191,7 @@ export const PRODUCTS: Product[] = [
     name: 'Imported Authentic Sudanese Toob',
     description: 'Indulge in absolute luxury. A traditional imported women’s Toob dress made from exquisite, ultra-lightweight cotton blended with custom-spun gold silk fibers.',
     subDescription: 'Timeless Sudanese women’s wear crafted for formal celebrations.',
-    price: 1850,
+    price: 0,
     category: 'fashion',
     images: [
       '/src/assets/images/fashion-sudanese-toob.jpg'
@@ -215,7 +215,7 @@ export const PRODUCTS: Product[] = [
     name: 'Royal Silk Abaya & Accessories Suite',
     description: 'A loose, majestic modern Abaya made from double-weight premium mulberry silk, detailed with pristine calligraphic lines in gold embroidery.',
     subDescription: 'High-end modest wear incorporating elegant geometric weaves.',
-    price: 1450,
+    price: 0,
     category: 'fashion',
     images: [
       '/src/assets/images/fashion-silk-abaya.jpg'
@@ -238,7 +238,7 @@ export const PRODUCTS: Product[] = [
     name: 'Luxury Sudanese White Thobe',
     description: 'A premium, pristine white traditional Thobe crafted from the finest breathable cotton.',
     subDescription: 'Classic, crisp white Thobe featuring elegant drape and refined finishing.',
-    price: 490,
+    price: 0,
     category: 'thobes',
     images: [
       '/src/assets/images/thobes-white-luxury.jpg'
@@ -261,7 +261,7 @@ export const PRODUCTS: Product[] = [
     name: 'Modern Heritage Men\'s Thobe',
     description: 'A contemporary take on traditional wear, featuring subtle modern tailoring elements.',
     subDescription: 'Traditional silhouette updated with sophisticated sharp lines.',
-    price: 320,
+    price: 0,
     category: 'thobes',
     images: [
       '/src/assets/images/thobes-heritage-modern.jpg'
