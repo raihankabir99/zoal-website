@@ -182,7 +182,7 @@ export default function About() {
               }}
               className="p-6 bg-zinc-950/20 border border-white/5 rounded-xs"
             >
-              <span className="text-3xl sm:text-4xl font-mono text-gold-pure font-bold block">2025</span>
+              <span className="text-3xl sm:text-4xl font-['Times_New_Roman'] text-gold-pure font-bold block">2025</span>
               <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Foundation of ZOAL</h4>
               <p className="text-zinc-500 text-[10px] mt-1">ZOAL began in Al Hofuf with a vision of bringing authentic Sudanese and Arabian products to the local community through a clothing store and grocery market focused on quality, heritage, and everyday essentials.</p>
             </motion.div>
@@ -194,7 +194,7 @@ export default function About() {
               }}
               className="p-6 bg-zinc-950/20 border border-white/5 rounded-xs"
             >
-              <span className="text-3xl sm:text-4xl font-mono text-gold-pure font-bold block">Late 2025</span>
+              <span className="text-3xl sm:text-4xl font-['Times_New_Roman'] text-gold-pure font-bold block">Late 2025</span>
               <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Coffee & Bakery Launch</h4>
               <p className="text-zinc-500 text-[10px] mt-1">Expanded into hospitality with the introduction of a specialty coffee café and traditional bakery, serving Arabic coffee, Sudanese favorites, fresh breads, pastries, and handcrafted baked goods.</p>
             </motion.div>
@@ -206,7 +206,7 @@ export default function About() {
               }}
               className="p-6 bg-zinc-950/20 border border-white/5 rounded-xs"
             >
-              <span className="text-3xl sm:text-4xl font-mono text-gold-pure font-bold block">2026</span>
+              <span className="text-3xl sm:text-4xl font-['Times_New_Roman'] text-gold-pure font-bold block">2026</span>
               <h4 className="text-white text-[11px] font-display uppercase font-semibold mt-2">Hospitality Expansion</h4>
               <p className="text-zinc-500 text-[10px] mt-1">Extended the ZOAL experience into accommodation and guest services, creating welcoming spaces that combine comfort, culture, and traditional Arabian hospitality.</p>
             </motion.div>
