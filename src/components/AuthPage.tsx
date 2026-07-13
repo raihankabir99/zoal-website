@@ -555,111 +555,15 @@ export default function AuthPage({
       <div className="absolute top-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#D4AF37] opacity-5 blur-[140px] rounded-full pointer-events-none z-0"></div>
       <div className="absolute bottom-[-100px] right-[-100px] w-[400px] h-[400px] bg-[#D4AF37] opacity-5 blur-[140px] rounded-full pointer-events-none z-0"></div>
 
-      <div className="relative w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 bg-[#09090b]/85 border border-white/10 rounded-xl shadow-[0_24px_70px_rgba(0,0,0,0.95),0_0_40px_rgba(212,175,55,0.03)] backdrop-blur-xl z-10 overflow-hidden min-h-[580px] lg:min-h-[680px]">
+      <div className="relative w-full max-w-xl bg-[#09090b]/85 border border-white/10 rounded-xl shadow-[0_24px_70px_rgba(0,0,0,0.95),0_0_40px_rgba(212,175,55,0.03)] backdrop-blur-xl z-10 overflow-hidden min-h-[580px] lg:min-h-[640px]">
         
         {/* Top Sovereign Gold Line Accent */}
         <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent z-20"></div>
 
         {/* ====================================================
-            LEFT SIDE PANEL - LUXURY BRANDING (Desktop only)
-            ==================================================== */}
-        <div className="hidden lg:flex lg:col-span-5 p-12 flex-col justify-between bg-gradient-to-b from-[#09090b]/90 via-[#030303]/60 to-[#09090b]/95 border-r border-white/10 relative overflow-hidden select-none">
-          {/* Subtle animated background particles */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30">
-            {[...Array(6)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-1 h-1 rounded-full bg-[#D4AF37]"
-                style={{
-                  top: `${15 + i * 15}%`,
-                  left: `${20 + (i * 12) % 60}%`,
-                }}
-                animate={{
-                  y: [0, -35, 0],
-                  opacity: [0.15, 0.75, 0.15],
-                  scale: [1, 1.4, 1],
-                }}
-                transition={{
-                  duration: 6 + i * 2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Top Header Logo & Branding */}
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-10 h-10 border border-[#D4AF37] rounded-sm flex items-center justify-center bg-black/70 shadow-[0_0_12px_rgba(212,175,55,0.15)]">
-              <span className="font-display text-sm font-bold text-[#D4AF37] tracking-wider">AZ</span>
-            </div>
-            <div>
-              <span className="font-display text-xs font-bold tracking-[0.3em] text-[#D4AF37] block">AL ZOAL</span>
-              <span className="text-[7.5px] uppercase tracking-widest text-zinc-500 font-sans">Sovereign Enterprise</span>
-            </div>
-          </div>
-
-          {/* Central Luxury Message and Value propositions */}
-          <div className="relative z-10 my-auto py-8">
-            <span className="text-[8.5px] uppercase tracking-[0.35em] text-[#D4AF37] font-semibold block mb-3">
-              ESTABLISHED IN 2026
-            </span>
-            <h1 className="text-3xl font-extralight tracking-wide text-white leading-tight font-display mb-4">
-              WELCOME <br />
-              <span className="font-semibold text-white">BACK</span>
-            </h1>
-            <p className="text-zinc-400 text-[11.5px] font-sans leading-relaxed max-w-sm">
-              Enter the chambers of pure luxury. Curated collections, exquisite bespoke tailoring, and unrivaled priority service await you.
-            </p>
-
-            {/* Feature Cards */}
-            <div className="mt-8 space-y-4">
-              <div className="flex items-center gap-4 p-3.5 bg-white/[0.01] border border-white/5 rounded-md backdrop-blur-sm hover:border-[#D4AF37]/20 transition-all duration-300 group">
-                <div className="w-7 h-7 rounded-full bg-zinc-950 border border-white/10 flex items-center justify-center group-hover:border-[#D4AF37]/40 transition-colors">
-                  <span className="text-[#D4AF37] text-[10px] font-bold">✓</span>
-                </div>
-                <div>
-                  <h4 className="text-[10px] uppercase tracking-widest text-zinc-300 font-bold font-sans">Secure Authentication</h4>
-                  <p className="text-[9px] text-zinc-500 font-sans mt-0.5">Sovereign asymmetric key protection</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 p-3.5 bg-white/[0.01] border border-white/5 rounded-md backdrop-blur-sm hover:border-[#D4AF37]/20 transition-all duration-300 group">
-                <div className="w-7 h-7 rounded-full bg-zinc-950 border border-white/10 flex items-center justify-center group-hover:border-[#D4AF37]/40 transition-colors">
-                  <span className="text-[#D4AF37] text-[10px] font-bold">✓</span>
-                </div>
-                <div>
-                  <h4 className="text-[10px] uppercase tracking-widest text-zinc-300 font-bold font-sans">Fast Checkout</h4>
-                  <p className="text-[9px] text-zinc-500 font-sans mt-0.5">One-click express luxury acquisitions</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 p-3.5 bg-white/[0.01] border border-white/5 rounded-md backdrop-blur-sm hover:border-[#D4AF37]/20 transition-all duration-300 group">
-                <div className="w-7 h-7 rounded-full bg-zinc-950 border border-white/10 flex items-center justify-center group-hover:border-[#D4AF37]/40 transition-colors">
-                  <span className="text-[#D4AF37] text-[10px] font-bold">✓</span>
-                </div>
-                <div>
-                  <h4 className="text-[10px] uppercase tracking-widest text-zinc-300 font-bold font-sans">Enterprise Security</h4>
-                  <p className="text-[9px] text-zinc-500 font-sans mt-0.5">Advanced fraud and privacy guardians</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Left Panel Bottom Security Notice */}
-          <div className="relative z-10 pt-4 border-t border-white/5 flex items-center justify-between text-zinc-500 text-[8px] uppercase tracking-widest font-sans font-medium">
-            <span className="flex items-center gap-1.5 text-zinc-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
-              Sovereign TLS
-            </span>
-            <span>Est. 2026</span>
-          </div>
-        </div>
-
-        {/* ====================================================
             RIGHT SIDE PANEL - LUXURY AUTHENTICATION FORM
             ==================================================== */}
-        <div id="auth-portal-card" className="col-span-12 lg:col-span-7 p-6 sm:p-10 md:p-12 flex flex-col justify-between relative z-10">
+        <div id="auth-portal-card" className="w-full p-6 sm:p-10 md:p-12 flex flex-col justify-between relative z-10">
           
           <div className="my-auto max-w-md w-full mx-auto space-y-6">
             
