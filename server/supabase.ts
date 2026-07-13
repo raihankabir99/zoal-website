@@ -51,6 +51,28 @@ export const SUPABASE_SQL_SCHEMA = `-- =========================================
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Drop existing tables in reverse-dependency order to allow a clean, fresh setup
+DROP TABLE IF EXISTS zoal_email_logs CASCADE;
+DROP TABLE IF EXISTS zoal_inquiries CASCADE;
+DROP TABLE IF EXISTS zoal_activity_logs CASCADE;
+DROP TABLE IF EXISTS zoal_staff_details CASCADE;
+DROP TABLE IF EXISTS zoal_analytics CASCADE;
+DROP TABLE IF EXISTS zoal_notifications CASCADE;
+DROP TABLE IF EXISTS zoal_reviews CASCADE;
+DROP TABLE IF EXISTS zoal_cart CASCADE;
+DROP TABLE IF EXISTS zoal_wishlist CASCADE;
+DROP TABLE IF EXISTS zoal_order_items CASCADE;
+DROP TABLE IF EXISTS zoal_orders CASCADE;
+DROP TABLE IF EXISTS zoal_shipping CASCADE;
+DROP TABLE IF EXISTS zoal_coupons CASCADE;
+DROP TABLE IF EXISTS zoal_addresses CASCADE;
+DROP TABLE IF EXISTS zoal_inventory CASCADE;
+DROP TABLE IF EXISTS zoal_products CASCADE;
+DROP TABLE IF EXISTS zoal_brands CASCADE;
+DROP TABLE IF EXISTS zoal_categories CASCADE;
+DROP TABLE IF EXISTS zoal_sessions CASCADE;
+DROP TABLE IF EXISTS zoal_users CASCADE;
+
 -- =========================================================================
 -- 1. USER ACCOUNTS & SESSIONS (BACKWARDS COMPATIBLE WITH CORE AUTH ENGINE)
 -- =========================================================================
