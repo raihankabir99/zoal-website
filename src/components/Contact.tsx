@@ -198,7 +198,7 @@ export default function Contact() {
                   disabled={submitting}
                   className="w-full py-4 bg-gradient-to-r from-gold-dark to-gold-pure disabled:from-zinc-800 disabled:to-zinc-900 text-black font-display font-bold uppercase tracking-widest text-[10px] rounded-sm transition-transform hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {submitting ? 'Transmitting...' : 'Submit Privy Inquiry'}
+                  {submitting ? 'Transmitting...' : 'SEND INQUIRY'}
                   <Send className="w-4 h-4" />
                 </button>
 
