@@ -91,11 +91,8 @@ export default function Contact() {
               <div className="p-5 flex items-start gap-4">
                 <Phone className="w-5 h-5 text-gold-pure mt-0.5" />
                 <div>
-                  <h4 className="text-white font-medium">Phone & WhatsApp</h4>
-                  <p className="text-zinc-500 mt-1 mb-1" dir="ltr">📞 +966 56 769 9315</p>
-                  <p className="text-zinc-500">
-                    💬 WhatsApp: <a href="https://wa.me/966567699315" target="_blank" rel="noopener noreferrer" className="hover:text-gold-pure transition-colors" dir="ltr">+966 56 769 9315</a> · Direct WhatsApp Mobile
-                  </p>
+                  <h4 className="text-white font-medium">Phone</h4>
+                  <p className="text-zinc-500 mt-1 mb-1" dir="ltr">+966 56 769 9315</p>
                 </div>
               </div>
 
@@ -115,29 +112,6 @@ export default function Contact() {
                 </div>
               </div>
 
-            </div>
-
-            {/* Direct WhatsApp trigger banner */}
-            <div className="p-5 border border-emerald-500/25 bg-emerald-950/5 rounded-sm space-y-3">
-              <div className="flex items-center space-x-2 text-emerald-400">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
-                <span className="text-xs font-display font-semibold uppercase tracking-wider">Connect on WhatsApp</span>
-              </div>
-              <p className="text-[10.5px] text-zinc-400">Reach our team directly for product inquiries, orders, delivery information, and customer assistance.</p>
-              <ul className="text-[10px] text-zinc-500 space-y-1">
-                <li>• Available during business hours.</li>
-                <li>• Fast, friendly, and personalized support.</li>
-              </ul>
-              <button
-                onClick={() => {
-                  window.open('https://wa.me/966567699315', '_blank');
-                }}
-                className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-black font-display font-bold text-[9px] uppercase tracking-widest rounded-sm transition-colors cursor-pointer w-fit mt-2"
-              >
-                Chat with us
-              </button>
             </div>
 
           </div>
