@@ -10,7 +10,7 @@ interface NavbarProps {
   setCurrentPage: (page: string) => void;
   cart: CartItem[];
   wishlist: string[];
-  currentUser: { name: string; email: string; role?: string } | null;
+  currentUser: { name: string; email: string } | null;
   setAuthModalOpen: (open: boolean) => void;
   selectedCategoryFilter?: string;
   setSelectedCategoryFilter?: (cat: string) => void;
@@ -200,35 +200,13 @@ export default function Navbar({
 
               {currentUser && (
                 <div className="absolute right-0 top-full mt-1 w-52 bg-zinc-950 border border-white/10 rounded-xs shadow-[0_12px_40px_rgba(0,0,0,0.95)] opacity-0 pointer-events-none group-hover/nav-profile:opacity-100 group-hover/nav-profile:pointer-events-auto transition-all duration-300 z-50 p-2.5">
-                  <div className="p-2 border-b border-white/5 mb-2 flex items-center gap-2.5 text-left">
-                    <div className="w-8 h-8 rounded-full bg-zinc-900 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] text-[10px] font-semibold uppercase tracking-wider shrink-0 select-none">
-                      {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2) : 'U'}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10.5px] text-white font-semibold font-display tracking-wide uppercase truncate leading-tight mb-1">
-                        {currentUser.name}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                        <span className={`inline-flex items-center text-[7.5px] px-1.5 py-0.5 font-mono tracking-widest uppercase rounded-xs border ${
-                          currentUser.role === 'superadmin'
-                            ? 'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/30'
-                            : currentUser.role === 'admin'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : currentUser.role === 'staff'
-                            ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                            : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-                        }`}>
-                          {currentUser.role === 'superadmin' ? 'Super Admin' : currentUser.role || 'Customer'}
-                        </span>
-                        <span className={`inline-flex items-center text-[7px] px-1 py-0.5 font-mono tracking-wider uppercase rounded-xs border ${
-                          (currentUser as any).status === 'suspended'
-                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        }`}>
-                          {(currentUser as any).status || 'ACTIVE'}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="p-2 border-b border-white/5 text-left mb-2">
+                    <p className="text-[10.5px] text-white font-semibold font-display tracking-wide uppercase truncate leading-tight mb-0.5">
+                      {currentUser.name}
+                    </p>
+                    <span className="text-[8.5px] font-mono text-zinc-500 tracking-wider truncate block">
+                      {currentUser.email}
+                    </span>
                   </div>
                   <div className="flex flex-col gap-1">
                     {[

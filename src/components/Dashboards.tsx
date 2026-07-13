@@ -22,7 +22,6 @@ import { getReturnsConfig, saveReturnsConfig, ReturnsConfig } from '../data/retu
 import TrackOrder from './TrackOrder';
 import { AddressSection } from './AddressSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
-import UserManagement from './UserManagement';
 
 interface DashboardsProps {
   currentUser: { name: string; email: string; phone: string; address: string; role?: string; addresses?: any[] } | null;
@@ -63,13 +62,9 @@ export default function Dashboards({
   const allProducts = useGlobalProducts();
   // Assume currentUser has a 'role' property: 'customer' | 'admin'
   const userRole = currentUser ? (currentUser as any).role || 'customer' : null;
-  const isInternalRole = userRole === 'superadmin' || userRole === 'admin' || userRole === 'manager' || userRole === 'staff';
 
   // Select active role view
-  const [activeDashboardTab, setActiveDashboardTab] = useState<'patron' | 'admin' | 'owner'>(() => {
-    if (isInternalRole) return 'admin';
-    return 'patron';
-  });
+  const [activeDashboardTab, setActiveDashboardTab] = useState<'patron' | 'admin' | 'owner'>('patron');
 
   // Customer sub-tab states
   const [customerSubTab, setCustomerSubTab] = useState<string>(() => {
@@ -171,10 +166,10 @@ export default function Dashboards({
   };
 
   useEffect(() => {
-    if (isInternalRole) {
+    if (userRole === 'admin') {
       fetchSupabaseStatus();
     }
-  }, [userRole, isInternalRole]);
+  }, [userRole]);
 
   const [languagePreference, setLanguagePreference] = useState<string>(() => {
     if (!currentUser?.email) return 'en';
@@ -373,17 +368,15 @@ export default function Dashboards({
           </div>
 
           <div className="flex bg-zinc-950 p-1 border border-white/5 rounded-sm w-full sm:w-auto rtl:flex-row-reverse">
-            {userRole === 'customer' && (
-              <button
-                onClick={() => setActiveDashboardTab('patron')}
-                className={`flex-grow sm:flex-initial py-2.5 px-5 rounded-xs text-[10px] sm:text-xs font-display uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                  activeDashboardTab === 'patron' ? 'bg-gold-pure text-black font-semibold' : 'text-zinc-500 hover:text-white'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" /> {t('dashboard.patron_area', { defaultValue: 'Patron Area' })}
-              </button>
-            )}
-            {isInternalRole && (
+            <button
+              onClick={() => setActiveDashboardTab('patron')}
+              className={`flex-grow sm:flex-initial py-2.5 px-5 rounded-xs text-[10px] sm:text-xs font-display uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                activeDashboardTab === 'patron' ? 'bg-gold-pure text-black font-semibold' : 'text-zinc-500 hover:text-white'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" /> {t('dashboard.patron_area', { defaultValue: 'Patron Area' })}
+            </button>
+            {userRole === 'admin' && (
               <>
                 <button
                   onClick={() => setActiveDashboardTab('admin')}
@@ -407,7 +400,7 @@ export default function Dashboards({
         </div>
 
         {/* I. PATRON / CUSTOMER DASHBOARD */}
-        {activeDashboardTab === 'patron' && userRole === 'customer' && (
+        {activeDashboardTab === 'patron' && (
           <div className="space-y-6">
             
             {/* Top Navigation & Breadcrumb Bar */}
@@ -1184,12 +1177,11 @@ export default function Dashboards({
                                     <button
                                       onClick={() => {
                                         onAddToCart(product, 1);
-                                        onToggleWishlist(product.id);
-                                        triggerToast(`✓ Moved ${product.name} to shopping cart.`, 'success');
+                                        triggerToast(`✓ Dispatched ${product.name} into shopping cart.`, 'success');
                                       }}
                                       className="px-3 py-1.5 bg-[#D4AF37] hover:bg-white text-black text-[8.5px] font-bold uppercase tracking-wider rounded-xs cursor-pointer"
                                     >
-                                      Move to Cart
+                                      Add to Cart
                                     </button>
                                     <button
                                       onClick={() => {
@@ -1698,25 +1690,6 @@ export default function Dashboards({
               </AnimatePresence>
             </div>
 
-          </div>
-        )}
-
-        {activeDashboardTab === 'patron' && userRole !== 'customer' && (
-          <div className="p-12 text-center bg-zinc-950 border border-white/5 rounded-sm my-10 space-y-4">
-            <Lock className="w-12 h-12 text-[#D4AF37] mx-auto mb-2 animate-bounce" />
-            <h3 className="text-white text-sm font-display uppercase tracking-wider">Access Restricted</h3>
-            <p className="text-zinc-400 text-xs max-w-md mx-auto leading-relaxed">
-              Your security role (<span className="text-[#D4AF37] font-mono font-bold uppercase">{userRole}</span>) is not authorized to access the Customer Portal. 
-              Please enter your authorized control desk.
-            </p>
-            {isInternalRole && (
-              <button
-                onClick={() => setActiveDashboardTab('admin')}
-                className="px-6 py-2.5 bg-[#D4AF37] hover:bg-white text-black text-[10px] font-bold uppercase tracking-widest rounded-xs transition-all duration-300 cursor-pointer font-sans"
-              >
-                Go to Portal Desk
-              </button>
-            )}
           </div>
         )}
 
@@ -2572,11 +2545,6 @@ export default function Dashboards({
                 </div>
               )}
             </div>
-
-            {/* 🛡️ IX. Enterprise Security & User Management (Super Admin only) */}
-            {userRole === 'superadmin' && (
-              <UserManagement />
-            )}
 
           </div>
         )}

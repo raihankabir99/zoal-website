@@ -8,18 +8,44 @@ export default function Contact() {
   const [msg, setMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          phone,
+          message: msg,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to submit your inquiry. Please try again.');
+      }
+
       setSuccess(true);
       setName('');
       setEmail('');
       setPhone('');
       setMsg('');
-    }, 1500);
+    } catch (err: any) {
+      console.error('Inquiry submission failure:', err);
+      setError(err.message || 'An unexpected connection error occurred.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -121,6 +147,12 @@ export default function Contact() {
             
             <h3 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-3">Inquiry Application</h3>
 
+            {error && (
+              <div className="p-4 border border-red-500/25 bg-red-950/15 rounded-sm text-red-400 text-xs font-sans leading-relaxed">
+                {error}
+              </div>
+            )}
+
             {success ? (
               <div className="p-6 border border-gold-pure/20 rounded-xs bg-gold-pure/5 text-center space-y-3 animate-fade-in">
                 <CheckCircle2 className="w-10 h-10 text-gold-pure mx-auto animate-pulse" />
@@ -146,7 +178,7 @@ export default function Contact() {
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Abdullah Bin-Ali"
+                      placeholder=""
                       className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white focus:outline-none focus:border-gold-pure/35"
                     />
                   </div>
@@ -157,21 +189,21 @@ export default function Contact() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="alzoal3003@gmail.com"
-                      className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white focus:outline-none focus:border-gold-pure/35"
+                      placeholder="example@email.com"
+                      className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white placeholder-zinc-700/40 focus:outline-none focus:border-gold-pure/35"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[9px] text-zinc-400 uppercase tracking-widest">Phone Axis:</label>
+                  <label className="text-[9px] text-zinc-400 uppercase tracking-widest">Phone Number:</label>
                   <input
                     type="tel"
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+966 56 769 9315"
-                    className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white focus:outline-none focus:border-gold-pure/35"
+                    placeholder="+966XXXXXXXXX"
+                    className="w-full bg-black border border-white/5 rounded-sm p-2.5 text-xs text-white placeholder-zinc-700/40 focus:outline-none focus:border-gold-pure/35"
                   />
                 </div>
 

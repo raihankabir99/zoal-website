@@ -240,7 +240,7 @@ export default function Checkout({
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder={i18n.language === 'ar' ? 'عبدالله السعودي' : 'e.g. Abdullah Al-Saudi'}
+                    placeholder=""
                     className="w-full bg-black border border-white/5 rounded-sm p-3 text-xs text-white focus:outline-none focus:border-gold-pure/45 transition-colors"
                   />
                 </div>
@@ -255,7 +255,7 @@ export default function Checkout({
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+966 56 769 9315"
+                    placeholder=""
                     className="w-full bg-black border border-white/5 rounded-sm p-3 text-xs text-white focus:outline-none focus:border-gold-pure/45 transition-colors"
                   />
                 </div>
@@ -270,7 +270,7 @@ export default function Checkout({
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="alzoal3003@gmail.com"
+                    placeholder=""
                     className="w-full bg-black border border-white/5 rounded-sm p-3 text-xs text-white focus:outline-none focus:border-gold-pure/45 transition-colors"
                   />
                 </div>
@@ -789,7 +789,7 @@ export default function Checkout({
                       type="text"
                       value={cardHolder}
                       onChange={(e) => setCardHolder(e.target.value)}
-                      placeholder="e.g. Abdullah Al-Saudi"
+                      placeholder=""
                       className="w-full bg-black border border-white/5 rounded-xs p-2 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-gold-pure/30"
                     />
                   </div>

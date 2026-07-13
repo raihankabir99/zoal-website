@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -522,18 +523,11 @@ app.post('/api/auth/register', async (req, res) => {
       phone: phone.trim(),
       passwordHash: AuthDB.hashPassword(password),
       role: 'customer',
-      status: 'active',
       isVerified: false,
-      emailVerified: false,
-      phoneVerified: false,
-      avatar: null,
       verificationCode,
       resetCode: '',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      addresses: [],
-      suspended: false,
-      permissions: []
+      addresses: []
     };
 
     users.push(newUser);
@@ -614,10 +608,6 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email/Phone and Password are required.' });
     }
 
-    const { browser, device } = parseUserAgent(req.headers['user-agent'] || '');
-    const country = 'Saudi Arabia';
-    const ip = req.ip || '127.0.0.1';
-
     const users = await AuthDB.readUsersAsync();
     const cleanCredential = emailOrPhone.trim().toLowerCase();
 
@@ -629,29 +619,20 @@ app.post('/api/auth/login', async (req, res) => {
     );
 
     if (!user) {
-      await AuthDB.logLoginHistoryAsync('unknown', ip, device, browser, country, 'failure');
       return res.status(401).json({ error: 'Invalid credentials. User not found.' });
     }
 
     const isPasswordCorrect = AuthDB.verifyPassword(password, user.passwordHash);
     if (!isPasswordCorrect) {
-      await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'failure');
       return res.status(401).json({ error: 'Invalid credentials. Password incorrect.' });
     }
 
-    if (user.status === 'suspended' || user.suspended) {
-      await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'failure');
-      return res.status(403).json({ error: 'This account has been suspended by the administrator.' });
-    }
-
-    const isVerified = user.emailVerified || user.isVerified;
-    if (!isVerified) {
-      await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'failure');
+    if (!user.isVerified) {
       return res.status(403).json({
         error: 'Email is not verified.',
         needsVerification: true,
         email: user.email,
-        verificationCode: user.verificationCode || 'VERIFIED' // Pass back so they can log in seamlessly in development
+        verificationCode: user.verificationCode // Pass back so they can log in seamlessly in development
       });
     }
 
@@ -670,13 +651,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     await AuthDB.writeSessionsAsync(sessions);
-
-    // Save login timestamp
-    user.lastLogin = new Date().toISOString();
-    await AuthDB.writeUsersAsync(users);
-
-    await AuthDB.logLoginHistoryAsync(user.id, ip, device, browser, country, 'success');
-    await AuthDB.logActivityAsync(user.id, user.email, 'LOGIN', ip, req.headers['user-agent'] || '');
+    await AuthDB.logActivityAsync(user.id, user.email, 'LOGIN', req.ip || '', req.headers['user-agent'] || '');
 
     return res.json({
       success: true,
@@ -690,11 +665,8 @@ app.post('/api/auth/login', async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         phone: user.phone,
         role: user.role,
-        status: user.status || 'active',
-        avatar: user.avatar,
-        isVerified: true,
-        addresses: user.addresses || [],
-        permissions: user.permissions || []
+        isVerified: user.isVerified,
+        addresses: user.addresses || []
       }
     });
   } catch (error) {
@@ -738,10 +710,6 @@ app.post('/api/auth/session', async (req, res) => {
       return res.status(401).json({ error: 'Associated account not found.' });
     }
 
-    if (user.status === 'suspended' || user.suspended) {
-      return res.status(403).json({ error: 'This account has been suspended by the administrator.' });
-    }
-
     return res.json({
       success: true,
       user: {
@@ -752,11 +720,8 @@ app.post('/api/auth/session', async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         phone: user.phone,
         role: user.role,
-        status: user.status || 'active',
-        avatar: user.avatar,
-        isVerified: user.emailVerified || user.isVerified,
-        addresses: user.addresses || [],
-        permissions: user.permissions || []
+        isVerified: user.isVerified,
+        addresses: user.addresses || []
       }
     });
   } catch (error) {
@@ -1008,14 +973,6 @@ app.post('/api/auth/logout', async (req, res) => {
 
       if (user) {
         await AuthDB.logActivityAsync(user.id, user.email, 'LOGOUT', req.ip || '', req.headers['user-agent'] || '');
-        // Update login history logout time
-        const historyList = await AuthDB.readLoginHistoryAsync();
-        const latestHistory = [...historyList]
-          .reverse()
-          .find(h => h.userId === user.id && h.logoutAt === null);
-        if (latestHistory) {
-          await AuthDB.logLogoutHistoryAsync(latestHistory.id);
-        }
       }
 
       sessions.splice(sessionIndex, 1);
@@ -1031,8 +988,25 @@ app.post('/api/auth/logout', async (req, res) => {
 // Fetch Activity Logs (Admin only)
 app.get('/api/auth/activity-logs', async (req, res) => {
   try {
-    const adminUser = await verifyUserWithPermission(req, res, 'system.logs');
-    if (!adminUser) return;
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No authorization token provided.' });
+    }
+
+    const token = authHeader.substring(7);
+    const sessions = await AuthDB.readSessionsAsync();
+    const session = sessions.find((s) => s.token === token);
+
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid session token.' });
+    }
+
+    const users = await AuthDB.readUsersAsync();
+    const user = users.find((u) => u.id === session.userId);
+
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized. Administrative rights required.' });
+    }
 
     const logs = await AuthDB.readLogsAsync();
     // Return sorted descending by timestamp
@@ -1248,324 +1222,308 @@ app.post('/api/supabase/sync', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// SUPER ADMIN USER MANAGEMENT API ENDPOINTS
-// -------------------------------------------------------------
+// Helper to generate the luxury HTML inquiry email template
+function generateInquiryEmailHtml(inquiry: { id: string; name: string; email: string; phone: string; message: string; date: string }): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New AL ZOAL Privy Inquiry Received</title>
+  <style>
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      -webkit-text-size-adjust: none;
+      -ms-text-size-adjust: none;
+    }
+    @media only screen and (max-width: 600px) {
+      .container {
+        width: 100% !important;
+        padding: 15px !important;
+      }
+    }
+  </style>
+</head>
+<body style="background-color: #000000; color: #ffffff; padding: 20px 0;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #000000; width: 100%;">
+    <tr>
+      <td align="center">
+        <!-- Main Wrapper (600px max) -->
+        <table class="container" width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #050505; border: 1px solid #1c180e; border-radius: 4px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.9);">
+          
+          <!-- Double Gold Border Header Spacer -->
+          <tr>
+            <td height="4" style="background: linear-gradient(90deg, #8F6F27 0%, #E2C573 50%, #8F6F27 100%);"></td>
+          </tr>
 
-function parseUserAgent(userAgentStr: string) {
-  const ua = userAgentStr || '';
-  let browser = 'Unknown Browser';
-  let device = 'Desktop';
+          <!-- Corporate Brand Banner -->
+          <tr>
+            <td align="center" style="padding: 40px 40px 25px 40px; border-bottom: 1px solid #111111;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="text-align: center;">
+                <tr>
+                  <td>
+                    <!-- Elegant Serif Logo Text -->
+                    <div style="font-family: 'Times New Roman', Times, 'Playfair Display', Georgia, serif; font-size: 32px; font-weight: bold; color: #D4AF37; letter-spacing: 0.35em; text-transform: uppercase; margin-bottom: 5px;">
+                      ZOAL
+                    </div>
+                    <div style="font-size: 9px; font-weight: 500; color: #8F6F27; letter-spacing: 0.55em; text-transform: uppercase;">
+                      Curated Excellence
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-  if (ua.includes('Firefox')) browser = 'Firefox';
-  else if (ua.includes('Chrome')) browser = 'Chrome';
-  else if (ua.includes('Safari')) browser = 'Safari';
-  else if (ua.includes('Edge')) browser = 'Edge';
-  else if (ua.includes('Opera')) browser = 'Opera';
+          <!-- Confirmation Announcement Message -->
+          <tr>
+            <td style="padding: 40px 40px 20px 40px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="padding-bottom: 20px;">
+                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; border-radius: 50%; background-color: rgba(212, 175, 55, 0.1); border: 1px solid rgba(212, 175, 55, 0.3); text-align: center; color: #D4AF37; font-size: 20px; font-weight: bold;">
+                      ✉
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 30px;">
+                    <h2 style="font-size: 18px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 0.15em; margin: 0; font-family: 'Times New Roman', Times, serif;">
+                      New Privy Inquiry Registered
+                    </h2>
+                    <p style="font-size: 11px; color: #D4AF37; text-transform: uppercase; letter-spacing: 0.1em; margin: 8px 0 0 0; font-family: monospace;">
+                      Reference ID: ${inquiry.id}
+                    </p>
+                  </td>
+                </tr>
+                
+                <!-- Inquiry Details Card -->
+                <tr>
+                  <td style="padding: 25px; background-color: #0b0b0b; border: 1px solid #1a1a1a; border-radius: 2px;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="padding-bottom: 12px; font-size: 11px; color: #8F6F27; text-transform: uppercase; letter-spacing: 0.1em; font-family: monospace; font-weight: bold; width: 120px;">
+                          Name:
+                        </td>
+                        <td style="padding-bottom: 12px; font-size: 13px; color: #ffffff; font-weight: 600;">
+                          ${inquiry.name}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 12px; font-size: 11px; color: #8F6F27; text-transform: uppercase; letter-spacing: 0.1em; font-family: monospace; font-weight: bold;">
+                          Email Address:
+                        </td>
+                        <td style="padding-bottom: 12px; font-size: 13px; color: #ffffff; font-family: monospace;">
+                          <a href="mailto:${inquiry.email}" style="color: #D4AF37; text-decoration: none;">${inquiry.email}</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 12px; font-size: 11px; color: #8F6F27; text-transform: uppercase; letter-spacing: 0.1em; font-family: monospace; font-weight: bold;">
+                          Phone Axis:
+                        </td>
+                        <td style="padding-bottom: 12px; font-size: 13px; color: #ffffff; font-family: monospace;">
+                          <a href="tel:${inquiry.phone}" style="color: #D4AF37; text-decoration: none;">${inquiry.phone}</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 12px; font-size: 11px; color: #8F6F27; text-transform: uppercase; letter-spacing: 0.1em; font-family: monospace; font-weight: bold;">
+                          Registered At:
+                        </td>
+                        <td style="padding-bottom: 12px; font-size: 13px; color: #ffffff; font-family: monospace;">
+                          ${inquiry.date}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="border-top: 1px solid #1a1a1a; padding-top: 15px; font-size: 11px; color: #8F6F27; text-transform: uppercase; letter-spacing: 0.1em; font-family: monospace; font-weight: bold; padding-bottom: 8px;">
+                          Inquiry Narrative:
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="font-size: 13px; color: #e4e4e7; line-height: 1.6; white-space: pre-wrap; background-color: #050505; border: 1px solid #151515; padding: 15px; border-radius: 2px;">
+                          ${inquiry.message}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-  if (ua.includes('Mobi') || ua.includes('Android') || ua.includes('iPhone')) {
-    device = 'Mobile';
-  } else if (ua.includes('Tablet') || ua.includes('iPad')) {
-    device = 'Tablet';
-  }
+                <tr>
+                  <td align="center" style="padding-top: 35px; padding-bottom: 15px;">
+                    <p style="font-size: 11px; color: #a1a1aa; line-height: 1.6; max-width: 320px; text-align: center; margin: 0;">
+                      Please log in to your staff or admin dashboard to review the submission or coordinate response protocols.
+                    </p>
+                  </td>
+                </tr>
 
-  return { browser, device };
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Area -->
+          <tr>
+            <td style="background-color: #020202; border-top: 1px solid #111111; padding: 40px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="font-size: 10px; color: #52525b; line-height: 1.5; font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em;">
+                    © 2026 ZOAL Group. Curated Luxury Coffee, Fashion & Homeware. All Rights Reserved.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
 }
 
-async function verifyUserWithPermission(req: any, res: any, permissionId: string) {
-  const authHeader = req.headers['authorization'];
-  let token = '';
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  }
-  if (!token) {
-    res.status(401).json({ error: 'Session token required.' });
-    return null;
-  }
-  const sessions = await AuthDB.readSessionsAsync();
-  const session = sessions.find((s) => s.token === token);
-  if (!session) {
-    res.status(401).json({ error: 'Invalid session token.' });
-    return null;
-  }
-  const users = await AuthDB.readUsersAsync();
-  const user = users.find((u) => u.id === session.userId);
-  if (!user) {
-    res.status(401).json({ error: 'User account not found.' });
-    return null;
-  }
-  if (user.status === 'suspended' || user.suspended) {
-    res.status(403).json({ error: 'This account has been suspended by the administrator.' });
-    return null;
-  }
-  if (!AuthDB.hasPermission(user, permissionId)) {
-    res.status(403).json({ error: `Unauthorized. Requires permission: ${permissionId}` });
-    return null;
-  }
-  return user;
-}
-
-// Get all users
-app.get('/api/admin/users', async (req, res) => {
+// POST Contact Inquiry endpoint
+app.post('/api/contact', async (req, res) => {
   try {
-    const adminUser = await verifyUserWithPermission(req, res, 'users.view');
-    if (!adminUser) return;
+    const { name, email, phone, message, msg } = req.body;
+    const finalMessage = message || msg;
 
-    const users = await AuthDB.readUsersAsync();
-    const safeUsers = users.map(u => ({
-      id: u.id,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      email: u.email,
-      phone: u.phone,
-      role: u.role,
-      isVerified: u.emailVerified || u.isVerified,
-      createdAt: u.createdAt,
-      suspended: u.status === 'suspended' || !!u.suspended,
-      permissions: u.permissions || []
-    }));
-
-    return res.json(safeUsers);
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error retrieving users.' });
-  }
-});
-
-// Create Admin/Staff account
-app.post('/api/admin/users', async (req, res) => {
-  try {
-    const adminUser = await verifyUserWithPermission(req, res, 'users.create');
-    if (!adminUser) return;
-
-    const { firstName, lastName, email, phone, password, role, permissions } = req.body;
-
-    if (!firstName || !lastName || !email || !phone || !password || !role) {
-      return res.status(400).json({ error: 'All fields (firstName, lastName, email, phone, password, role) are required.' });
+    // 1. Validate Input
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      return res.status(400).json({ error: 'Please enter a valid name (at least 2 characters).' });
     }
 
-    const users = await AuthDB.readUsersAsync();
-    if (users.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
-      return res.status(400).json({ error: 'A user with this email address already exists.' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || typeof email !== 'string' || !emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
 
-    const newUser: any = {
-      id: `USR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-      passwordHash: AuthDB.hashPassword(password),
-      role,
-      status: 'active',
-      emailVerified: true,
-      phoneVerified: true,
-      avatar: null,
-      verificationCode: 'VERIFIED',
-      resetCode: '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      addresses: [],
-      suspended: false,
-      permissions: permissions || []
-    };
+    if (!phone || typeof phone !== 'string' || phone.trim().length < 5) {
+      return res.status(400).json({ error: 'Please enter a valid phone number.' });
+    }
 
-    users.push(newUser);
-    await AuthDB.writeUsersAsync(users);
+    if (!finalMessage || typeof finalMessage !== 'string' || finalMessage.trim().length < 5) {
+      return res.status(400).json({ error: 'Please describe your inquiry in more detail (at least 5 characters).' });
+    }
 
-    await AuthDB.logActivityAsync(
-      adminUser.id,
-      adminUser.email,
-      `USER_CREATED: ${newUser.email} (Role: ${newUser.role})`,
-      req.ip || '',
-      req.headers['user-agent'] || ''
-    );
+    const inquiryId = `INQ-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const nowIso = new Date().toISOString();
 
-    return res.status(201).json({
+    // 2. Save Inquiry to Supabase (zoal_inquiries table)
+    let supabaseSaved = false;
+    const supabase = getSupabaseClient();
+    
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('zoal_inquiries').insert([
+          {
+            id: inquiryId,
+            name: name.trim(),
+            email: email.trim(),
+            phone: phone.trim(),
+            message: finalMessage.trim(),
+            created_at: nowIso
+          }
+        ]);
+
+        if (error) {
+          console.error('⚠️ Supabase zoal_inquiries insertion error:', error.message);
+          // Try inserting to alternative contact_messages if required
+          const { error: fallbackError } = await supabase.from('contact_messages').insert([
+            {
+              id: inquiryId,
+              name: name.trim(),
+              email: email.trim(),
+              phone: phone.trim(),
+              message: finalMessage.trim(),
+              created_at: nowIso
+            }
+          ]);
+          if (fallbackError) {
+            console.error('⚠️ Supabase fallback contact_messages insertion error:', fallbackError.message);
+          } else {
+            supabaseSaved = true;
+            console.log('✅ Inquiry saved to contact_messages fallback table.');
+          }
+        } else {
+          supabaseSaved = true;
+          console.log('✅ Inquiry saved successfully to zoal_inquiries table.');
+        }
+      } catch (dbErr: any) {
+        console.error('❌ Exception writing to Supabase:', dbErr.message || dbErr);
+      }
+    } else {
+      console.warn('⚠️ Supabase is not configured. Saving database record skipped.');
+    }
+
+    // 3. Send HTML email notification via Nodemailer
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || '465');
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || 'orders@zoalgroup.com';
+
+    let emailSent = false;
+    let emailWarning = '';
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      emailWarning = 'SMTP variables are not fully configured. Email notification could not be dispatched.';
+      console.warn(`⚠️ ${emailWarning}`);
+    } else {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+
+        const formattedDate = new Date().toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC';
+        const emailHtml = generateInquiryEmailHtml({
+          id: inquiryId,
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          message: finalMessage.trim(),
+          date: formattedDate
+        });
+
+        await transporter.sendMail({
+          from: `"AL ZOAL Luxury Inquiry" <${smtpFrom}>`,
+          to: smtpFrom, // Admin / Support team email recipient
+          replyTo: email.trim(), // Replying goes directly to the inquirer
+          subject: `✉ [New Privy Inquiry] ${name.trim()} - Ref: ${inquiryId}`,
+          html: emailHtml,
+        });
+
+        emailSent = true;
+        console.log(`✉ Contact inquiry notification email sent to ${smtpFrom} (Reply-to: ${email}).`);
+      } catch (mailErr: any) {
+        console.error('❌ Nodemailer failed to send contact notification email:', mailErr.message || mailErr);
+        emailWarning = `Failed to dispatch email notification: ${mailErr.message || mailErr}`;
+      }
+    }
+
+    // 4. Return response
+    return res.status(200).json({
       success: true,
-      message: `User ${newUser.email} created successfully.`,
-      user: {
-        id: newUser.id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-        phone: newUser.phone,
-        role: newUser.role,
-        suspended: false,
-        permissions: newUser.permissions
-      }
+      inquiryId,
+      message: 'Your inquiry has been processed successfully.',
+      supabaseSaved,
+      emailSent,
+      warning: emailWarning || undefined
     });
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error creating user.' });
-  }
-});
 
-// Edit user details, role, suspended status, and permissions
-app.put('/api/admin/users/:id', async (req, res) => {
-  try {
-    const adminUser = await verifyUserWithPermission(req, res, 'users.edit');
-    if (!adminUser) return;
-
-    const { id } = req.params;
-    const { firstName, lastName, email, phone, role, suspended, permissions } = req.body;
-
-    const users = await AuthDB.readUsersAsync();
-    const userIndex = users.findIndex(u => u.id === id);
-
-    if (userIndex === -1) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    const user = users[userIndex];
-
-    if (user.id === adminUser.id) {
-      if (suspended === true) {
-        return res.status(400).json({ error: 'You cannot suspend your own account.' });
-      }
-      if (role && role !== user.role) {
-        return res.status(400).json({ error: 'You cannot change your own role.' });
-      }
-    }
-
-    if (suspended !== undefined) {
-      if (!AuthDB.hasPermission(adminUser, 'users.suspend')) {
-        return res.status(403).json({ error: 'Unauthorized. Requires users.suspend permission.' });
-      }
-    }
-
-    if (firstName) user.firstName = firstName.trim();
-    if (lastName) user.lastName = lastName.trim();
-    if (email) user.email = email.trim().toLowerCase();
-    if (phone) user.phone = phone.trim();
-    if (role) user.role = role;
-    if (suspended !== undefined) {
-      user.suspended = !!suspended;
-      user.status = suspended ? 'suspended' : 'active';
-    }
-    if (permissions !== undefined) user.permissions = permissions;
-    user.updatedAt = new Date().toISOString();
-
-    await AuthDB.writeUsersAsync(users);
-
-    await AuthDB.logActivityAsync(
-      adminUser.id,
-      adminUser.email,
-      `USER_UPDATED: ${user.email}`,
-      req.ip || '',
-      req.headers['user-agent'] || ''
-    );
-
-    return res.json({
-      success: true,
-      message: 'User updated successfully.',
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        suspended: user.status === 'suspended' || !!user.suspended,
-        permissions: user.permissions || []
-      }
-    });
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error editing user.' });
-  }
-});
-
-// Delete user
-app.delete('/api/admin/users/:id', async (req, res) => {
-  try {
-    const adminUser = await verifyUserWithPermission(req, res, 'users.delete');
-    if (!adminUser) return;
-
-    const { id } = req.params;
-
-    if (id === adminUser.id) {
-      return res.status(400).json({ error: 'You cannot delete your own account.' });
-    }
-
-    const users = await AuthDB.readUsersAsync();
-    const user = users.find(u => u.id === id);
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    const filteredUsers = users.filter(u => u.id !== id);
-    await AuthDB.writeUsersAsync(filteredUsers);
-
-    await AuthDB.logActivityAsync(
-      adminUser.id,
-      adminUser.email,
-      `USER_DELETED: ${user.email}`,
-      req.ip || '',
-      req.headers['user-agent'] || ''
-    );
-
-    return res.json({
-      success: true,
-      message: 'User deleted successfully.'
-    });
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error deleting user.' });
-  }
-});
-
-// Reset user password
-app.post('/api/admin/users/:id/reset-password', async (req, res) => {
-  try {
-    const adminUser = await verifyUserWithPermission(req, res, 'users.edit');
-    if (!adminUser) return;
-
-    const { id } = req.params;
-    const { newPassword } = req.body;
-
-    if (!newPassword || newPassword.trim().length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
-    }
-
-    const users = await AuthDB.readUsersAsync();
-    const userIndex = users.findIndex(u => u.id === id);
-
-    if (userIndex === -1) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    const user = users[userIndex];
-    user.passwordHash = AuthDB.hashPassword(newPassword.trim());
-    user.updatedAt = new Date().toISOString();
-
-    await AuthDB.writeUsersAsync(users);
-
-    await AuthDB.logActivityAsync(
-      adminUser.id,
-      adminUser.email,
-      `PASSWORD_RESET: ${user.email}`,
-      req.ip || '',
-      req.headers['user-agent'] || ''
-    );
-
-    return res.json({
-      success: true,
-      message: `Password for user ${user.email} reset successfully.`
-    });
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error resetting password.' });
-  }
-});
-
-// Get login history
-app.get('/api/admin/login-history', async (req, res) => {
-  try {
-    const adminUser = await verifyUserWithPermission(req, res, 'system.logs');
-    if (!adminUser) return;
-
-    const history = await AuthDB.readLoginHistoryAsync();
-    const sortedHistory = [...history].sort((a, b) => new Date(b.loginAt).getTime() - new Date(a.loginAt).getTime());
-    return res.json(sortedHistory);
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error retrieving login history.' });
+  } catch (err: any) {
+    console.error('Error in /api/contact handler:', err);
+    return res.status(500).json({ error: err.message || 'An unexpected error occurred while processing your inquiry.' });
   }
 });
 

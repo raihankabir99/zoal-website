@@ -56,7 +56,7 @@ export default function TrackOrder({ orders, setCurrentPage, isEmbedded = false 
     orderNum: isAr ? 'رقم الطلب' : 'Order Number',
     orderNumPlaceholder: isAr ? 'مثال: ZL-9871' : 'e.g., ZL-9871',
     email: isAr ? 'البريد الإلكتروني' : 'Email Address',
-    emailPlaceholder: isAr ? 'مثال: alzoal3003@gmail.com' : 'e.g., alzoal3003@gmail.com',
+    emailPlaceholder: isAr ? 'أدخل البريد الإلكتروني' : 'Enter Email Address',
     btnTrack: isAr ? 'تتبع طلبك الآن' : 'Track Order',
     btnTracking: isAr ? 'جاري البحث في السجلات...' : 'Searching archives...',
     quickDemo: isAr ? 'العروض التجريبية السريعة' : 'Quick Demo Links',
@@ -1063,7 +1063,7 @@ export default function TrackOrder({ orders, setCurrentPage, isEmbedded = false 
                         <input 
                           type="text" 
                           required 
-                          placeholder="Abdullah" 
+                          placeholder="" 
                           className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-white focus:outline-none focus:border-gold-pure/40" 
                         />
                       </div>
