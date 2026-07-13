@@ -5,7 +5,7 @@
     "lastName": "Infinity",
     "email": "rkinfinity.official@gmail.com",
     "phone": "+966 50 000 0000",
-    "passwordHash": "19918759d527fc05a14bf20288e534cb:dbc36c5919a5dc850e0f191911fc70c06a8a1cc91a5d118e18b9e843b157136bc9b557206da99285e71cde44f753fc60cc38a4a4fd3e43038101070ef19e28fa",
+    "passwordHash": "d1d6abf88f84a04566a1be2bb9025d6d:4a8092431079c7db1f1495de63e983c32dcd307815c13c2812567b9ba17bf86b4280b41aae2e8f75057da82995b78f4a973530f3b9a0ed1863a3f0ff3becc37c",
     "role": "superadmin",
     "status": "active",
     "emailVerified": true,
@@ -14,8 +14,8 @@
     "isVerified": true,
     "verificationCode": "VERIFIED",
     "resetCode": "",
-    "createdAt": "2026-07-13T08:17:28.374Z",
-    "updatedAt": "2026-07-13T08:17:28.374Z",
+    "createdAt": "2026-07-13T10:05:05.194Z",
+    "updatedAt": "2026-07-13T10:05:05.194Z",
     "lastLogin": null,
     "addresses": [
       "Al Wahat District, Riyadh, KSA"
