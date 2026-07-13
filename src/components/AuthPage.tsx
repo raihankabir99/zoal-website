@@ -648,7 +648,7 @@ export default function AuthPage({
                         placeholder="coordinates@alzoal.com"
                         value={emailOrPhone}
                         onChange={(e) => setEmailOrPhone(e.target.value)}
-                        className="w-full bg-black border border-white/10 rounded-md py-3.5 pl-11 pr-4 text-xs text-white focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/50 transition-all font-sans disabled:opacity-40"
+                        className="w-full bg-black border border-white/10 rounded-md py-3.5 pl-11 pr-4 text-xs text-white placeholder-white/20 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/50 transition-all font-sans disabled:opacity-40"
                         aria-label="Email Address or Mobile Number"
                       />
                     </div>
@@ -677,7 +677,7 @@ export default function AuthPage({
                         required
                         disabled={activeInputsDisabled}
                         autoComplete="current-password"
-                        placeholder="••••••••"
+                        placeholder=""
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         onKeyDown={handlePasswordKeyDown}
