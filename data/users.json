@@ -1,51 +1,25 @@
 [
   {
-    "id": "USR-ADMIN-1",
-    "firstName": "Abdullah",
-    "lastName": "Al-Saudi",
-    "email": "alzoal3003@gmail.com",
-    "phone": "+966 56 769 9315",
-    "passwordHash": "f6153309be5179970b7f997893a1f275:a73a3957f4a44485b4ccb1091b200e93352a8e83b7280c36562066323833d6c03f1f5d110ee0a8cbb0720ba89938ffaef011e7f93be1c96c78ecb5e811beeec2",
-    "role": "admin",
+    "id": "USR-SUPERADMIN-1",
+    "firstName": "RK",
+    "lastName": "Infinity",
+    "email": "rkinfinity.official@gmail.com",
+    "phone": "+966 50 000 0000",
+    "passwordHash": "19918759d527fc05a14bf20288e534cb:dbc36c5919a5dc850e0f191911fc70c06a8a1cc91a5d118e18b9e843b157136bc9b557206da99285e71cde44f753fc60cc38a4a4fd3e43038101070ef19e28fa",
+    "role": "superadmin",
+    "status": "active",
+    "emailVerified": true,
+    "phoneVerified": true,
+    "avatar": "",
     "isVerified": true,
     "verificationCode": "VERIFIED",
     "resetCode": "",
-    "createdAt": "2026-07-11T15:05:33.876Z",
+    "createdAt": "2026-07-13T08:17:28.374Z",
+    "updatedAt": "2026-07-13T08:17:28.374Z",
+    "lastLogin": null,
     "addresses": [
-      "Al Shati District, Dammam, KSA",
-      "Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361"
-    ]
-  },
-  {
-    "id": "USR-STAFF-1",
-    "firstName": "Raed",
-    "lastName": "Al-Fahad",
-    "email": "staff@alzoal.com",
-    "phone": "+966 50 123 4567",
-    "passwordHash": "b010b0c82a378ba88e06ebdac33c4ccd:9a0235dceaef3ae531f525f289408d4e2b2dc98d129a27145b8f4b252244a4a87455ed0b62d8ec41cfb2252f2cf70b65538191361e309042fb7b604e38124d81",
-    "role": "staff",
-    "isVerified": true,
-    "verificationCode": "VERIFIED",
-    "resetCode": "",
-    "createdAt": "2026-07-11T15:05:33.885Z",
-    "addresses": [
-      "Al Hofuf boutique, KSA"
-    ]
-  },
-  {
-    "id": "USR-CUSTOMER-1",
-    "firstName": "Sultan",
-    "lastName": "Al-Ghamdi",
-    "email": "customer@alzoal.com",
-    "phone": "+966 55 987 6543",
-    "passwordHash": "338d41ee1633c4511d335d271a8d502c:3aa79584ec93fc9a5c1011754fb7e082b547c223e792304b9ce6f9cae5b58b75610c580c2adc7d0e273e76c393d00bd9aff4a92748fdc72b34906b3b4d947f50",
-    "role": "customer",
-    "isVerified": true,
-    "verificationCode": "VERIFIED",
-    "resetCode": "",
-    "createdAt": "2026-07-11T15:05:33.896Z",
-    "addresses": [
-      "Al Hamra District, Riyadh, KSA"
-    ]
+      "Al Wahat District, Riyadh, KSA"
+    ],
+    "permissions": []
   }
 ]

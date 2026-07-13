@@ -294,7 +294,7 @@ export default function ReturnRefundPolicy() {
         "@type": "Organization",
         "name": "ZOAL",
         "url": window.location.origin,
-        "logo": `${window.location.origin}/logo.png`,
+        "logo": `${window.location.origin}/assets/images/zoal_logo_fixed_1780848794781.png`,
         "contactPoint": {
           "@type": "ContactPoint",
           "telephone": returnsConfig.supportPhone,
