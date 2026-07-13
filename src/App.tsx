@@ -35,6 +35,7 @@ import Footer from './components/Footer';
 import { formatCurrency } from './utils';
 import CheckoutSuccessModal from './components/CheckoutSuccessModal';
 import ToastContainer, { ToastItem } from './components/ToastContainer';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   const { t } = useTranslation();
@@ -965,6 +966,7 @@ export default function App() {
       />
 
       <CookieConsent />
+      <Analytics />
 
     </div>
   );
