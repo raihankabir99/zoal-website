@@ -1,0 +1,20 @@
+[
+  {
+    "token": "7396e6b4-3217-4041-b87c-dfe133ee413e",
+    "userId": "USR-ADMIN-1",
+    "expiresAt": "2026-08-12T21:27:00.961+00:00",
+    "rememberMe": true
+  },
+  {
+    "token": "7e6aced5-8ff5-4581-890e-6d36dad3884d",
+    "userId": "USR-ADMIN-1",
+    "expiresAt": "2026-07-15T12:28:06.549+00:00",
+    "rememberMe": false
+  },
+  {
+    "token": "59f2ba66-1ee0-41d8-bf15-b081f5c19af6",
+    "userId": "USR-ADMIN-1",
+    "expiresAt": "2026-08-14T12:33:01.772Z",
+    "rememberMe": true
+  }
+]
