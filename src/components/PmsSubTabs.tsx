@@ -316,8 +316,13 @@ export const PmsSubTabs: React.FC<PmsSubTabsProps> = ({
       formData.append('bucket', bucket);
       formData.append('path', pathInBucket);
       
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+
       const response = await fetch('/api/storage/upload', {
         method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: formData,
       });
       

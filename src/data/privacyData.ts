@@ -20,8 +20,8 @@ export const contactDetails = {
   phone: '+966 56 769 9315',
   whatsapp: '+966 56 769 9315',
   address: {
-    en: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Eastern Province, Saudi Arabia',
-    ar: 'طريق أبو بكر الصديق، المعلمين، الهفوف 36361، المنطقة الشرقية، المملكة العربية السعودية'
+    en: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+    ar: 'طريق أبو بكر الصديق، المعلمين، الهفوف 36361، المملكة العربية السعودية'
   },
   supportHours: {
     en: 'Available 24/7 (Sovereign Patron Concierge Support)',

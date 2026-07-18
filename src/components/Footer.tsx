@@ -135,7 +135,7 @@ export default function Footer({ setCurrentPage, setSelectedCategoryFilter }: Fo
               <p className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-gold-pure shrink-0 mt-0.5" />
                 <span className="text-zinc-500 scale-95 origin-top-left leading-relaxed">
-                  Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia
+                  {settings.address}
                 </span>
               </p>
               <p className="flex items-center gap-2">
@@ -144,11 +144,11 @@ export default function Footer({ setCurrentPage, setSelectedCategoryFilter }: Fo
               </p>
               <p className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-gold-pure shrink-0" />
-                <span className="text-zinc-500 font-mono" dir="ltr">+966 56 769 9315</span>
+                <span className="text-zinc-500 font-mono" dir="ltr">{settings.phone}</span>
               </p>
               <p className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-gold-pure shrink-0" />
-                <span className="text-zinc-500" dir="ltr">alzoal3003@gmail.com</span>
+                <span className="text-zinc-500" dir="ltr">{settings.email}</span>
               </p>
             </div>
 

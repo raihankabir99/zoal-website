@@ -14,10 +14,10 @@ export default function Branches() {
         {/* Title */}
         <div className="text-center mb-16">
           <span className="text-[10px] tracking-[0.4em] text-gold-pure uppercase font-display block mb-3">
-            {t('branches.subtitle', { defaultValue: 'Physical Showrooms' })}
+            {t('branches.subtitle', { defaultValue: 'Experience Centers' })}
           </span>
           <h1 className="text-3xl sm:text-5xl font-bold tracking-[0.25em] uppercase font-display">
-            {t('branches.title', { defaultValue: 'The Hub Network' })}
+            {t('branches.title', { defaultValue: 'Discover Our Flagship Lounge' })}
           </h1>
           <div className="w-12 h-[1px] bg-gold-pure mx-auto mt-4" />
         </div>
@@ -80,15 +80,17 @@ export default function Branches() {
               
               <div className="relative z-10 text-center space-y-3">
                 <MapPin className="w-8 h-8 text-gold-pure animate-bounce mx-auto" />
-                <h4 className="text-white text-xs font-display uppercase tracking-widest">{i18n.language === 'ar' ? t(`branches_data.${selectedBranch.id}.name`, { defaultValue: selectedBranch.name }) : selectedBranch.name} {t('branches.maps_position', { defaultValue: 'Maps Position' })}</h4>
+                <h4 className="text-white text-xs font-display uppercase tracking-widest">{i18n.language === 'ar' ? t(`branches_data.${selectedBranch.id}.name`, { defaultValue: selectedBranch.name }) : selectedBranch.name} {t('branches.maps_position', { defaultValue: 'Find Us on Google Maps' })}</h4>
                 <p className="text-zinc-500 text-[10.5px] max-w-sm font-sans mx-auto">
-                  {t('branches.lat', { defaultValue: 'Latitude:' })} {selectedBranch.coordinates.lat} · {t('branches.lng', { defaultValue: 'Longitude:' })} {selectedBranch.coordinates.lng} <br />
+                  GPS Coordinates<br />
+                  Latitude: {selectedBranch.coordinates.lat}<br />
+                  Longitude: {selectedBranch.coordinates.lng}<br />
                   {i18n.language === 'ar' ? t(`branches_data.${selectedBranch.id}.address`, { defaultValue: selectedBranch.address }) : selectedBranch.address}
                 </p>
                 
                 <button
                   onClick={() => {
-                    window.open(`https://www.google.com/maps/search/?api=1&query=${selectedBranch.coordinates.lat},${selectedBranch.coordinates.lng}`, '_blank');
+                    window.open('https://maps.app.goo.gl/vxN9qXhiUUA9iwWC6', '_blank');
                   }}
                   className="px-6 py-2.5 bg-[#0a0a0a] border border-gold-pure/25 hover:border-gold-pure text-gold-pure font-display font-medium text-[9px] uppercase tracking-widest rounded-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
                 >
@@ -98,14 +100,14 @@ export default function Branches() {
 
               {/* Decorative side coordinates details */}
               <div className="absolute bottom-3 left-3 text-[8px] font-mono text-zinc-500 tracking-widest uppercase">
-                GIS COORDINATES SYSTEMS v1.0
+                Verified Location
               </div>
 
             </div>
 
             <div className="space-y-4">
               <span className="text-[9px] uppercase tracking-[0.25em] text-[#D4AF37] font-display block flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 animate-pulse" /> {t('branches.outfitting', { defaultValue: 'Outfitting Particulars' })}
+                <Sparkles className="w-3.5 h-3.5 animate-pulse" /> {t('branches.outfitting', { defaultValue: 'The Experience' })}
               </span>
               <p className="text-zinc-400 text-xs leading-relaxed">
                 {i18n.language === 'ar' ? t(`branches_data.${selectedBranch.id}.description`, { defaultValue: selectedBranch.description }) : selectedBranch.description}

@@ -360,35 +360,18 @@ export default function Store({
 
           {/* Category Cards */}
           <div className="grid grid-cols-2 min-[480px]:grid-cols-3 sm:grid-cols-6 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-x-visible pb-4 sm:pb-0 scrollbar-hide border-t border-white/5 pt-6">
-            {categories.map((cat) => {
+            {categories.map((cat, index) => {
               const imgMap: Record<string, string> = {
-                all: '/images/all_collection.png?v=4',
-                coffee: '/images/coffee_category.png?v=4',
-                bakery: '/images/bakery_category.png?v=4',
-                market: '/images/market_category.png?v=4',
-                fashion: '/images/fashion_category.png?v=4',
-                thobes: '/images/thobes_category.png?v=4'
+                all: '/images/collections/collection.png',
+                coffee: '/images/collections/coffee.png',
+                bakery: '/images/collections/bakery.png',
+                market: '/images/collections/market.png',
+                fashion: '/images/collections/premium.png',
+                thobes: '/images/collections/thobes-attire.png'
               };
               
               const imgSrc = imgMap[cat.id];
               const isActive = activeCategory === cat.id;
-              
-              // Custom scale and filter configurations to optimize each category logo/icon presentation
-              const configMap: Record<string, { scale: number; filter?: string }> = {
-                all: { scale: 1.45, filter: 'brightness(1.5) contrast(1.25)' }, // Perfect scale and brightness boost to maximize visibility
-                coffee: { scale: 1.3 },
-                bakery: { scale: 1.3, filter: 'brightness(1.4) contrast(1.15)' },
-                market: { scale: 1.6, filter: 'brightness(1.5) contrast(1.25)' }, // Elegant zoom to balance visual weight
-                fashion: { scale: 1.3, filter: 'brightness(1.4) contrast(1.15)' },
-                thobes: { scale: 1.3, filter: 'brightness(1.4) contrast(1.15)' }
-              };
-              
-              const config = configMap[cat.id] || { scale: 1.0 };
-              const filterStyle: React.CSSProperties = {
-                transform: `scale(${config.scale})`,
-                transformOrigin: 'center',
-                filter: config.filter
-              };
 
               return (
                 <button
@@ -405,28 +388,39 @@ export default function Store({
                       : 'bg-zinc-950/40 border-white/5 hover:border-gold-pure/20 hover:bg-[#0a0a0a]'
                   }`}
                 >
-                  <div className={`w-full h-[36px] sm:h-[38px] lg:h-[44px] relative z-10 transition-transform duration-500 flex items-center justify-center`}>
+                  {/* Background Image filling the card perfectly */}
+                  <div className="absolute inset-0 z-0 overflow-hidden">
                     <img 
                       src={imgSrc || undefined} 
                       alt={cat.name} 
-                      className="h-full w-auto max-w-full object-contain mx-auto transition-transform duration-500"
-                      style={filterStyle}
+                      className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
                       loading="eager"
                       decoding="sync"
                       onError={(e) => {
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = '/images/zoal_logo_transparent.png';
+                        e.currentTarget.src = '/images/branding/zoal-logo.jpg';
                       }}
                     />
+                    <div className="absolute inset-0 bg-black/60 transition-opacity duration-300 group-hover:bg-black/50" />
                   </div>
-                  <span className={`text-[7px] sm:text-[8px] uppercase font-display tracking-[0.2em] relative z-10 transition-colors duration-300 ${
-                    isActive ? 'text-gold-pure font-bold' : 'text-zinc-400 group-hover:text-zinc-200'
-                  } absolute bottom-1.5 sm:relative sm:bottom-auto`}>
+
+                  <span 
+                    style={index === 2 ? {
+                      marginTop: '-6px',
+                      marginBottom: '-68px',
+                      paddingBottom: '0px',
+                      paddingTop: '0px',
+                      paddingLeft: '0px'
+                    } : undefined}
+                    className={`text-[7px] sm:text-[8px] uppercase font-display tracking-[0.2em] relative z-10 transition-colors duration-300 ${
+                      isActive ? 'text-gold-pure font-bold' : 'text-zinc-400 group-hover:text-zinc-200'
+                    } absolute bottom-1.5 sm:relative sm:bottom-auto`}
+                  >
                     {cat.name}
                   </span>
                   
                   {isActive && (
-                    <div className="absolute inset-0 bg-gradient-to-t from-gold-pure/5 to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gold-pure/10 to-transparent pointer-events-none z-10" />
                   )}
                 </button>
               );

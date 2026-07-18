@@ -593,7 +593,7 @@ export default function AuthPage({
                   <div className="space-y-1.5 text-left">
                     <div className="flex justify-between items-center">
                       <label htmlFor="login-password" className="text-[9px] text-zinc-400 uppercase tracking-widest block font-bold">
-                        Secret Password
+                        Password
                       </label>
                       <button
                         type="button"
@@ -617,7 +617,7 @@ export default function AuthPage({
                         onChange={(e) => setPassword(e.target.value)}
                         onKeyDown={handlePasswordKeyDown}
                         className="w-full bg-black border border-white/10 rounded-md py-3.5 pl-11 pr-11 text-xs text-white focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/50 transition-all font-sans disabled:opacity-40"
-                        aria-label="Secret Password"
+                        aria-label="Password"
                       />
                       
                       {/* Caps Lock indicator overlay */}
@@ -1198,7 +1198,7 @@ export default function AuthPage({
                 </div>
 
                 <div className="space-y-1.5 text-left">
-                  <label htmlFor="reset-new-password" className="text-[9px] text-zinc-400 uppercase tracking-widest block font-bold">New Secret Password</label>
+                  <label htmlFor="reset-new-password" className="text-[9px] text-zinc-400 uppercase tracking-widest block font-bold">New Password</label>
                   <input
                     id="reset-new-password"
                     name="password"

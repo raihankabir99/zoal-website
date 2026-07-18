@@ -297,8 +297,8 @@ export const BRANCHES: Branch[] = [
     name: 'ZOAL Al Hofuf Flagship Lounge',
     address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
     phone: '+966 56 769 9315',
-    hours: '08:00 AM - Midnight (Fri/Sat: till 01:00 AM)',
-    description: 'Our award-winning flagship showroom features glass structures, a specialty Espresso theater, raw sandstone columns, Sudanese premium collections showcases, and beautiful terracotta botanical displays.',
+    hours: 'Open Daily 08:00 AM – 12:00 AM',
+    description: 'Experience the world of AL ZOAL at our flagship boutique in Al Hofuf. Discover freshly crafted specialty coffee, premium Sudanese bakery selections, luxury fashion, authentic market products, and exclusive collections—all thoughtfully presented in an elegant and welcoming atmosphere designed for every guest.',
     image: '/src/assets/images/branch-al-hofuf.jpg',
     coordinates: { lat: 25.367976, lng: 49.573064 }
   }

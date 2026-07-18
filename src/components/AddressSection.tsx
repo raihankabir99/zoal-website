@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MapPin, Plus, Trash2, Loader2, CheckCircle2, AlertCircle, X, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useBranding } from './BrandingContext';
 
 interface Address {
   id: string;
@@ -16,6 +17,7 @@ interface AddressSectionProps {
 }
 
 export function AddressSection({ currentUser, onUpdateCurrentUser }: AddressSectionProps) {
+  const { settings } = useBranding();
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -241,7 +243,7 @@ export function AddressSection({ currentUser, onUpdateCurrentUser }: AddressSect
               <input
                 type="text"
                 required
-                placeholder="+966 56 769 9315"
+                placeholder={settings.phone}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"

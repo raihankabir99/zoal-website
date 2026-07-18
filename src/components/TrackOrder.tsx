@@ -27,6 +27,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Order } from '../types';
 import { formatCurrency } from '../utils';
+import { useBranding } from './BrandingContext';
 
 interface TrackOrderProps {
   orders: Order[];
@@ -36,6 +37,7 @@ interface TrackOrderProps {
 
 export default function TrackOrder({ orders, setCurrentPage, isEmbedded = false }: TrackOrderProps) {
   const { i18n, t } = useTranslation();
+  const { settings } = useBranding();
   const isAr = i18n.language === 'ar';
 
   const [orderNumberInput, setOrderNumberInput] = useState('');
@@ -849,9 +851,9 @@ export default function TrackOrder({ orders, setCurrentPage, isEmbedded = false 
                 {/* Header Letterhead */}
                 <div className="flex justify-between items-start gap-4 border-b border-white/10 pb-5">
                   <div className="space-y-1 text-left ltr:text-left rtl:text-right">
-                    <span className="text-lg font-display text-white uppercase tracking-widest">ZOAL COMPANY</span>
-                    <p className="text-[10px] text-zinc-400 font-sans">Specialty Hospitality & Heritage Artistry</p>
-                    <p className="text-[9px] text-zinc-500">{tr.vatNo}</p>
+                    <span className="text-lg font-display text-gold-pure uppercase tracking-widest">{settings.businessName}</span>
+                    <p className="text-[10px] text-zinc-400 font-sans">{settings.address}</p>
+                    <p className="text-[9px] text-zinc-500">{tr.vatNo} • {settings.phone}</p>
                   </div>
                   <div className="text-right ltr:text-right rtl:text-left space-y-1 font-mono">
                     <span className="px-3 py-1 bg-gold-pure/10 text-gold-pure font-bold text-[9px] rounded-full uppercase tracking-wider inline-block">
@@ -1015,26 +1017,26 @@ export default function TrackOrder({ orders, setCurrentPage, isEmbedded = false 
 
                 {/* Phone support */}
                 <a 
-                  href="tel:+966567699315" 
+                  href={`tel:${settings.phone.replace(/\s+/g, '')}`} 
                   className="flex items-center justify-between p-3.5 bg-gold-pure/5 hover:bg-gold-pure/10 border border-gold-pure/10 hover:border-gold-pure/25 rounded-xs transition-all text-xs"
                 >
                   <span className="text-zinc-300 font-semibold flex items-center gap-2">
                     <Phone className="w-4 h-4 text-gold-pure" />
                     {tr.callSupport}
                   </span>
-                  <span className="font-mono text-gold-pure text-[11px]">+966 56 769 9315</span>
+                  <span className="font-mono text-gold-pure text-[11px]">{settings.phone}</span>
                 </a>
 
                 {/* Email Support */}
                 <a 
-                  href="mailto:alzoal3003@gmail.com?subject=ZOAL%20Luxury%20Fulfillment%20Priority%20Assistance" 
+                  href={`mailto:${settings.email}?subject=ZOAL%20Luxury%20Fulfillment%20Priority%20Assistance`} 
                   className="flex items-center justify-between p-3.5 bg-black/40 hover:bg-white/5 border border-white/5 hover:border-white/15 rounded-xs transition-all text-xs"
                 >
                   <span className="text-zinc-400 flex items-center gap-2">
                     <Mail className="w-4 h-4 text-gold-pure" />
                     {tr.emailSupport}
                   </span>
-                  <span className="font-mono text-zinc-500 text-[10px] truncate">alzoal3003@gmail.com</span>
+                  <span className="font-mono text-zinc-500 text-[10px] truncate">{settings.email}</span>
                 </a>
               </div>
 

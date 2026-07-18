@@ -823,7 +823,7 @@ export default function Checkout({
                         rows={2}
                         value={address}
                         onChange={(e) => setAddress(e.target.value)}
-                        placeholder={i18n.language === 'ar' ? 'مثال: حي الشاطئ، شارع الأمير محمد، فيلا 4ب' : 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361'}
+                        placeholder={i18n.language === 'ar' ? 'مثال: حي الشاطئ، شارع الأمير محمد، فيلا 4ب' : settings.address.replace(', Saudi Arabia', '')}
                         className="w-full bg-black border border-white/5 rounded-sm p-3 text-xs text-white focus:outline-none focus:border-gold-pure/45 transition-colors placeholder:text-zinc-600/40"
                       />
                     </div>

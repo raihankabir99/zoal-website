@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { privacySections, contactDetails, PrivacySection } from '../data/privacyData';
+import { useBranding } from './BrandingContext';
 
 // Dynamic helper to resolve icons securely
 const getSectionIcon = (iconName: string, className = "w-5 h-5 text-gold-pure") => {
@@ -53,6 +54,7 @@ const getSectionIcon = (iconName: string, className = "w-5 h-5 text-gold-pure") 
 
 export default function PrivacyPolicy() {
   const { i18n } = useTranslation();
+  const { settings } = useBranding();
   const isAr = i18n.language === 'ar';
 
   const [activeSectionId, setActiveSectionId] = useState<string>('introduction');
@@ -129,10 +131,10 @@ export default function PrivacyPolicy() {
       "description": seoDescription,
       "publisher": {
         "@type": "Organization",
-        "name": "ZOAL",
+        "name": settings.businessName,
         "logo": {
           "@type": "ImageObject",
-          "url": window.location.origin + "/assets/images/zoal_logo_fixed_1780848794781.png"
+          "url": settings.businessLogo.startsWith('http') ? settings.businessLogo : window.location.origin + settings.businessLogo
         }
       },
       "mainEntityOfPage": window.location.href,
@@ -513,7 +515,7 @@ export default function PrivacyPolicy() {
                         
                         {/* Email box */}
                         <a 
-                          href={`mailto:${contactDetails.email}`}
+                          href={`mailto:${settings.email}`}
                           className="p-4 rounded-xs border border-white/5 bg-black/40 hover:border-gold-pure/30 group transition-all duration-300 flex items-start gap-3.5"
                         >
                           <div className="p-2 rounded-full bg-white/5 group-hover:bg-gold-pure/10 text-zinc-400 group-hover:text-gold-pure transition-all">
@@ -521,13 +523,13 @@ export default function PrivacyPolicy() {
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'البريد الإلكتروني الكوني' : 'Official Email'}</span>
-                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold break-all transition-colors">{contactDetails.email}</span>
+                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold break-all transition-colors">{settings.email}</span>
                           </div>
                         </a>
 
                         {/* WhatsApp box */}
                         <a 
-                          href="https://wa.me/966567699315"
+                          href={`https://wa.me/${settings.phone.replace(/\+/g, '').replace(/\s+/g, '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-4 rounded-xs border border-white/5 bg-black/40 hover:border-gold-pure/30 group transition-all duration-300 flex items-start gap-3.5"
@@ -537,7 +539,7 @@ export default function PrivacyPolicy() {
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'دعم الواتساب الفوري' : 'Concierge WhatsApp'}</span>
-                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold transition-colors">{contactDetails.phone}</span>
+                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold transition-colors">{settings.phone}</span>
                           </div>
                         </a>
 
@@ -550,7 +552,7 @@ export default function PrivacyPolicy() {
                             <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'مواعيد دعم العملاء' : 'Support Availability'}</span>
                             <span className="text-xs text-zinc-200 block font-semibold">{isAr ? contactDetails.supportHours.ar : contactDetails.supportHours.en}</span>
                             <span className="text-[11px] text-zinc-400 block font-sans leading-relaxed">
-                              {isAr ? `العنوان: ${contactDetails.address.ar}` : `Address: ${contactDetails.address.en}`}
+                              {isAr ? `العنوان: ${settings.address}` : `Address: ${settings.address}`}
                             </span>
                           </div>
                         </div>

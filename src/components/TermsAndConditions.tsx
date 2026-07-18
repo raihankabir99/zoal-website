@@ -552,7 +552,7 @@ export default function TermsAndConditions() {
                         
                         {/* Email box */}
                         <a 
-                          href={`mailto:${contactDetails.email}`}
+                          href={`mailto:${settings.email}`}
                           className="p-4 rounded-xs border border-white/5 bg-black/40 hover:border-gold-pure/30 group transition-all duration-300 flex items-start gap-3.5"
                         >
                           <div className="p-2 rounded-full bg-white/5 group-hover:bg-gold-pure/10 text-zinc-400 group-hover:text-gold-pure transition-all">
@@ -560,13 +560,13 @@ export default function TermsAndConditions() {
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'البريد الإلكتروني' : 'Official Email'}</span>
-                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold break-all transition-colors">{contactDetails.email}</span>
+                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold break-all transition-colors">{settings.email}</span>
                           </div>
                         </a>
 
                         {/* WhatsApp box */}
                         <a 
-                          href="https://wa.me/966567699315"
+                          href={`https://wa.me/${settings.phone.replace(/\+/g, '').replace(/\s+/g, '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-4 rounded-xs border border-white/5 bg-black/40 hover:border-gold-pure/30 group transition-all duration-300 flex items-start gap-3.5"
@@ -576,7 +576,7 @@ export default function TermsAndConditions() {
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'دعم الواتساب الفوري' : 'Concierge WhatsApp'}</span>
-                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold transition-colors">{contactDetails.phone}</span>
+                            <span className="text-xs text-white group-hover:text-gold-pure font-semibold transition-colors">{settings.phone}</span>
                           </div>
                         </a>
 
@@ -589,7 +589,7 @@ export default function TermsAndConditions() {
                             <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'أوقات العمل واستقبال الاستفسارات' : 'Inquiry Support Hours'}</span>
                             <span className="text-xs text-zinc-200 block font-semibold">{isAr ? contactDetails.supportHours.ar : contactDetails.supportHours.en}</span>
                             <span className="text-[11px] text-zinc-400 block font-sans leading-relaxed">
-                              {isAr ? `العنوان الفاخر: ${contactDetails.address.ar}` : `Boutique Address: ${contactDetails.address.en}`}
+                              {isAr ? `العنوان الفاخر: ${settings.address}` : `Boutique Address: ${settings.address}`}
                             </span>
                           </div>
                         </div>

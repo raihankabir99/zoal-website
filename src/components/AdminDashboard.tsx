@@ -168,7 +168,7 @@ export default function AdminDashboard({
     return [
       { id: 'sup-1', name: 'Kordofan Premium Co-Op', contactName: 'El-Hadi Ibrahim', phone: '+249 912 345678', email: 'elhadi@kordofanpremium.com', status: 'Active Partner', categories: ['Market Raw Spices', 'Organic Gum Crystals'] },
       { id: 'sup-2', name: 'Yemeni Terraces Coffee Sourcing', contactName: 'Adnan Al-Hamdani', phone: '+967 711 234567', email: 'adnan@yemeniterraces.com', status: 'Active Partner', categories: ['Specialty Coffee Saffron'] },
-      { id: 'sup-3', name: 'Riyadh Silk & Brocade Guild', contactName: 'Fatma Al-Jasser', phone: '+966 50 123 4567', email: 'fatma.j@riyadhbrocade.com', status: 'Active Partner', categories: ['Bespoke Sudanese Toob', 'Luxury Men\'s Thobes'] }
+      { id: 'sup-3', name: 'Riyadh Silk & Brocade Guild', contactName: 'Fatma Al-Jasser', phone: '+966 56 769 9315', email: 'fatma.j@riyadhbrocade.com', status: 'Active Partner', categories: ['Bespoke Sudanese Toob', 'Luxury Men\'s Thobes'] }
     ];
   });
 
@@ -308,7 +308,7 @@ export default function AdminDashboard({
       if (raw) return JSON.parse(raw);
     } catch (e) {}
     return [
-      { email: 'rkinfinity.official@gmail.com', date: '2026-07-10', status: 'subscribed' },
+      { email: 'alzoal3003@gmail.com', date: '2026-07-10', status: 'subscribed' },
       { email: 'patron1@saudiheritage.com', date: '2026-07-12', status: 'subscribed' }
     ];
   });
@@ -589,7 +589,7 @@ export default function AdminDashboard({
       { id: 'notif-1', title: 'New Order Placed', message: 'VIP Order #ZL-4491 placed by Patron Amna Al-Saeed for 350 SAR.', time: '5 mins ago', type: 'success', category: 'new_order', status: 'unread' },
       { id: 'notif-2', title: 'Low Stock Alert', message: 'Taif Rose Saffron Tea has dropped below threshold. Current count: 3 jars.', time: '20 mins ago', type: 'warning', category: 'low_stock', status: 'unread' },
       { id: 'notif-3', title: 'Out of Stock Warning', message: 'Luxury Men\'s Silk Thobe has hit zero stock in Hofuf warehouse.', time: '1 hour ago', type: 'error', category: 'out_of_stock', status: 'unread' },
-      { id: 'notif-4', title: 'Refund Request Issued', message: 'Patron rkinfinity.official@gmail.com has requested a refund for Order #ZL-9543 (420 SAR).', time: '3 hours ago', type: 'warning', category: 'refund_request', status: 'unread' },
+      { id: 'notif-4', title: 'Refund Request Issued', message: 'Patron alzoal3003@gmail.com has requested a refund for Order #ZL-9543 (420 SAR).', time: '3 hours ago', type: 'warning', category: 'refund_request', status: 'unread' },
       { id: 'notif-5', title: 'New Customer Registered', message: 'Verified elite account created for Patron Khalid bin Al-Waleed.', time: '5 hours ago', type: 'info', category: 'new_customer', status: 'unread' },
       { id: 'notif-6', title: 'Payment Failed', message: 'Credit card transaction failed for checkout attempt from IP 192.168.1.45.', time: '8 hours ago', type: 'error', category: 'payment_failed', status: 'read' },
       { id: 'notif-7', title: 'System Warning', message: 'Database replication sync delay of 1.5s detected on European server.', time: '12 hours ago', type: 'warning', category: 'system_warning', status: 'read' },
@@ -5559,7 +5559,7 @@ export default function AdminDashboard({
                         { id: `notif-${Date.now()}-1`, title: 'New Order Placed', message: 'VIP Order #ZL-4491 placed by Patron Amna Al-Saeed for 350 SAR.', time: 'Just now', type: 'success', category: 'new_order', status: 'unread' },
                         { id: `notif-${Date.now()}-2`, title: 'Low Stock Alert', message: 'Taif Rose Saffron Tea has dropped below threshold. Current count: 3 jars.', time: '5 mins ago', type: 'warning', category: 'low_stock', status: 'unread' },
                         { id: `notif-${Date.now()}-3`, title: 'Out of Stock Warning', message: 'Luxury Men\'s Silk Thobe has hit zero stock in Hofuf warehouse.', time: '12 mins ago', type: 'error', category: 'out_of_stock', status: 'unread' },
-                        { id: `notif-${Date.now()}-4`, title: 'Refund Request Issued', message: 'Patron rkinfinity.official@gmail.com has requested a refund for Order #ZL-9543 (420 SAR).', time: '1 hour ago', type: 'warning', category: 'refund_request', status: 'unread' },
+                        { id: `notif-${Date.now()}-4`, title: 'Refund Request Issued', message: 'Patron alzoal3003@gmail.com has requested a refund for Order #ZL-9543 (420 SAR).', time: '1 hour ago', type: 'warning', category: 'refund_request', status: 'unread' },
                         { id: `notif-${Date.now()}-5`, title: 'New Customer Registered', message: 'Verified elite account created for Patron Khalid bin Al-Waleed.', time: '3 hours ago', type: 'info', category: 'new_customer', status: 'unread' },
                         { id: `notif-${Date.now()}-6`, title: 'Payment Failed', message: 'Credit card transaction failed for checkout attempt from IP 192.168.1.45.', time: '6 hours ago', type: 'error', category: 'payment_failed', status: 'read' },
                         { id: `notif-${Date.now()}-7`, title: 'System Warning', message: 'Database replication sync delay of 1.5s detected on European server.', time: '12 hours ago', type: 'warning', category: 'system_warning', status: 'read' }
@@ -6179,7 +6179,7 @@ export default function AdminDashboard({
                           const fileData = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupPayload, null, 2));
                           const link = document.createElement("a");
                           link.setAttribute("href", fileData);
-                          link.setAttribute("download", `${brandName.toUpperCase()}_Full_Database_Backup_${new Date().toISOString().slice(0,10)}.json`);
+                          link.setAttribute("download", `${(globalSettings?.businessName || "ZOAL").toUpperCase()}_Full_Database_Backup_${new Date().toISOString().slice(0,10)}.json`);
                           document.body.appendChild(link);
                           link.click();
                           document.body.removeChild(link);
@@ -6263,9 +6263,14 @@ export default function AdminDashboard({
                       if (backEl) updated.autoBackupFrequency = backEl.value;
                       if (colEl) updated.accentColor = colEl.value;
 
-                      setGlobalSettings(updated);
-                      addLog("Settings Changes", "Modified global business, taxation, and secure SMTP mail configurations");
-                      alert("Prestige configuration successfully updated, verified, and locked!");
+                      setGlobalSettings(updated).then((success) => {
+                        addLog("Settings Changes", "Modified global business, taxation, and secure SMTP mail configurations");
+                        if (success) {
+                          alert("Prestige configuration successfully updated, verified, and locked in Supabase!");
+                        } else {
+                          alert("Prestige configuration updated locally, but failed to persist to Supabase database. Please check your session.");
+                        }
+                      });
                     }}
                     className="py-2 px-6 bg-gold-pure text-black font-bold uppercase tracking-widest text-[9.5px] cursor-pointer hover:bg-white transition-all rounded-xs"
                   >

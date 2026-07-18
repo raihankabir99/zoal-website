@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Sparkles, Heart, ShoppingBag, Eye, X, ShieldAlert, ArrowUpRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BrandingProvider } from './components/BrandingContext';
+import { BrandingProvider, useBranding } from './components/BrandingContext';
 import { Product, CartItem, Order } from './types';
 import { SEED_MOCK_ORDERS } from './data';
 import { useTranslation } from 'react-i18next';
@@ -61,6 +61,7 @@ export default function App() {
 function AppContent() {
   const { t } = useTranslation();
   const allProducts = useGlobalProducts();
+  const { settings } = useBranding();
   // Navigation states
   const [currentPage, setCurrentPage] = useState<string>('home');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -496,8 +497,9 @@ function AppContent() {
     setCurrentUser({
       name: authName.trim(),
       email: authEmail.trim(),
-      phone: '+966 56 769 9315',
-      address: ''
+      phone: settings.phone,
+      address: '',
+      role: 'customer'
     });
     setAuthModalOpen(false);
   };

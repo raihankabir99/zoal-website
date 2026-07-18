@@ -1425,7 +1425,7 @@ export default function Dashboards({
                           </div>
                           <div className="p-3 bg-black border border-white/5 rounded-xs space-y-1">
                             <span className="text-zinc-500 block uppercase font-mono text-[8px] tracking-widest">Authorized Contact Phone</span>
-                            <span className="text-zinc-300 font-mono">{currentUser?.phone || '+966 56 769 9315'}</span>
+                            <span className="text-zinc-300 font-mono">{currentUser?.phone || settings.phone}</span>
                           </div>
                           <div className="p-3 bg-black border border-white/5 rounded-xs space-y-1 sm:col-span-2">
                             <span className="text-zinc-500 block uppercase font-mono text-[8px] tracking-widest">Verification Status</span>
@@ -2308,7 +2308,7 @@ export default function Dashboards({
                               <span className="text-[8.5px] uppercase font-mono tracking-widest text-zinc-500 block">Bill To Recipient:</span>
                               <p className="font-bold text-white uppercase text-[9.5px]">{currentUser?.name}</p>
                               <p>{currentUser?.address || 'King Fahd Road, Al Hofuf'}</p>
-                              <p className="font-mono">Phone: {currentUser?.phone || '+966 56 769 9315'}</p>
+                              <p className="font-mono">Phone: {currentUser?.phone || settings.phone}</p>
                               <p className="font-mono">Email: {currentUser?.email}</p>
                             </div>
                           </div>
@@ -3058,7 +3058,7 @@ export default function Dashboards({
                     Sovereign Logistics Clause
                   </div>
                   <p className="leading-relaxed">
-                    All delicate viennoiseries and specialty Geisha cold-brews are distributed under strict climate-controlled environments matching 18°C temperature baselines across Abu Bakr As Siddiq Rd (Al Hofuf) and Prince Mohammad Bin Fahd Rd (Dammam). Real-time dispatch is backed by ZOAL Priority Services.
+                    All delicate viennoiseries and specialty Geisha cold-brews are distributed under strict climate-controlled environments matching 18°C temperature baselines across {settings.address} and Prince Mohammad Bin Fahd Rd (Dammam). Real-time dispatch is backed by ZOAL Priority Services.
                   </p>
                 </div>
 

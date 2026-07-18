@@ -17,6 +17,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useBranding } from './BrandingContext';
 import { faqCategories, faqData, FAQItem } from '../data/faqData';
 
 // Dynamic helper to resolve icons from strings securely
@@ -37,6 +38,7 @@ interface FAQProps {
 
 export default function FAQ({ setCurrentPage }: FAQProps) {
   const { i18n } = useTranslation();
+  const { settings } = useBranding();
   const isAr = i18n.language === 'ar';
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,6 +149,14 @@ export default function FAQ({ setCurrentPage }: FAQProps) {
   // Handle Accordion Toggle (ensure only one remains expanded at a time)
   const handleToggleItem = (id: string) => {
     setExpandedItemId((prev) => (prev === id ? null : id));
+  };
+
+  // Dynamic helper to format and clean text (replacing placeholders or hardcoded strings)
+  const formatText = (text: string) => {
+    return text
+      .replace(/\+966 56 769 9315/g, settings.phone)
+      .replace(/966567699315/g, settings.phone.replace(/\+/g, '').replace(/\s+/g, ''))
+      .replace(/alzoal3003@gmail.com/g, settings.email);
   };
 
   return (
@@ -324,7 +334,7 @@ export default function FAQ({ setCurrentPage }: FAQProps) {
                           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                         >
                           <div className="px-4 sm:px-5 pb-5 pt-1 text-zinc-400 text-xs sm:text-[13px] leading-relaxed border-t border-white/5 bg-zinc-950/20 font-sans">
-                            {isAr ? item.answer.ar : item.answer.en}
+                            {formatText(isAr ? item.answer.ar : item.answer.en)}
                           </div>
                         </motion.div>
                       )}
@@ -391,7 +401,7 @@ export default function FAQ({ setCurrentPage }: FAQProps) {
 
             {/* WhatsApp trigger */}
             <a
-              href="https://wa.me/966567699315"
+              href={`https://wa.me/${settings.phone.replace(/\+/g, '').replace(/\s+/g, '')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="py-3 px-4 border border-[#D4AF37]/40 hover:border-[#D4AF37] hover:bg-zinc-900/40 text-[#D4AF37] rounded-sm transition-all duration-300 active:scale-98 flex items-center justify-center"
@@ -404,7 +414,7 @@ export default function FAQ({ setCurrentPage }: FAQProps) {
 
             {/* Email trigger */}
             <a
-              href="mailto:alzoal3003@gmail.com"
+              href={`mailto:${settings.email}`}
               className="py-3 px-4 border border-white/5 hover:border-white/15 bg-[#050505] hover:bg-zinc-900/30 text-zinc-300 hover:text-white font-display uppercase tracking-widest text-[10px] rounded-sm transition-all duration-300 active:scale-98 flex items-center justify-center gap-1.5"
             >
               <Mail className="w-4 h-4 shrink-0 text-zinc-400" />
@@ -423,7 +433,7 @@ export default function FAQ({ setCurrentPage }: FAQProps) {
           </p>
           <div className="flex items-center justify-center gap-2.5 mt-3 text-zinc-400 font-mono text-[10px]">
             <Phone className="w-3.5 h-3.5 text-gold-pure" />
-            <span dir="ltr">+966 56 769 9315</span>
+            <span dir="ltr">{settings.phone}</span>
             <span className="text-zinc-600">|</span>
             <span className="text-gold-pure uppercase tracking-widest">{isAr ? 'متاح 24/7' : 'Available 24/7'}</span>
           </div>

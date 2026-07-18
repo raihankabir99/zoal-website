@@ -9,6 +9,7 @@ import {
   CheckCircle, HardDrive, Filter, Folder, Tag, FileSpreadsheet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useBranding } from './BrandingContext';
 
 // Interfaces for our full CMS state
 export interface CmsDashboardStats {
@@ -250,11 +251,11 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     if (raw) return JSON.parse(raw);
     return {
       companyInfo: 'AL ZOAL is a premium cultural bridge celebrating fine Sudanese artistry, organic agricultural marvels, and authentic Arabian luxury hospitality.',
-      address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Eastern Province, Saudi Arabia',
-      phone: '+966 50 123 4567',
+      address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+      phone: '+966 56 769 9315',
       email: 'alzoal3003@gmail.com',
       workingHours: 'Everyday: 07:00 AM - 11:30 PM (Special prayer pauses apply)',
-      socialLinks: { facebook: 'https://facebook.com/alzoal', instagram: 'https://instagram.com/alzoal', twitter: 'https://twitter.com/alzoal', snapchat: 'https://snapchat.com/add/alzoal', whatsapp: 'https://wa.me/966501234567' },
+      socialLinks: { facebook: 'https://facebook.com/alzoal', instagram: 'https://instagram.com/alzoal', twitter: 'https://twitter.com/alzoal', snapchat: 'https://snapchat.com/add/alzoal', whatsapp: 'https://wa.me/966567699315' },
       paymentIcons: ['mada', 'visa', 'mastercard', 'applepay', 'stcpay', 'banktransfer'],
       certifications: ['Saudi Ministry of Commerce Registered', 'Maroof Elite Platform Bronze Stamp', 'SFDA Approved Food Grade Facilities'],
       copyright: '© 2026 AL ZOAL Boutique Co. All sovereign rights reserved. Developed to Saudi e-Commerce standards.',

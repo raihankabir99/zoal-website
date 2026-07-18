@@ -129,7 +129,7 @@ export default function EnterpriseInventoryManagement({
         status: 'Active',
         capacity: 50000,
         currentStock: 12450,
-        contactPhone: '+966 50 123 4567',
+        contactPhone: '+966 56 769 9315',
         contactEmail: 'dammam.hub@alzoal.com'
       },
       {

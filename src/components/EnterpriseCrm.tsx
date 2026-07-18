@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { Order } from '../types';
 import { formatCurrency } from '../utils';
+import { useBranding } from './BrandingContext';
 
 // --- TS Interfaces ---
 export interface CustomerCrmProfile {
@@ -391,7 +392,7 @@ const SEED_CRM_CUSTOMERS: CustomerCrmProfile[] = [
     id: 'ZL-CRM-1005',
     name: 'Faisal bin Sultan',
     email: 'faisal.sultan@flagship.sa',
-    phone: '+966 55 123 4567',
+    phone: '+966 56 769 9315',
     photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200',
     country: 'Saudi Arabia',
     city: 'Branch B',
@@ -510,6 +511,7 @@ const SEED_CRM_CUSTOMERS: CustomerCrmProfile[] = [
 ];
 
 export default function EnterpriseCrm({ currentUser, orders, addLog }: EnterpriseCrmProps) {
+  const { settings } = useBranding();
   // Localized RBAC Override Simulator for Preview/Reviewers
   const [activeRole, setActiveRole] = useState<string>(() => {
     return currentUser?.role || 'admin';
@@ -3234,7 +3236,7 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
                   <input
                     type="text"
                     required
-                    placeholder="e.g. +966 55 123 4567"
+                    placeholder={`e.g. ${settings.phone}`}
                     value={addForm.phone}
                     onChange={(e) => setAddForm(prev => ({ ...prev, phone: e.target.value }))}
                     className="w-full bg-black border border-white/10 text-white rounded-xs p-2 outline-none focus:border-gold-pure"

@@ -28,6 +28,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { cookiesSections, CookieSection } from '../data/cookiesData';
 import { contactDetails } from '../data/privacyData';
+import { useBranding } from './BrandingContext';
 
 const getSectionIcon = (iconName: string, className = "w-5 h-5 text-gold-pure") => {
   switch (iconName) {
@@ -45,6 +46,7 @@ const getSectionIcon = (iconName: string, className = "w-5 h-5 text-gold-pure") 
 
 export default function CookiePolicy() {
   const { i18n, t } = useTranslation();
+  const { settings } = useBranding();
   const isAr = i18n.language === 'ar';
 
   const [activeSectionId, setActiveSectionId] = useState<string>('what-are-cookies');
@@ -240,10 +242,10 @@ export default function CookiePolicy() {
       "description": seoDescription,
       "publisher": {
         "@type": "Organization",
-        "name": "ZOAL",
+        "name": settings.businessName,
         "logo": {
           "@type": "ImageObject",
-          "url": `${window.location.origin}/assets/images/zoal_logo_fixed_1780848794781.png`
+          "url": settings.businessLogo.startsWith('http') ? settings.businessLogo : window.location.origin + settings.businessLogo
         }
       },
       "mainEntityOfPage": `${window.location.origin}/cookie-policy`,

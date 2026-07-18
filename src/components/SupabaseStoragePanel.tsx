@@ -158,11 +158,16 @@ export default function SupabaseStoragePanel() {
     let successCount = 0;
     let failCount = 0;
 
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+
     for (const filePath of selectedFiles) {
       try {
         const response = await fetch('/api/storage/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
           body: JSON.stringify({ bucket: activeBucket, path: filePath }),
         });
         if (response.ok) {
@@ -184,8 +189,13 @@ export default function SupabaseStoragePanel() {
   const fetchFiles = async (bucketId: string) => {
     setLoading(true);
     setError(null);
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
     try {
-      const response = await fetch(`/api/storage/list?bucket=${bucketId}`);
+      const response = await fetch(`/api/storage/list?bucket=${bucketId}`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       const data = await response.json();
       if (response.ok) {
         setFiles(data.files || []);
@@ -247,9 +257,14 @@ export default function SupabaseStoragePanel() {
     formData.append('file', file);
     formData.append('bucket', activeBucket);
 
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+
     try {
       const response = await fetch('/api/storage/upload', {
         method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: formData,
       });
 
@@ -275,10 +290,15 @@ export default function SupabaseStoragePanel() {
       return;
     }
 
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+
     try {
       const response = await fetch('/api/storage/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ bucket: activeBucket, path: filePath }),
       });
 

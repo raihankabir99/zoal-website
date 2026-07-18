@@ -28,6 +28,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { getShippingConfig, ShippingConfig } from '../data/shippingData';
 import { contactDetails } from '../data/termsData';
+import { useBranding } from './BrandingContext';
 
 interface PolicySection {
   id: string;
@@ -53,6 +54,7 @@ const policySections: PolicySection[] = [
 
 export default function ShippingPolicy() {
   const { i18n } = useTranslation();
+  const { settings } = useBranding();
   const isAr = i18n.language === 'ar';
 
   const [activeSectionId, setActiveSectionId] = useState<string>('shipping-coverage');
@@ -169,10 +171,10 @@ export default function ShippingPolicy() {
       "description": seoDescription,
       "publisher": {
         "@type": "Organization",
-        "name": "ZOAL",
+        "name": settings.businessName,
         "logo": {
           "@type": "ImageObject",
-          "url": window.location.origin + "/assets/images/zoal_logo_fixed_1780848794781.png"
+          "url": settings.businessLogo.startsWith('http') ? settings.businessLogo : window.location.origin + settings.businessLogo
         }
       },
       "mainEntity": {

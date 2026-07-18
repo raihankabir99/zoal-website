@@ -25,9 +25,11 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getReturnsConfig, ReturnsConfig } from '../data/returnsData';
+import { useBranding } from './BrandingContext';
 
 export default function ReturnRefundPolicy() {
   const { i18n } = useTranslation();
+  const { settings } = useBranding();
   const isAr = i18n.language === 'ar';
 
   const [returnsConfig, setReturnsConfig] = useState<ReturnsConfig>(() => getReturnsConfig());
@@ -292,9 +294,9 @@ export default function ReturnRefundPolicy() {
       "lastReviewed": new Date().toISOString().split('T')[0],
       "publisher": {
         "@type": "Organization",
-        "name": "ZOAL",
+        "name": settings.businessName,
         "url": window.location.origin,
-        "logo": `${window.location.origin}/logo.png`,
+        "logo": settings.businessLogo.startsWith('http') ? settings.businessLogo : window.location.origin + settings.businessLogo,
         "contactPoint": {
           "@type": "ContactPoint",
           "telephone": returnsConfig.supportPhone,

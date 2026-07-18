@@ -1149,7 +1149,7 @@ export const BrandManagement: React.FC<BrandManagementProps> = ({
                         type="tel" 
                         value={supportPhone}
                         onChange={(e) => setSupportPhone(e.target.value)}
-                        placeholder="+966 50 123 4567"
+                        placeholder="+966 56 769 9315"
                         className="w-full bg-black border border-white/5 p-2 rounded-xs text-white focus:border-gold-pure outline-none font-sans text-xs"
                       />
                     </div>

@@ -119,7 +119,7 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
     setMetaTag('property', 'og:url', canonical);
     setMetaTag('property', 'og:image', ogImage);
     setMetaTag('property', 'og:type', ogType);
-    setMetaTag('property', 'og:site_name', 'AL ZOAL');
+    setMetaTag('property', 'og:site_name', settings.businessName);
 
     // Twitter Card Tags
     setMetaTag('name', 'twitter:card', 'summary_large_image');
@@ -158,16 +158,16 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
     const orgSchema = {
       '@context': 'https://schema.org',
       '@type': 'Organization',
-      '@id': 'https://alzoal.com/#organization',
-      'name': 'AL ZOAL',
-      'url': 'https://alzoal.com',
+      '@id': `${window.location.origin}/#organization`,
+      'name': settings.businessName,
+      'url': settings.website || window.location.origin,
       'logo': {
         '@type': 'ImageObject',
-        'url': 'https://alzoal.com/src/assets/images/favicon.svg'
+        'url': window.location.origin + (settings.favicon || settings.businessLogo)
       },
       'contactPoint': {
         '@type': 'ContactPoint',
-        'telephone': '+966-56-769-9315',
+        'telephone': settings.phone,
         'contactType': 'customer support',
         'areaServed': 'SA',
         'availableLanguage': ['Arabic', 'English']
@@ -185,7 +185,7 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
         '@type': 'ListItem',
         'position': 1,
         'name': 'Home',
-        'item': 'https://alzoal.com/'
+        'item': `${window.location.origin}/`
       }
     ];
 
@@ -194,13 +194,13 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
         '@type': 'ListItem',
         'position': 2,
         'name': 'Store',
-        'item': 'https://alzoal.com/store'
+        'item': `${window.location.origin}/store`
       });
       breadcrumbItems.push({
         '@type': 'ListItem',
         'position': 3,
         'name': selectedProduct.name,
-        'item': `https://alzoal.com/store?product=${selectedProduct.id}`
+        'item': `${window.location.origin}/store?product=${selectedProduct.id}`
       });
     } else if (currentPage !== 'home') {
       const pageLabel = currentPage.charAt(0).toUpperCase() + currentPage.slice(1);
@@ -208,14 +208,14 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
         '@type': 'ListItem',
         'position': 2,
         'name': pageLabel,
-        'item': `https://alzoal.com/${currentPage}`
+        'item': `${window.location.origin}/${currentPage}`
       });
     }
 
     const breadcrumbSchema = {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
-      '@id': 'https://alzoal.com/#breadcrumb',
+      '@id': `${window.location.origin}/#breadcrumb`,
       'itemListElement': breadcrumbItems
     };
     injectJSONLD('schema-breadcrumb', breadcrumbSchema);
@@ -225,18 +225,18 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
       const productSchema = {
         '@context': 'https://schema.org',
         '@type': 'Product',
-        '@id': `https://alzoal.com/store?product=${selectedProduct.id}#product`,
+        '@id': `${window.location.origin}/store?product=${selectedProduct.id}#product`,
         'name': selectedProduct.name,
         'image': selectedProduct.images || [ogImage],
-        'description': selectedProduct.description || `${selectedProduct.name} crafted exclusively for Al Zoal patrons.`,
+        'description': selectedProduct.description || `${selectedProduct.name} crafted exclusively for ${brandName} patrons.`,
         'sku': `ZOAL-${selectedProduct.id.slice(0, 8).toUpperCase()}`,
         'brand': {
           '@type': 'Brand',
-          'name': 'AL ZOAL'
+          'name': brandName
         },
         'offers': {
           '@type': 'Offer',
-          'url': `https://alzoal.com/store?product=${selectedProduct.id}`,
+          'url': `${window.location.origin}/store?product=${selectedProduct.id}`,
           'priceCurrency': 'SAR',
           'price': selectedProduct.price.toFixed(2),
           'priceValidUntil': '2030-12-31',
@@ -244,7 +244,7 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
           'itemCondition': 'https://schema.org/NewCondition',
           'seller': {
             '@type': 'Organization',
-            'name': 'AL ZOAL'
+            'name': settings.businessName
           }
         },
         'aggregateRating': selectedProduct.rating ? {

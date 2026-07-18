@@ -1,8 +1,10 @@
 import React from 'react';
 import { MapPin, Phone, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useBranding } from './BrandingContext';
 
 export default function BranchLocation() {
+  const { settings } = useBranding();
   return (
     <section className="py-20 bg-[#050505] border-y border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -46,11 +48,11 @@ export default function BranchLocation() {
             transition={{ duration: 0.8 }}
             className="border border-white/5 bg-zinc-950/40 backdrop-blur-sm p-8 rounded-sm shadow-xl flex flex-col justify-center space-y-6"
           >
-            <h3 className="text-xl font-display uppercase tracking-wider text-white">ZOAL Store</h3>
+            <h3 className="text-xl font-display uppercase tracking-wider text-white">{settings.businessName} Store</h3>
             <div className="space-y-4 text-zinc-300">
               <div className="flex items-start gap-3">
                 <MapPin className="w-5 h-5 text-gold-pure shrink-0 mt-0.5" />
-                <p className="text-sm font-sans tracking-wide">Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia</p>
+                <p className="text-sm font-sans tracking-wide">{settings.address}</p>
               </div>
               <div className="flex items-center gap-3">
                 <Clock className="w-5 h-5 text-gold-pure shrink-0" />
@@ -58,7 +60,7 @@ export default function BranchLocation() {
               </div>
               <div className="flex items-center gap-3">
                 <Phone className="w-5 h-5 text-gold-pure shrink-0" />
-                <p className="text-sm font-sans tracking-wide" dir="ltr">+966 56 769 9315</p>
+                <p className="text-sm font-sans tracking-wide" dir="ltr">{settings.phone}</p>
               </div>
             </div>
           </motion.div>

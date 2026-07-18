@@ -70,6 +70,7 @@ export const SUPABASE_SQL_SCHEMA = `-- =========================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Drop existing tables in reverse-dependency order to allow a clean, fresh setup
+DROP TABLE IF EXISTS branding_settings CASCADE;
 DROP TABLE IF EXISTS zoal_product_images CASCADE;
 DROP TABLE IF EXISTS zoal_product_videos CASCADE;
 DROP TABLE IF EXISTS zoal_product_variants CASCADE;
@@ -615,5 +616,50 @@ CREATE POLICY "Users can manage their own invoices" ON storage.objects
     bucket_id = 'invoices' AND 
     (substring(name from '^([^/]+)') = auth.uid()::text OR storage.is_zoal_admin())
   );
+
+-- =========================================================================
+--             ENTERPRISE BRANDING SETTINGS
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS branding_settings (
+  id INT PRIMARY KEY CHECK (id = 1),
+  business_name TEXT,
+  business_logo TEXT,
+  favicon TEXT,
+  company_description TEXT,
+  phone TEXT,
+  email TEXT,
+  website TEXT,
+  address TEXT,
+  social_links JSONB,
+  accent_color TEXT,
+  theme TEXT,
+  language TEXT,
+  currency TEXT,
+  shipping_fee_default NUMERIC,
+  shipping_free_threshold NUMERIC,
+  tax_rate NUMERIC,
+  tax_id TEXT,
+  smtp_host TEXT,
+  smtp_port TEXT,
+  smtp_user TEXT,
+  smtp_pass TEXT,
+  ip_whitelist TEXT,
+  session_expiration_minutes INT,
+  auto_backup_frequency TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_by TEXT
+);
+
+-- Enable RLS
+ALTER TABLE branding_settings ENABLE ROW LEVEL SECURITY;
+
+-- Allow read access to anyone
+CREATE POLICY "Allow public read access to branding settings" ON branding_settings
+  FOR SELECT USING (true);
+
+-- Allow full access to admins only
+CREATE POLICY "Allow admins to manage branding settings" ON branding_settings
+  FOR ALL USING (storage.is_zoal_admin());
 `;
 
