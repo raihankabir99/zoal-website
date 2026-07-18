@@ -89,6 +89,85 @@ export default function AuthPage({
     return () => clearInterval(interval);
   }, [view, otpCountdown]);
 
+  // Google/Social OAuth Loading State Management & Window Focus Listener
+  useEffect(() => {
+    let focusCheckTimeout: NodeJS.Timeout;
+    
+    const handleFocus = async () => {
+      if (socialLoading === 'google' || socialLoading === 'facebook') {
+        // Debounce slightly to ensure browser has fully focused and network calls can resume safely
+        focusCheckTimeout = setTimeout(async () => {
+          try {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session) {
+              const token = session.access_token || '';
+              localStorage.setItem('zoal_auth_token', token);
+              setSuccessMsg('Sovereign session established successfully!');
+              onSuccess(session.user, token);
+            } else {
+              // No session exists - either user closed popup/window or cancelled
+              setSocialLoading(null);
+              setLoading(false);
+            }
+          } catch (e) {
+            setSocialLoading(null);
+            setLoading(false);
+          }
+        }, 1000);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    // Initial check if we are already logged in when returning
+    const checkSessionOnMount = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session) {
+          const token = session.access_token || '';
+          localStorage.setItem('zoal_auth_token', token);
+          onSuccess(session.user, token);
+        } else {
+          // If we came back with an error param or empty session, stop the loading
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('error') || urlParams.get('error_description')) {
+            setError(urlParams.get('error_description') || 'External authentication was cancelled or failed.');
+          }
+          setSocialLoading(null);
+          setLoading(false);
+        }
+      } catch (e) {
+        setSocialLoading(null);
+        setLoading(false);
+      }
+    };
+
+    // A safety timeout of 10 seconds in case focus doesn't trigger or user is stuck
+    let safetyTimeout: NodeJS.Timeout;
+    if (socialLoading === 'google' || socialLoading === 'facebook') {
+      checkSessionOnMount();
+      
+      safetyTimeout = setTimeout(async () => {
+        try {
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (!session) {
+            setSocialLoading(null);
+            setLoading(false);
+          }
+        } catch (e) {
+          setSocialLoading(null);
+          setLoading(false);
+        }
+      }, 10000);
+    }
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      if (focusCheckTimeout) clearTimeout(focusCheckTimeout);
+      if (safetyTimeout) clearTimeout(safetyTimeout);
+    };
+  }, [socialLoading, onSuccess]);
+
   const clearMessages = () => {
     setError(null);
     setSuccessMsg(null);
