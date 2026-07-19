@@ -405,13 +405,54 @@ export default function Store({
                   </div>
 
                   <span 
-                    style={index === 2 ? {
-                      marginTop: '-6px',
-                      marginBottom: '-68px',
-                      paddingBottom: '0px',
-                      paddingTop: '0px',
-                      paddingLeft: '0px'
-                    } : undefined}
+                    style={(() => {
+                      switch (index) {
+                        case 0:
+                          return {
+                            marginBottom: '-68px',
+                            fontWeight: 'bold'
+                          };
+                        case 1:
+                          return {
+                            marginBottom: '-68px',
+                            fontWeight: 'bold',
+                            color: '#9f9fa9'
+                          };
+                        case 2:
+                          return {
+                            fontWeight: 'bold'
+                          };
+                        case 3:
+                          return {
+                            marginBottom: '-66px',
+                            fontWeight: 'bold',
+                            height: '24px'
+                          };
+                        case 4:
+                          return {
+                            marginBottom: '-68px',
+                            fontWeight: 'bold',
+                            width: '140.667px',
+                            height: '28px'
+                          };
+                        case 5:
+                          return {
+                            marginBottom: '-68px',
+                            fontWeight: 'bold',
+                            height: '32px',
+                            width: '110.667px',
+                            paddingTop: '0px',
+                            paddingLeft: '0px',
+                            paddingRight: '0px',
+                            paddingBottom: '0px',
+                            marginLeft: '0px',
+                            marginTop: '0px',
+                            marginRight: '0px'
+                          };
+                        default:
+                          return undefined;
+                      }
+                    })()}
                     className={`text-[7px] sm:text-[8px] uppercase font-display tracking-[0.2em] relative z-10 transition-colors duration-300 ${
                       isActive ? 'text-gold-pure font-bold' : 'text-zinc-400 group-hover:text-zinc-200'
                     } absolute bottom-1.5 sm:relative sm:bottom-auto`}
