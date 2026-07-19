@@ -420,7 +420,9 @@ export default function Store({
                           };
                         case 2:
                           return {
-                            fontWeight: 'bold'
+                            fontWeight: 'bold',
+                            marginBottom: '-68px',
+                            height: '24px'
                           };
                         case 3:
                           return {
