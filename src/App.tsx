@@ -5,6 +5,7 @@ import { BrandingProvider, useBranding } from './components/BrandingContext';
 import { Product, CartItem, Order } from './types';
 import { SEED_MOCK_ORDERS } from './data';
 import { useTranslation } from 'react-i18next';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // Static / High Priority Core Viewport Imports (for zero-shift, immediate initial paint)
 import Navbar from './components/Navbar';
@@ -1058,6 +1059,7 @@ function AppContent() {
 
       <CookieConsent />
 
+      <SpeedInsights />
     </div>
   );
 }
