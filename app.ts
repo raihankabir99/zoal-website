@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getSupabaseClient, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './server/supabase';
+import { getSupabaseClient, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.js';
 import pg from 'pg';
 const { Client } = pg;
 
@@ -18,11 +18,11 @@ import {
   uploadToSupabase,
   deleteFromSupabase,
   getOptimizedImageUrl
-} from './server/storage';
+} from './backend/storage.js';
 
-import { PRODUCTS } from './src/data';
-import { friendlyToUUID } from './src/lib/uuidMapper';
-import { injectServerSEO } from './server/seo';
+import { PRODUCTS } from './src/data.js';
+import { friendlyToUUID } from './src/lib/uuidMapper.js';
+import { injectServerSEO } from './backend/seo.js';
 
 import {
   securityHeadersMiddleware,
@@ -34,7 +34,7 @@ import {
   validateContactSecurity,
   serveRobotsTxt,
   serveSitemapXml
-} from './server/security';
+} from './backend/security.js';
 
 // Resolve ESM vs CJS paths safely
 const __filename_esm = typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : '';
@@ -566,7 +566,7 @@ async function logActivityAsync(userId: string | null, email: string | null, act
 }
 
 // Authentication check using Supabase getUser
-// DEPRECATED: Moved to server/security.ts
+// DEPRECATED: Moved to backend/security.ts
 // async function authenticateRequest(req: any, res: any, next: any) { ... }
 
 // Session validation & profile retrieval
