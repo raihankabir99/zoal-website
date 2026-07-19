@@ -1928,6 +1928,25 @@ app.get('/api/support/reports', async (req, res) => {
 //            PRODUCT PERSISTENCE CRUD APIS
 // =========================================================================
 
+// Auth Callback Route for Supabase OAuth
+app.get('/auth/callback', async (req, res) => {
+  const code = req.query.code as string;
+  const next = (req.query.next as string) || '/';
+  const supabase = getSupabaseClient();
+
+  if (code) {
+    try {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+      return res.redirect(next);
+    } catch (err: any) {
+      console.error('❌ OAuth Callback Error:', err.message || err);
+      return res.redirect(`/?error=${encodeURIComponent(err.message || 'Authentication failed')}`);
+    }
+  }
+
+  res.redirect('/');
+});
 app.get('/api/products', async (req, res) => {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -2234,9 +2253,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
