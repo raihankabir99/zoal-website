@@ -1,0 +1,194 @@
+{
+  "nav": {
+    "home": "Home",
+    "store": "Store",
+    "portfolio": "Portfolio",
+    "about": "About",
+    "contact": "Contact",
+    "blog": "Blog",
+    "faq": "FAQ",
+    "privacy": "Privacy Policy",
+    "terms": "Terms & Conditions",
+    "wishlist": "Saved Wishlist",
+    "cart": "Shopping Cart",
+    "account": "Account",
+    "login": "Login Privilege",
+    "track": "Track Order"
+  },
+  "hero": {
+    "slide1": {
+      "line1": "ELEVATED",
+      "line2": "ARABIAN",
+      "line3": "ELEGANCE",
+      "tag": "MODEST FASHION",
+      "subtitle": "Discover thobes, abayas, women's fashion, children's wear, luxurious fabrics, and bespoke tailoring inspired by Sudanese and Arabian traditions."
+    },
+    "slide2": {
+      "line1": "THE RITUAL",
+      "line2": "OF ARABIC",
+      "line3": "COFFEE",
+      "tag": "THE ART OF HOSPITALITY",
+      "subtitle": "Experience authentic Arabic and Sudanese coffee, freshly baked Hoboz bread, pastries, and traditional bakery favorites prepared daily."
+    },
+    "slide3": {
+      "line1": "FRESHNESS",
+      "line2": "SELECTED FOR",
+      "line3": "EVERY HOME",
+      "line4": "",
+      "tag": "HERITAGE & ESSENTIALS",
+      "subtitle": "Discover premium groceries, authentic ingredients, and everyday essentials—carefully selected to bring quality, freshness, and trust to every home."
+    },
+    "shop_button": "Shop The Collection"
+  },
+  "app": {
+    "curated_excellence": "Curated Excellence",
+    "featured_collection": "Featured Collection",
+    "selected_favorites": "Selected favorites from across ZOAL experiences",
+    "view_all": "VIEW ALL",
+    "examine": "Examine",
+    "sar": "SAR",
+    "auth": {
+      "title": "VIP Authentication Login",
+      "desc": "Simulate entering credentials to manage orders, track delivery points, and save catalogs.",
+      "name_label": "Customer Name:",
+      "email_label": "Email Coordinates:",
+      "submit": "Log In VIP Portal"
+    },
+    "toast": {
+      "added": "Added to Collection",
+      "saved": "Saved securely to private client lobby",
+      "close": "Close"
+    }
+  },
+  "footer": {
+    "rights": "All Rights Reserved.",
+    "desc": "A tribute to Sudanese heritage intertwined with premier Saudi luxury hospitality. Setting the gold standard for cultural immersion."
+  },
+  "store": {
+    "title": "THE COLLECTION",
+    "subtitle": "OUR FINEST SELECTION",
+    "search": "Search collections, products, or specifications...",
+    "category": {
+      "all": "All Collections",
+      "coffee": "COFFEE HOUSE",
+      "bakery": "BAKERY & SNACKS",
+      "market": "MARKET & GROCERY",
+      "fashion": "PREMIUM COLLECTIONS",
+      "thobes": "THOBES & MEN'S WEAR"
+    },
+    "sort": {
+      "label": "Curate Display",
+      "featured": "Featured",
+      "newest": "Newest Arrivals",
+      "best_sellers": "Best Sellers",
+      "rating": "Highest Rated",
+      "price_low": "Price: Low → High",
+      "price_high": "Price: High → Low"
+    },
+    "filters": {
+      "all": "All Products",
+      "in_stock": "In Stock",
+      "new_arrivals": "New Arrivals",
+      "best_sellers": "Best Sellers",
+      "limited_edition": "Limited Edition"
+    },
+    "add_to_cart": "Acquire Item",
+    "quick_view": "Examine Item",
+    "added": "Acquired",
+    "out_of_stock": "UNAVAILABLE",
+    "details": "Specification Details",
+    "reviews": "Client Testimonials",
+    "close": "Close Document"
+  },
+  "contact": {
+    "title": "CONCIERGE SERVICES",
+    "subtitle": "Request direct assistance from our luxury management team or schedule a private fitting.",
+    "form": {
+      "name": "Full Client Name",
+      "email": "Contact Email",
+      "phone": "Phone (Optional)",
+      "subject": "Inquiry Subject",
+      "message": "Your Request Details...",
+      "submit": "Transmit Secure Inquiry"
+    },
+    "info": {
+      "headquarters": "Flagship Headquarters",
+      "hours": "Operation Hours",
+      "direct_line": "Direct Line"
+    }
+  },
+  "cart": {
+    "title": "SHOPPING BAG",
+    "empty": "Your bag is currently pristine. Explore our collections to acquire luxury goods.",
+    "checkout": "Proceed to Checkout",
+    "subtotal": "Subtotal",
+    "shipping": "Shipping",
+    "total": "Total",
+    "continue": "Continue Curation"
+  },
+  "about": {
+    "title": "THE ZOAL HERITAGE",
+    "subtitle": "Where Sudanese traditions meet modern Saudi luxury.",
+    "mission": "Our Mission",
+    "mission_text": "To elevate the perception of Sudanese culture through premium hospitality, high-end design, and exceptional culinary experiences.",
+    "vision": "Our Vision",
+    "vision_text": "A world where heritage is not just preserved but celebrated with sophistication and luxury.",
+    "history": "Our History",
+    "history_text": "Founded to bridge the rich cultural tapestry of Sudan with the dynamic luxury market of Saudi Arabia, bringing together the finest from both worlds."
+  },
+  "product_detail": {
+    "back": "Back to Curations",
+    "hover_zoom": "Hover main image to magnify details",
+    "collection_label": "Collection",
+    "rating": "Customer Rating",
+    "select_option": "Select Premium Option Preset:",
+    "quantity": "Quantity:",
+    "inventory": "pieces physically available",
+    "add_to_cart": "Add to Cart",
+    "buy_now": "BUY NOW",
+    "whatsapp_inquiry": "Assemble WhatsApp Inquiry Order",
+    "discard_wishlist": "Discard from Royal Wishlist",
+    "add_wishlist": "Add to private Royal Wishlist",
+    "narrative_title": "The Sensory Narrative",
+    "certified_auth": "Certified ZOAL authenticity. Prepared under hygienic, thermal, and design conditions exceeding SASO and SFDA requirements.",
+    "tech_register": "Technical Register",
+    "testimonials": "Client Testimonials",
+    "no_reviews": "No client logs registered yet",
+    "no_reviews_sub": "Be the very first distinguished customer to submit sensory reviews.",
+    "submit_review": "Submit Privy Review",
+    "patron_name": "Customer Name:",
+    "sensory_rating": "Sensory Rating:",
+    "comments": "Privy Comments:",
+    "broadcast_review": "Broadcast Review Logging",
+    "related": "Related Domain Suggestions"
+  },
+  "checkout": {
+    "back": "Back to Basket",
+    "title": "Sovereign Checkout Portal",
+    "cart_total": "Cart Total:",
+    "billing_details": "I. Customer Coordinates",
+    "full_name": "Full Name:",
+    "email": "Email Address:",
+    "phone": "Phone Number (Required for WhatsApp Updates):",
+    "city": "Saudi City Location:",
+    "address": "Physical Shipping Address (District, Street, Villa/Bldg):",
+    "delivery_options": "II. Courier Delivery Standard",
+    "standard": "Classic Delivery",
+    "standard_desc": "2-3 Business Days. Managed in sealed climate boxes.",
+    "vip": "VIP Same-Day Express",
+    "vip_desc": "Guaranteed within 5 hours in Dammam/Khobar.",
+    "payment": "III. Sealed Payment Process",
+    "madan": "Mada / Visa",
+    "applepay": "Apple Pay",
+    "cod": "Cash on Delivery",
+    "summary": "ORDER SUMMARY",
+    "qty": "Qty:",
+    "shipping": "Shipping",
+    "total": "Total",
+    "authorize": "PROCEED TO CHECKOUT"
+  },
+  "dashboard": {
+    "customer_dashboard": "Customer Dashboard",
+    "staff_dashboard": "Staff Dashboard"
+  }
+}
