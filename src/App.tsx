@@ -22,25 +22,50 @@ import CheckoutSuccessModal from './components/CheckoutSuccessModal';
 import ToastContainer, { ToastItem } from './components/ToastContainer';
 import SEO from './components/SEO';
 
-// Dynamic / Low Priority Viewport Imports (Code Splitting & Bundle Size Optimization)
-const Checkout = lazy(() => import('./components/Checkout'));
-const Dashboards = lazy(() => import('./components/Dashboards'));
-const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
-const AuthPage = lazy(() => import('./components/AuthPage'));
-const WishlistPage = lazy(() => import('./components/WishlistPage'));
-const Portfolio = lazy(() => import('./components/Portfolio'));
-const About = lazy(() => import('./components/About'));
-const Branches = lazy(() => import('./components/Branches'));
-const Blog = lazy(() => import('./components/Blog'));
-const Contact = lazy(() => import('./components/Contact'));
-const FAQ = lazy(() => import('./components/FAQ'));
-const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy'));
-const TermsAndConditions = lazy(() => import('./components/TermsAndConditions'));
-const ShippingPolicy = lazy(() => import('./components/ShippingPolicy'));
-const ReturnRefundPolicy = lazy(() => import('./components/ReturnRefundPolicy'));
-const CookiePolicy = lazy(() => import('./components/CookiePolicy'));
-const NotFound = lazy(() => import('./components/NotFound'));
-const TrackOrder = lazy(() => import('./components/TrackOrder'));
+// Dynamic / Low Priority Viewport Imports (Code Splitting & Bundle Size Optimization with Robust Retry Logic)
+const lazyWithRetry = (importFn: () => Promise<any>) => {
+  return lazy(() => 
+    importFn().catch((err) => {
+      console.warn("Failed to load dynamically imported module, retrying...", err);
+      // Retry once after 1 second
+      return new Promise((resolve) => setTimeout(resolve, 1000))
+        .then(() => importFn())
+        .catch((err2) => {
+          console.warn("Retrying dynamic module import failed again. Trying one final time in 2 seconds...", err2);
+          // Try one final time after 2 seconds
+          return new Promise((resolve) => setTimeout(resolve, 2000))
+            .then(() => importFn())
+            .catch((finalErr) => {
+              console.error("Critical: Failed to fetch dynamically imported module after retries.", finalErr);
+              // As a last-resort safety valve, reload page to force fetch of new chunks
+              if (typeof window !== 'undefined') {
+                window.location.reload();
+              }
+              throw finalErr;
+            });
+        });
+    })
+  );
+};
+
+const Checkout = lazyWithRetry(() => import('./components/Checkout'));
+const Dashboards = lazyWithRetry(() => import('./components/Dashboards'));
+const AdminDashboard = lazyWithRetry(() => import('./components/AdminDashboard'));
+const AuthPage = lazyWithRetry(() => import('./components/AuthPage'));
+const WishlistPage = lazyWithRetry(() => import('./components/WishlistPage'));
+const Portfolio = lazyWithRetry(() => import('./components/Portfolio'));
+const About = lazyWithRetry(() => import('./components/About'));
+const Branches = lazyWithRetry(() => import('./components/Branches'));
+const Blog = lazyWithRetry(() => import('./components/Blog'));
+const Contact = lazyWithRetry(() => import('./components/Contact'));
+const FAQ = lazyWithRetry(() => import('./components/FAQ'));
+const PrivacyPolicy = lazyWithRetry(() => import('./components/PrivacyPolicy'));
+const TermsAndConditions = lazyWithRetry(() => import('./components/TermsAndConditions'));
+const ShippingPolicy = lazyWithRetry(() => import('./components/ShippingPolicy'));
+const ReturnRefundPolicy = lazyWithRetry(() => import('./components/ReturnRefundPolicy'));
+const CookiePolicy = lazyWithRetry(() => import('./components/CookiePolicy'));
+const NotFound = lazyWithRetry(() => import('./components/NotFound'));
+const TrackOrder = lazyWithRetry(() => import('./components/TrackOrder'));
 
 // Premium, On-Brand Suspense Loader
 const PremiumLoader = () => (
