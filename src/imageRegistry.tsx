@@ -567,7 +567,16 @@ export function useGlobalProducts(): Product[] {
     ...customProducts,
     ...PRODUCTS.filter(p => !deletedStaticIds.includes(p.id) && !customProducts.some(cp => cp.id === p.id))
   ];
-  return mergedProducts.map(p => {
+
+  // Robust deduplication pass to ensure absolute key uniqueness regardless of source
+  const seenIds = new Set<string>();
+  const uniqueProducts = mergedProducts.filter(p => {
+    if (seenIds.has(p.id)) return false;
+    seenIds.add(p.id);
+    return true;
+  });
+
+  return uniqueProducts.map(p => {
     let resolved = { ...p };
     if (p.id in productOverrides) {
       resolved = { ...resolved, ...productOverrides[p.id] };

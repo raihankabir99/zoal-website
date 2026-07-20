@@ -99,7 +99,17 @@ export default function AdminDashboard({
   const [categories, setCategories] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_categories');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((c: any) => {
+            if (!c || !c.id || seen.has(c.id)) return false;
+            seen.add(c.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3 },
@@ -114,13 +124,23 @@ export default function AdminDashboard({
   const [brands, setBrands] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_brands');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((b: any) => {
+            if (!b || !b.id || seen.has(b.id)) return false;
+            seen.add(b.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'brand-1', name: 'ZOAL Specialty Roasters', slug: 'zoal-roasters', description: 'Elite micro-batch single-origin coffees sourced from high-altitude smallholders across Yemen and East Africa.', logoUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=200' },
       { id: 'brand-2', name: 'Sudan Bakery Heritage', slug: 'bakery-heritage', description: 'Centuries-old sourdough cultures hand-kneaded by Sudanese master bakers using stone-deck wood fire hearths.', logoUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=200' },
       { id: 'brand-3', name: 'Kordofan Organic Co.', slug: 'kordofan-organic', description: 'First-grade natural agricultural exports harvested directly from the rain-fed plains of Western Sudan.', logoUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-4', name: 'Artisan Sudanese Weaves', slug: 'artisan-weaves', description: 'Prestige textile workshops creating bespoke hand-spun organic long-staple cotton and golden thread embroidery.', logoUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=200' }
+      { id: 'brand-4', name: 'Artisan Sudanese Weaves', slug: 'artisan-weaves', description: 'Prestige textile workshops creating bespoke hand-spun organic long-staple cotton and golden thread embroidery.', logoUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=800' }
     ];
   });
 
@@ -150,7 +170,17 @@ export default function AdminDashboard({
   const [stockHistory, setStockHistory] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_stock_history');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'sh-1', productId: '1', productName: 'Saffron Specialty Blend Coffee', oldStock: 25, newStock: 20, adjustedBy: 'Admin', reason: 'Sales Order Fulfilled', time: new Date(Date.now() - 3600000).toLocaleString() },
@@ -165,7 +195,17 @@ export default function AdminDashboard({
   const [supplierReference, setSupplierReference] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_suppliers');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'sup-1', name: 'Kordofan Premium Co-Op', contactName: 'El-Hadi Ibrahim', phone: '+249 912 345678', email: 'elhadi@kordofanpremium.com', status: 'Active Partner', categories: ['Market Raw Spices', 'Organic Gum Crystals'] },
@@ -181,7 +221,17 @@ export default function AdminDashboard({
   const [purchaseHistory, setPurchaseHistory] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_purchases');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'po-501', supplierName: 'Kordofan Premium Co-Op', date: '2026-07-01', amount: 4500, status: 'Completed', items: '50kg Whole Karkadeh Flowers, 10kg Gum Arabic Tears' },
@@ -213,7 +263,17 @@ export default function AdminDashboard({
   const [staffList, setStaffList] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_staff');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'staff-1', name: 'Khalid Al-Mansoori', email: 'khalid@zoal.com', role: 'Senior Concierge Representative', permissions: ['Catalog Edit', 'Order Modify'], status: 'active', lastActive: 'Active 2 mins ago' },
@@ -262,7 +322,17 @@ export default function AdminDashboard({
   const [coupons, setCoupons] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_coupons');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'c-1', code: 'ZOALGOLD', rate: 15, type: 'percent', expiry: '2026-12-31', limit: 500, usedCount: 84 },
@@ -277,7 +347,17 @@ export default function AdminDashboard({
   const [campaigns, setCampaigns] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_campaigns');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'cp-1', name: 'Summer Solstice Bespoke Sale', discountPercent: 10, category: 'fashion', status: 'active' },
@@ -292,7 +372,17 @@ export default function AdminDashboard({
   const [banners, setBanners] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('zoal_admin_banners');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((x: any) => {
+            if (!x || !x.id || seen.has(x.id)) return false;
+            seen.add(x.id);
+            return true;
+          });
+        }
+      }
     } catch (e) {}
     return [
       { id: 'ban-1', title: 'Luxury Toob Collection Premiere', image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=800', link: 'fashion', status: 'active' },

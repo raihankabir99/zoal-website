@@ -101,7 +101,15 @@ function AppContent() {
     const saved = localStorage.getItem('zoal_orders');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const seen = new Set();
+          return parsed.filter((o: any) => {
+            if (!o || !o.id || seen.has(o.id)) return false;
+            seen.add(o.id);
+            return true;
+          });
+        }
       } catch (e) {
         console.error('Failed to restore orders ledger:', e);
       }
