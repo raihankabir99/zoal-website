@@ -638,7 +638,7 @@ export default function Dashboards({
                     <div className="border-t border-white/5 my-1 pt-1">
                       <button
                         onClick={() => {
-                          if (onLogout && window.confirm('Terminate secure session?')) {
+                          if (onLogout) {
                             onLogout();
                           }
                         }}
@@ -695,9 +695,7 @@ export default function Dashboards({
                 {onLogout && (
                   <button
                     onClick={() => {
-                      if (window.confirm('Sign out of your AL ZOAL sovereign session?')) {
-                        onLogout();
-                      }
+                      onLogout();
                     }}
                     className="w-full text-left py-2.5 px-3 flex items-center gap-3 text-[9px] font-display uppercase tracking-[0.15em] transition-all rounded-xs text-rose-500/80 hover:text-rose-400 hover:bg-rose-950/20 mt-4 border-t border-white/5 pt-4 cursor-pointer"
                   >
@@ -784,9 +782,7 @@ export default function Dashboards({
                       {onLogout && (
                         <button
                           onClick={() => {
-                            if (window.confirm('Sign out of your AL ZOAL session?')) {
-                              onLogout();
-                            }
+                            onLogout();
                           }}
                           className="w-full text-left py-3 px-3 flex items-center gap-3 text-[9px] font-display uppercase tracking-[0.15em] transition-all rounded-xs text-rose-500/80 hover:text-rose-400 hover:bg-rose-950/20 border-t border-white/5 cursor-pointer mt-auto"
                         >

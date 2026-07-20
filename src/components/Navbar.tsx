@@ -247,7 +247,7 @@ export default function Navbar({
                   <div className="border-t border-white/5 mt-2 pt-2">
                     <button
                       onClick={() => {
-                        if (onLogout && window.confirm('Terminate secure session?')) {
+                        if (onLogout) {
                           onLogout();
                         }
                       }}

@@ -19,6 +19,7 @@ import Footer from './components/Footer';
 import { formatCurrency } from './utils';
 import { supabaseClient } from './lib/supabaseClient';
 import CheckoutSuccessModal from './components/CheckoutSuccessModal';
+import LogoutModal from './components/LogoutModal';
 import ToastContainer, { ToastItem } from './components/ToastContainer';
 import SEO from './components/SEO';
 
@@ -117,6 +118,10 @@ function AppContent() {
   const [activeSuccessOrder, setActiveSuccessOrder] = useState<Order | null>(null);
   const [orderSuccessToasts, setOrderSuccessToasts] = useState<ToastItem[]>([]);
 
+  // Premium Logout Modal State
+  const [logoutModalOpen, setLogoutModalOpen] = useState<boolean>(false);
+  const [logoutModalStatus, setLogoutModalStatus] = useState<'confirm' | 'loading' | 'success'>('confirm');
+
   // Applied modifiers
   const [couponCode, setCouponCode] = useState<string>('');
   const [discountPercent, setDiscountPercent] = useState<number>(0);
@@ -196,7 +201,13 @@ function AppContent() {
     }
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    setLogoutModalStatus('confirm');
+    setLogoutModalOpen(true);
+  };
+
+  const handleConfirmLogout = async () => {
+    setLogoutModalStatus('loading');
     try {
       await supabaseClient.auth.signOut();
     } catch (err) {
@@ -207,7 +218,17 @@ function AppContent() {
     localStorage.removeItem('zoal_auth_token');
     sessionStorage.removeItem('zoal_auth_token');
     setCurrentUser(null);
+
+    // Keep the luxury timing for the loader
+    setTimeout(() => {
+      setLogoutModalStatus('success');
+    }, 1000, { name: 'Logout State Success Transition' });
+  };
+
+  const handleLogoutSuccessRedirect = () => {
+    setLogoutModalOpen(false);
     setCurrentPage('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // DEFAULT DELIVERY ZONES SEATED SCHEMAS
@@ -1056,6 +1077,15 @@ function AppContent() {
         onContinueShopping={handleContinueShopping}
         onViewOrders={handleViewOrders}
         order={activeSuccessOrder}
+      />
+
+      {/* Premium Luxury Logout Modal (Refined Enterprise Experience) */}
+      <LogoutModal
+        isOpen={logoutModalOpen}
+        status={logoutModalStatus}
+        onClose={() => setLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        onSuccessRedirect={handleLogoutSuccessRedirect}
       />
 
       <ToastContainer

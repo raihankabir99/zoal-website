@@ -243,7 +243,7 @@ export default function StaffDashboard({
               )}
               <div className="border-t border-white/5 my-1 pt-1">
                 <button
-                  onClick={() => { if (onLogout && window.confirm('Logout from secure portal?')) onLogout(); }}
+                  onClick={() => { if (onLogout) onLogout(); }}
                   className="w-full text-left py-1 px-2 text-[9px] uppercase tracking-wider text-rose-500 hover:bg-rose-950/20 rounded-xs transition-all"
                 >
                   Sign Out
