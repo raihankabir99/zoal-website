@@ -87,6 +87,10 @@ export default function SEO({ currentPage, selectedProduct }: SEOProps) {
           title = `Imperial Administration Portal | ${brandName}`;
           description = `Secure business monitoring dashboard for staff details, order statuses, catalog settings, and system-wide activity logs.`;
           break;
+        case 'deletion':
+          title = `User Data Deletion | ${brandName}`;
+          description = `Learn how to request deletion of your ${brandName} account and personal information. We respect customer privacy and provide a structured process for requesting data erasure.`;
+          break;
         default:
           title = `Page Not Found | ${brandName}`;
           description = `The luxury asset requested is currently unavailable or has been relocated to another gallery section.`;

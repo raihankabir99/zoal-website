@@ -2,7 +2,7 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { getSupabaseClient } from './supabase.js';
+import { getSupabaseClient } from './supabase.ts';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');

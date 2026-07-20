@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getSupabaseClient, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.js';
+import { getSupabaseClient, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.ts';
 import pg from 'pg';
 const { Client } = pg;
 
@@ -18,11 +18,11 @@ import {
   uploadToSupabase,
   deleteFromSupabase,
   getOptimizedImageUrl
-} from './backend/storage.js';
+} from './backend/storage.ts';
 
-import { PRODUCTS } from './src/data.js';
-import { friendlyToUUID } from './src/lib/uuidMapper.js';
-import { injectServerSEO } from './backend/seo.js';
+import { PRODUCTS } from './src/data.ts';
+import { friendlyToUUID } from './src/lib/uuidMapper.ts';
+import { injectServerSEO } from './backend/seo.ts';
 
 import {
   securityHeadersMiddleware,
@@ -34,7 +34,7 @@ import {
   validateContactSecurity,
   serveRobotsTxt,
   serveSitemapXml
-} from './backend/security.js';
+} from './backend/security.ts';
 
 // Resolve ESM vs CJS paths safely
 const __filename_esm = typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : '';

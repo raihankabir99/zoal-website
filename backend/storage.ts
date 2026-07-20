@@ -1,6 +1,6 @@
 import multer from 'multer';
-import { getSupabaseClient, getCleanSupabaseUrl } from './supabase.js';
-import { validateFileSecurity } from './file_security.js';
+import { getSupabaseClient, getCleanSupabaseUrl } from './supabase.ts';
+import { validateFileSecurity } from './file_security.ts';
 
 // Configure Multer for in-memory file handling (production-ready, avoids disk I/O)
 const uploadMemory = multer({

@@ -163,7 +163,7 @@ export function xssSanitizerMiddleware(req: Request, res: Response, next: NextFu
 // -------------------------------------------------------------
 // 5. AUTHENTICATION & RBAC MIDDLEWARE
 // -------------------------------------------------------------
-import { getSupabaseClient } from './supabase.js';
+import { getSupabaseClient } from './supabase.ts';
 
 export async function authenticateRequest(req: any, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization || req.headers.Authorization;

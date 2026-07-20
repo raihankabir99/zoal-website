@@ -298,7 +298,7 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
       return data.products;
     }
   } catch (err) {
-    console.error('[Cache] Failed to fetch live products, falling back to local cache:', err);
+    console.warn('[Cache] Failed to fetch live products, falling back to local cache:', err);
   }
 
   // Last-resort fallback to whatever is in localStorage

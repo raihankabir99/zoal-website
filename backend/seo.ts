@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
-import { PRODUCTS, ARTICLES } from '../src/data';
-import { friendlyToUUID } from '../src/lib/uuidMapper';
+import { PRODUCTS, ARTICLES } from '../src/data.ts';
+import { friendlyToUUID } from '../src/lib/uuidMapper.ts';
 
 // Cache to prevent calling Gemini API or Database repeatedly for same static requests
 const seoCache = new Map<string, any>();

@@ -64,6 +64,7 @@ const TermsAndConditions = lazyWithRetry(() => import('./components/TermsAndCond
 const ShippingPolicy = lazyWithRetry(() => import('./components/ShippingPolicy'));
 const ReturnRefundPolicy = lazyWithRetry(() => import('./components/ReturnRefundPolicy'));
 const CookiePolicy = lazyWithRetry(() => import('./components/CookiePolicy'));
+const DataDeletion = lazyWithRetry(() => import('./components/DataDeletion'));
 const NotFound = lazyWithRetry(() => import('./components/NotFound'));
 const TrackOrder = lazyWithRetry(() => import('./components/TrackOrder'));
 
@@ -254,6 +255,8 @@ function AppContent() {
         return 'returns';
       case '/cookie-policy':
         return 'cookies';
+      case '/data-deletion':
+        return 'deletion';
       case '/track-order':
         return 'track';
       case '/404':
@@ -288,6 +291,7 @@ function AppContent() {
       case 'shipping': return '/shipping-policy';
       case 'returns': return '/return-refund-policy';
       case 'cookies': return '/cookie-policy';
+      case 'deletion': return '/data-deletion';
       case 'track': return '/track-order';
       case '404': return '/404';
       case 'cart': return '/cart';
@@ -752,6 +756,9 @@ function AppContent() {
 
           {/* COOKIE POLICY VIEW */}
           {currentPage === 'cookies' && <CookiePolicy />}
+
+          {/* USER DATA DELETION POLICY VIEW */}
+          {currentPage === 'deletion' && <DataDeletion />}
 
           {/* TRACK YOUR ORDER VIEW */}
           {currentPage === 'track' && (

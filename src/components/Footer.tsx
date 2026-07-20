@@ -124,6 +124,7 @@ export default function Footer({ setCurrentPage, setSelectedCategoryFilter }: Fo
               <button onClick={() => handleNavClick('shipping')} className="text-left hover:text-gold-pure duration-300 transition-colors uppercase tracking-wider text-[11px] font-mono">Shipping Policy</button>
               <button onClick={() => handleNavClick('returns')} className="text-left hover:text-gold-pure duration-300 transition-colors uppercase tracking-wider text-[11px] font-mono">Return & Refund Policy</button>
               <button onClick={() => handleNavClick('cookies')} className="text-left hover:text-gold-pure duration-300 transition-colors uppercase tracking-wider text-[11px] font-mono">Cookie Policy</button>
+              <button onClick={() => handleNavClick('deletion')} className="text-left hover:text-gold-pure duration-300 transition-colors uppercase tracking-wider text-[11px] font-mono">User Data Deletion</button>
             </div>
           </div>
 
