@@ -1159,7 +1159,8 @@ async function initializeBrandingDatabase() {
 
   const client = new Client({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 5000
   });
 
   try {
@@ -1321,7 +1322,8 @@ app.get('/api/branding', async (req, res) => {
 
     const client = new Client({
       connectionString,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 5000
     });
 
     await client.connect();
@@ -1410,7 +1412,8 @@ app.post('/api/branding', authenticateRequest, async (req: any, res) => {
 
     const client = new Client({
       connectionString,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 5000
     });
 
     await client.connect();
@@ -2080,7 +2083,8 @@ app.get('/api/products', async (req, res) => {
 
   const client = new Client({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 5000
   });
 
   try {
@@ -2142,7 +2146,8 @@ app.post('/api/products', async (req, res) => {
 
   const client = new Client({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 5000
   });
 
   try {
@@ -2192,7 +2197,8 @@ app.delete('/api/products/:id', async (req, res) => {
 
   const client = new Client({
     connectionString,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 5000
   });
 
   try {
