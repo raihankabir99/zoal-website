@@ -25,6 +25,22 @@ import { friendlyToUUID } from './src/lib/uuidMapper.ts';
 import { injectServerSEO } from './backend/seo.ts';
 
 import {
+  getBlogPosts,
+  createBlogPost,
+  updateBlogPost,
+  deleteBlogPost,
+  getCategories,
+  getTags,
+  getComments,
+  createComment,
+  getAuthors,
+  generateBlogSitemap,
+  generateBlogRss,
+  subscribeNewsletter,
+  searchBlog
+} from './server/blog.ts';
+
+import {
   securityHeadersMiddleware,
   rateLimiterMiddleware,
   csrfProtectionMiddleware,
@@ -3366,6 +3382,23 @@ app.post('/api/contact', validateContactSecurity, async (req: any, res) => {
 // -------------------------------------------------------------
 
 app.use('/api/support', authenticateRequest, requireRole(['staff']));
+
+// --- BLOG PUBLIC API ---
+app.get('/api/blog/posts', getBlogPosts);
+app.get('/api/blog/categories', getCategories);
+app.get('/api/blog/tags', getTags);
+app.get('/api/blog/authors', getAuthors);
+app.get('/api/blog/comments', getComments);
+app.post('/api/blog/comments', createComment);
+app.get('/api/blog/search', searchBlog);
+app.get('/api/blog/rss', generateBlogRss);
+app.get('/api/blog/sitemap', generateBlogSitemap);
+app.post('/api/blog/newsletter/subscribe', subscribeNewsletter);
+
+// --- BLOG ADMIN API ---
+app.post('/api/blog/posts', authenticateRequest, requireRole(['admin', 'staff']), createBlogPost);
+app.put('/api/blog/posts/:id', authenticateRequest, requireRole(['admin', 'staff']), updateBlogPost);
+app.delete('/api/blog/posts/:id', authenticateRequest, requireRole(['admin', 'staff']), deleteBlogPost);
 
 app.get('/api/support/tickets', async (req, res) => {
   // TODO: Fetch from Supabase
