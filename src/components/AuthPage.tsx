@@ -268,7 +268,7 @@ export default function AuthPage({
       if (error) throw error;
 
       if (data?.user) {
-        setSuccessMsg('Private access key verified! Opening Customer Dashboard...');
+        setSuccessMsg('Private access key verified! Opening Dashboard...');
         const token = data.session?.access_token || '';
         localStorage.setItem('zoal_auth_token', token);
 

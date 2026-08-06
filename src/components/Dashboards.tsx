@@ -613,7 +613,7 @@ export default function Dashboards({
                       {currentUser?.name?.[0]?.toUpperCase() || 'U'}
                     </div>
                     <span className="text-[10px] font-semibold text-zinc-300 uppercase tracking-wider truncate max-w-[100px] hidden sm:block">
-                      {currentUser ? (currentUser as any).firstName || (currentUser.name || (isAr ? 'عميل زول' : 'Customer')).split(' ')[0] : (isAr ? 'عميل زول' : 'Customer')}
+                      {currentUser ? (currentUser as any).firstName || (currentUser.name || (isAr ? 'عميل زول' : 'Customer')).split(' ')[0] : (isAr ? 'ضيف زول' : 'Guest')}
                     </span>
                   </div>
 
@@ -626,7 +626,7 @@ export default function Dashboards({
                         </div>
                         <div className="min-w-0">
                           <p className="text-[11px] text-white font-semibold font-display tracking-wide uppercase truncate leading-tight">
-                            {currentUser?.name || (isAr ? 'ضيف كريم' : 'Guest')}
+                            {currentUser?.name || (isAr ? 'عميل كريم' : 'Customer')}
                           </p>
                           <span className="text-[8.5px] font-mono text-zinc-500 tracking-wider truncate block">
                             {currentUser?.email}
@@ -737,8 +737,7 @@ export default function Dashboards({
                         {/* Drawer Header */}
                         <div className="flex items-center justify-between border-b border-white/5 pb-4">
                           <div>
-                            <span className="text-[8px] tracking-[0.3em] text-[#D4AF37] uppercase font-bold block mb-0.5">{isAr ? 'بوتيك زول الفاخر' : 'AL ZOAL BOUTIQUE'}</span>
-                            <span className="text-white font-display uppercase font-bold text-xs tracking-wider">{isAr ? 'حساب العميل' : 'Customer Account'}</span>
+                            <span className="text-white font-display uppercase font-bold text-xs tracking-wider">{isAr ? 'زول' : 'AL ZOAL'}</span>
                           </div>
                           <button
                             onClick={() => setSidebarOpen(false)}

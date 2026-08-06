@@ -13,7 +13,7 @@ interface CustomerDashboardProps {
 export default function CustomerDashboard(props: CustomerDashboardProps) {
   return (
     <div className="space-y-6">
-      <p>Customer Dashboard Placeholder - Logic to be moved</p>
+      <p>AL ZOAL Placeholder - Logic to be moved</p>
     </div>
   );
 }

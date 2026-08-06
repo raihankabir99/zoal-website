@@ -92,7 +92,7 @@ export default function SEO({ currentPage, selectedProduct, selectedPost }: SEOP
           description = `Finalize your premium transaction securely with Saudi payment standards (Mada, Visa, Apple Pay) or Bank Transfer options.`;
           break;
         case 'dashboard':
-          title = `Customer Account Center & Invoices | ${brandName}`;
+          title = `Account Center & Invoices | ${brandName}`;
           description = `Access your personal measurement profile, tracking status, support tickets, and printable gold-standard tax invoices.`;
           break;
         case 'wishlist':
