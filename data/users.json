@@ -1,0 +1,51 @@
+[
+  {
+    "id": "USR-ADMIN-1",
+    "firstName": "Abdullah",
+    "lastName": "Al-Saudi",
+    "email": "alzoal3003@gmail.com",
+    "phone": "+966 56 769 9315",
+    "passwordHash": "dbdf8aafdc77d0de6205dfeac4a03b72:90f5c9cc150ebc4c516cfea5cb10afdeb8eaaba66cc12206434baa3ba6d81c59a490dfe8e127f4335aacd46149d2809a260d3b0d6d48b94fc5268c44c54224c7",
+    "role": "admin",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-07-13T19:57:56.932Z",
+    "addresses": [
+      "Al Shati District, Dammam, KSA",
+      "Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361"
+    ]
+  },
+  {
+    "id": "USR-STAFF-1",
+    "firstName": "Raed",
+    "lastName": "Al-Fahad",
+    "email": "staff@alzoal.com",
+    "phone": "+966 50 123 4567",
+    "passwordHash": "8496bf9a5a03b1a237c9c78d5fe39fb4:6074ced1c0d4cf1684da07a882814cafe8b39f318268d0b2ea4df38b822d05b1b4c111c26927cd9e68cefbc1e83c1b24a227c8766f20f9e602e0d4aab878c113",
+    "role": "staff",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-07-13T19:57:56.939Z",
+    "addresses": [
+      "Al Hofuf boutique, KSA"
+    ]
+  },
+  {
+    "id": "USR-CUSTOMER-1",
+    "firstName": "Sultan",
+    "lastName": "Al-Ghamdi",
+    "email": "customer@alzoal.com",
+    "phone": "+966 55 987 6543",
+    "passwordHash": "fafa31fdd13a664a3db25238fd017c67:fb0351a79373822532ee94f83cf345e7baa3e531b77c670c636b6d3d618d1abc1fa8a98753d964d2d098f5b49c10c16308b9263a2827da85e1070f9e19730743",
+    "role": "customer",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-07-13T19:57:56.946Z",
+    "addresses": [
+      "Al Hamra District, Riyadh, KSA"
+    ]
+  }
+]

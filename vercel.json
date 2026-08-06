@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "functions": {
+    "api/server.ts": {
+      "includeFiles": "dist/**"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/server.ts"
+    },
+    {
+      "src": "/robots.txt",
+      "dest": "/api/server.ts"
+    },
+    {
+      "src": "/sitemap.xml",
+      "dest": "/api/server.ts"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/server.ts"
+    }
+  ]
+}

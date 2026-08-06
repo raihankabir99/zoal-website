@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
+  <!-- ZOAL Luxury Brand Emblem & Monogram (Dark Theme) -->
+  <g transform="translate(10, 10)">
+    <path d="M30 0 L60 17.32 L60 51.96 L30 69.28 L0 51.96 L0 17.32 Z" fill="url(#goldGradientDark)" opacity="0.2" />
+    <path d="M30 4 L56 19.05 L56 49.23 L30 64.28 L4 49.23 L4 19.05 Z" stroke="url(#goldGradientDark)" stroke-width="1.5" fill="none" />
+    <path d="M18 22 H42 L22 46 H42" stroke="url(#goldGradientDark)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="30" cy="34" r="2.5" fill="#F3E5AB" />
+  </g>
+  
+  <text x="82" y="42" fill="#FFFFFF" font-family="'Cinzel', 'Playfair Display', 'Georgia', serif" font-size="24" font-weight="700" letter-spacing="3">AL ZOAL</text>
+  <text x="83" y="58" fill="#D4AF37" font-family="'Plus Jakarta Sans', 'Inter', sans-serif" font-size="9" font-weight="600" letter-spacing="4">ENTERPRISE PLATFORM</text>
+  
+  <defs>
+    <linearGradient id="goldGradientDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF2A1" />
+      <stop offset="50%" stop-color="#D4AF37" />
+      <stop offset="100%" stop-color="#996F00" />
+    </linearGradient>
+  </defs>
+</svg>
