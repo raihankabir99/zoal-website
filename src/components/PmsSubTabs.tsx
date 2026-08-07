@@ -1792,7 +1792,7 @@ export const PmsSubTabs: React.FC<PmsSubTabsProps> = ({
                   </tr>
                 ) : (
                   pmsLogs.map((log, index) => (
-                    <tr key={log.id || index} className="hover:bg-white/2 transition-colors">
+                    <tr key={`${log.id || 'log'}-${index}`} className="hover:bg-white/2 transition-colors">
                       <td className="py-2.5 text-zinc-500">{log.time}</td>
                       <td className="py-2.5 font-bold text-white">{log.user}</td>
                       <td className="py-2.5">

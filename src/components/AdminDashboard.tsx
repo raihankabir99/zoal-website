@@ -352,7 +352,27 @@ export default function AdminDashboard({
     localStorage.setItem('zoal_admin_coupons', JSON.stringify(coupons));
   }, [coupons]);
 
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const DEFAULT_CAMPAIGNS = [
+    { id: 'camp-1', name: 'Ramadan Specialty Coffee Promo', channel: 'Email & SMS', status: 'Active', target_audience: 'VIP Customers', conversion_rate: '14.2%' },
+    { id: 'camp-2', name: 'Summer Bespoke Thobe Launch', channel: 'Instagram & WhatsApp', status: 'Scheduled', target_audience: 'All Registered', conversion_rate: '8.7%' }
+  ];
+
+  const DEFAULT_SUBSCRIBERS = [
+    { id: 'sub-1', email: 'tarig@zoal.sa', name: 'Tarig Al-Sultan', status: 'Subscribed', channel: 'Email', joined_at: '2026-05-10' },
+    { id: 'sub-2', email: 'fahed@zoal.sa', name: 'Fahed M. Khartum', status: 'Subscribed', channel: 'SMS', joined_at: '2026-06-01' },
+    { id: 'sub-3', email: 'amira@zoal.sa', name: 'Amira Hassan', status: 'Subscribed', channel: 'WhatsApp', joined_at: '2026-06-15' }
+  ];
+
+  const [campaigns, setCampaigns] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('zoal_admin_campaigns');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_CAMPAIGNS;
+  });
 
   useEffect(() => {
     localStorage.setItem('zoal_admin_campaigns', JSON.stringify(campaigns));
@@ -373,7 +393,20 @@ export default function AdminDashboard({
     localStorage.setItem('zoal_admin_banners', JSON.stringify(banners));
   }, [banners]);
 
-  const [subscribers, setSubscribers] = useState<any[]>([]);
+  const [subscribers, setSubscribers] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('zoal_admin_subscribers');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_SUBSCRIBERS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('zoal_admin_subscribers', JSON.stringify(subscribers));
+  }, [subscribers]);
 
   useEffect(() => {
     fetch('/api/marketing-data')
@@ -384,13 +417,15 @@ export default function AdminDashboard({
         return res.json();
       })
       .then(data => {
-        setCampaigns(data?.campaigns || []);
-        setSubscribers(data?.subscribers || []);
+        if (data?.campaigns && Array.isArray(data.campaigns) && data.campaigns.length > 0) {
+          setCampaigns(data.campaigns);
+        }
+        if (data?.subscribers && Array.isArray(data.subscribers) && data.subscribers.length > 0) {
+          setSubscribers(data.subscribers);
+        }
       })
       .catch(err => {
-        console.error('Failed to fetch marketing data:', err);
-        setCampaigns([]);
-        setSubscribers([]);
+        console.warn('Note: Could not sync marketing data from server, using local fallback:', err.message || err);
       });
   }, []);
 
@@ -713,6 +748,14 @@ export default function AdminDashboard({
           return false;
         }
         const fullProduct = { ...cachedProd, ...updatedFields };
+        
+        // Ensure image consistency if images are updated
+        if (Array.isArray(updatedFields.images)) {
+          fullProduct.image_urls = updatedFields.images;
+          fullProduct.image = updatedFields.images[0] || '';
+          fullProduct.image_url = updatedFields.images[0] || '';
+        }
+
         saveProductToSupabase(fullProduct);
         return true;
       }
@@ -721,6 +764,13 @@ export default function AdminDashboard({
         ...existingProduct,
         ...updatedFields
       };
+
+      // Ensure image consistency if images are updated
+      if (Array.isArray(updatedFields.images)) {
+        fullProduct.image_urls = updatedFields.images;
+        fullProduct.image = updatedFields.images[0] || '';
+        fullProduct.image_url = updatedFields.images[0] || '';
+      }
 
       saveProductToSupabase(fullProduct);
       return true;
@@ -800,8 +850,9 @@ export default function AdminDashboard({
 
   // Log function helper
   const addLog = (action: string, target?: string) => {
+    const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const newLog = {
-      id: `log-${Date.now()}`,
+      id: uniqueId,
       user: currentUser?.name || 'Admin',
       action,
       target: target || 'System Interface',
@@ -1189,6 +1240,9 @@ export default function AdminDashboard({
         warehouseLocation: formState.warehouseLocation || 'Al Hofuf Central',
         lowStockThreshold: parseInt(formState.lowStockThreshold) || 5,
         images: formState.images.length > 0 ? formState.images : [],
+        image_urls: formState.images.length > 0 ? formState.images : [],
+        image: formState.images[0] || '',
+        image_url: formState.images[0] || '',
         updatedAt: new Date().toISOString().slice(0, 10),
         // Upgraded Architecture Columns
         productType: formState.productType,
@@ -2980,8 +3034,8 @@ export default function AdminDashboard({
                     <button onClick={() => setActiveTab('logs')} className="text-[8px] uppercase font-mono text-zinc-500 hover:text-white">Audit</button>
                   </div>
                   <div className="space-y-3 font-mono text-[9px]">
-                    {systemLogs.slice(0, 5).map(log => (
-                      <div key={log.id} className="p-2 bg-black/40 border border-white/5 rounded-xs flex items-start gap-2 text-zinc-400">
+                    {systemLogs.slice(0, 5).map((log, idx) => (
+                      <div key={`${log.id}-${idx}`} className="p-2 bg-black/40 border border-white/5 rounded-xs flex items-start gap-2 text-zinc-400">
                         <Activity className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
                         <div className="space-y-0.5">
                           <div className="flex justify-between text-[8px] text-zinc-500 w-full gap-2">
@@ -6898,8 +6952,8 @@ export default function AdminDashboard({
                 </div>
                 
                 <div className="divide-y divide-white/5 font-mono text-[9.5px]">
-                  {systemLogs.map(log => (
-                    <div key={log.id} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
+                  {systemLogs.map((log, idx) => (
+                    <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
                       <div>
                         <span className="text-white block font-sans">{log.action}</span>
                         <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip}</span>

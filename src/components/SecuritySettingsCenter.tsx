@@ -529,8 +529,8 @@ export default function SecuritySettingsCenter({
                 <span className="text-[8px] font-mono text-zinc-500">Unmodifiable append-only record</span>
               </div>
               <div className="divide-y divide-white/5 font-mono text-[9.5px] max-h-72 overflow-y-auto pr-1 scrollbar-none">
-                {systemLogs.map(log => (
-                  <div key={log.id} className="py-2 flex justify-between text-zinc-400 hover:bg-white/1 duration-100 px-2 rounded-xs text-left">
+                {systemLogs.map((log, idx) => (
+                  <div key={`${log.id}-${idx}`} className="py-2 flex justify-between text-zinc-400 hover:bg-white/1 duration-100 px-2 rounded-xs text-left">
                     <div>
                       <span className="text-white block font-sans font-semibold">{log.action}</span>
                       <span className="text-zinc-600 text-[8px] block">Admin Principal: {log.user} • Remote Node IP: {log.ip || '19.16.1.10'}</span>

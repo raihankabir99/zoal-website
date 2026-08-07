@@ -745,8 +745,8 @@ export default function StaffDashboard({
                     </div>
 
                     <div className="divide-y divide-white/5 space-y-2 max-h-[190px] overflow-y-auto pr-1">
-                      {staffLogs.map((log: any) => (
-                        <div key={log.id} className="pt-2 text-left">
+                      {staffLogs.map((log: any, idx: number) => (
+                        <div key={`${log.id}-${idx}`} className="pt-2 text-left">
                           <div className="flex justify-between items-center text-[10px] text-zinc-300 font-sans leading-tight">
                             <span className="font-semibold text-[#D4AF37]">{log.action}</span>
                             <span className="text-[8.5px] font-mono text-zinc-500">{log.timestamp.split(',')[1] || log.timestamp}</span>

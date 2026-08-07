@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product } from '../types';
+import { SafeImage } from '../imageRegistry';
 
 // Category interface representing enterprise taxonomy
 export interface Category {
@@ -41,6 +42,8 @@ export interface Category {
   // Advanced images additions
   mobileBannerImage?: string;
   homepageImage?: string;
+  imageUrl?: string;
+  isFeatured?: boolean;
 }
 
 interface CategoryManagementProps {
@@ -94,6 +97,173 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
 }) => {
   // Views configuration
   const [activeView, setActiveView] = useState<'tree' | 'card' | 'table'>('tree');
+
+  // System Category "All Collections" Image management
+  const [systemAllCollectionsImage, setSystemAllCollectionsImage] = useState<string>(() => {
+    try {
+      const savedKey = localStorage.getItem('zoal_all_collections_image');
+      if (savedKey) return savedKey;
+
+      const gs = localStorage.getItem('zoal_admin_global_settings');
+      if (gs) {
+        const parsed = JSON.parse(gs);
+        if (parsed && parsed.allCollectionsImage) {
+          return parsed.allCollectionsImage;
+        }
+      }
+    } catch (e) {}
+    return '';
+  });
+  const [isUploadingSystemImage, setIsUploadingSystemImage] = useState(false);
+  const [systemImageSaveStatus, setSystemImageSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  const handleSystemImageUpload = async (file: File) => {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (PNG, JPG, WEBP, GIF, SVG).');
+      return;
+    }
+
+    setIsUploadingSystemImage(true);
+    try {
+      const timestamp = Date.now();
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `categories/allcollections_${timestamp}_${sanitizedName}`;
+
+      let publicUrl = '';
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'categories');
+      formData.append('path', filePath);
+
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+
+      try {
+        const res = await fetch('/api/storage/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) {
+            publicUrl = data.url;
+          }
+        }
+      } catch (err) {
+        console.warn('Storage upload server endpoint unavailable, using Data URL fallback:', err);
+      }
+
+      if (!publicUrl) {
+        publicUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') resolve(reader.result);
+            else reject(new Error('Failed to read image file'));
+          };
+          reader.onerror = () => reject(new Error('File reading error'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      setSystemAllCollectionsImage(publicUrl);
+      if (addLog) addLog(`Uploaded system category image "${file.name}"`, "Media Engine");
+    } catch (err: any) {
+      console.error('System category image upload failed:', err);
+      alert(err.message || 'Image upload failed. Please try again.');
+    } finally {
+      setIsUploadingSystemImage(false);
+    }
+  };
+
+  const handleSaveSystemImage = async () => {
+    setSystemImageSaveStatus('saving');
+    try {
+      let currentSettings: any = {};
+      const gs = localStorage.getItem('zoal_admin_global_settings');
+      let oldUrl = localStorage.getItem('zoal_all_collections_image') || '';
+      if (gs) {
+        try {
+          currentSettings = JSON.parse(gs);
+          if (!oldUrl) {
+            oldUrl = currentSettings.allCollectionsImage || '';
+          }
+        } catch (e) {}
+      }
+      
+      const nextSettings = {
+        ...currentSettings,
+        allCollectionsImage: systemAllCollectionsImage
+      };
+
+      localStorage.setItem('zoal_all_collections_image', systemAllCollectionsImage);
+      localStorage.setItem('zoal_admin_global_settings', JSON.stringify(nextSettings));
+
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      if (token) {
+        try {
+          await fetch('/api/branding', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(nextSettings)
+          });
+        } catch (err) {
+          console.warn('Failed to save settings via backend API:', err);
+        }
+      }
+
+      // 7. Delete previous image from Storage after successful save
+      if (oldUrl && oldUrl !== systemAllCollectionsImage) {
+        let storagePath = '';
+        if (oldUrl.includes('/categories/')) {
+          const parts = oldUrl.split('/categories/');
+          storagePath = parts[parts.length - 1];
+        } else if (oldUrl.includes('/storage/v1/object/public/')) {
+          const parts = oldUrl.split('/public/');
+          const subParts = parts[1]?.split('/') || [];
+          if (subParts.length > 1) {
+            storagePath = subParts.slice(1).join('/');
+          }
+        }
+
+        if (storagePath) {
+          try {
+            console.log(`[Storage Replacement] Deleting old system image: ${storagePath}`);
+            const delRes = await fetch('/api/storage/delete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token || 'dev-preview-token'}`
+              },
+              body: JSON.stringify({ bucket: 'categories', path: storagePath })
+            });
+            const delData = await delRes.json();
+            if (!delRes.ok) {
+              console.warn(`[Storage Replacement] System image cleanup failure: ${delData.error || 'Failed'}`);
+            } else {
+              console.log(`[Storage Replacement] Old system image removed successfully from Supabase Storage`);
+            }
+          } catch (delErr: any) {
+            console.warn(`[Storage Replacement] System image cleanup failure:`, delErr);
+          }
+        }
+      }
+
+      setSystemImageSaveStatus('saved');
+      if (addLog) addLog(`Saved dynamic "All Collections" category image`, "CMS Manager");
+      setTimeout(() => setSystemImageSaveStatus('idle'), 2500);
+    } catch (err) {
+      console.error(err);
+      setSystemImageSaveStatus('error');
+    }
+  };
   
   // Searching & Filtering states
   const [searchTerm, setSearchTerm] = useState('');
@@ -297,6 +467,13 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       return;
     }
 
+    // 1. Read the existing image URL before uploading the new one
+    let oldUrl = '';
+    if (fieldName === 'thumbnail') oldUrl = formFeaturedImage;
+    else if (fieldName === 'banner') oldUrl = formBannerImage;
+    else if (fieldName === 'mobileBanner') oldUrl = formMobileBannerImage;
+    else if (fieldName === 'homepageImage') oldUrl = formHomepageImage;
+
     setIsUploading(true);
     setIsOptimizing(true);
     setUploadProgress(15);
@@ -320,6 +497,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
 
       const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
 
+      // 2. Upload the new image using the existing upload service
       try {
         const res = await fetch('/api/storage/upload', {
           method: 'POST',
@@ -356,6 +534,51 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
 
       setUploadProgress(100);
 
+      // If oldUrl is an intermediate file (uploaded in this session but now being replaced),
+      // we delete it immediately because it will never be saved.
+      // We know it's an intermediate file if it is different from the original category image URL.
+      let isIntermediate = false;
+      if (editingCategory) {
+        if (fieldName === 'thumbnail' && oldUrl !== (editingCategory.featuredImage || '')) isIntermediate = true;
+        else if (fieldName === 'banner' && oldUrl !== (editingCategory.bannerImage || '')) isIntermediate = true;
+        else if (fieldName === 'mobileBanner' && oldUrl !== (editingCategory.mobileBannerImage || '')) isIntermediate = true;
+        else if (fieldName === 'homepageImage' && oldUrl !== (editingCategory.homepageImage || '')) isIntermediate = true;
+      } else {
+        // In create mode, any previous URL in form state is an intermediate file from this session
+        if (oldUrl) isIntermediate = true;
+      }
+
+      if (isIntermediate && oldUrl) {
+        let storagePath = '';
+        if (oldUrl.includes('/categories/')) {
+          const parts = oldUrl.split('/categories/');
+          storagePath = parts[parts.length - 1];
+        } else if (oldUrl.includes('/storage/v1/object/public/')) {
+          const parts = oldUrl.split('/public/');
+          const subParts = parts[1]?.split('/') || [];
+          if (subParts.length > 1) {
+            storagePath = subParts.slice(1).join('/');
+          }
+        }
+
+        if (storagePath) {
+          try {
+            console.log(`[Storage Replacement] Deleting intermediate session image: ${storagePath}`);
+            await fetch('/api/storage/delete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ bucket: 'categories', path: storagePath })
+            });
+          } catch (delErr) {
+            console.warn(`[Storage Replacement] Intermediate cleanup warning:`, delErr);
+          }
+        }
+      }
+
+      // 7. Refresh the Live Preview immediately by updating ONLY temporary form states
       if (fieldName === 'thumbnail') setFormFeaturedImage(publicUrl);
       if (fieldName === 'banner') setFormBannerImage(publicUrl);
       if (fieldName === 'mobileBanner') setFormMobileBannerImage(publicUrl);
@@ -368,7 +591,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         savings: "WebP / CDN"
       });
 
-      addLog(`Uploaded category image "${file.name}" for field ${fieldName}`, "Media Engine");
+      addLog(`Uploaded and replaced category image "${file.name}" for field ${fieldName}`, "Media Engine");
     } catch (err: any) {
       console.error('Category image upload failed:', err);
       setUploadError(err.message || 'Image upload failed. Please try again.');
@@ -1215,6 +1438,11 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     const finalFriendlyUrl = formFriendlyUrl || `/shop/${formSlug}`;
 
     if (modalMode === 'edit' && editingCategory) {
+      const oldThumbnail = editingCategory.featuredImage || '';
+      const oldBanner = editingCategory.bannerImage || '';
+      const oldMobileBanner = editingCategory.mobileBannerImage || '';
+      const oldHomepage = editingCategory.homepageImage || '';
+
       // Edit mode save
       setCategories(prev => {
         const updated = prev.map(c => c.id === editingCategory.id ? {
@@ -1254,6 +1482,58 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
         return updated;
       });
+
+      // 7. Delete previous image from Storage after successful save
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const deletePhoto = async (oldUrl: string) => {
+        if (!oldUrl) return;
+        let storagePath = '';
+        if (oldUrl.includes('/categories/')) {
+          const parts = oldUrl.split('/categories/');
+          storagePath = parts[parts.length - 1];
+        } else if (oldUrl.includes('/storage/v1/object/public/')) {
+          const parts = oldUrl.split('/public/');
+          const subParts = parts[1]?.split('/') || [];
+          if (subParts.length > 1) {
+            storagePath = subParts.slice(1).join('/');
+          }
+        }
+
+        if (storagePath) {
+          try {
+            console.log(`[Storage Replacement] Deleting old image after successful Save: ${storagePath}`);
+            const delRes = await fetch('/api/storage/delete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ bucket: 'categories', path: storagePath })
+            });
+            const delData = await delRes.json();
+            if (!delRes.ok) {
+              console.warn(`[Storage Replacement] Cleanup failure: ${delData.error || 'Failed'}`);
+            } else {
+              console.log(`[Storage Replacement] Old image removed successfully from Supabase Storage`);
+            }
+          } catch (delErr) {
+            console.warn(`[Storage Replacement] Cleanup failure:`, delErr);
+          }
+        }
+      };
+
+      if (formFeaturedImage !== oldThumbnail && oldThumbnail) {
+        deletePhoto(oldThumbnail);
+      }
+      if (formBannerImage !== oldBanner && oldBanner) {
+        deletePhoto(oldBanner);
+      }
+      if (formMobileBannerImage !== oldMobileBanner && oldMobileBanner) {
+        deletePhoto(oldMobileBanner);
+      }
+      if (formHomepageImage !== oldHomepage && oldHomepage) {
+        deletePhoto(oldHomepage);
+      }
 
       // Track granular change activity logs
       addLog(`Edited Category division: ${formName}`, "Category Center");
@@ -2019,7 +2299,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
             <div className="mt-3.5 space-y-1.5 max-h-36 overflow-y-auto pr-1">
               {auditLogs.length > 0 ? (
                 auditLogs.slice(0, 5).map((log, i) => (
-                  <div key={log.id || i} className="bg-zinc-900/40 border border-white/5 p-1.5 rounded-xs space-y-0.5">
+                  <div key={`${log.id || 'log'}-${i}`} className="bg-zinc-900/40 border border-white/5 p-1.5 rounded-xs space-y-0.5">
                     <div className="flex items-center justify-between text-[8px] font-mono">
                       <span className="text-gold-pure font-bold">{log.user || 'Admin'}</span>
                       <span className="text-zinc-500">{log.time}</span>
@@ -2492,6 +2772,127 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
           </div>
         ) : (
           <div>
+            {/* System Category Image Manager */}
+            <div className="mb-6 border border-white/10 bg-zinc-950/40 p-5 rounded-xs space-y-4 text-left font-sans animate-fade-in">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div>
+                  <span className="text-[8px] font-mono text-gold-pure uppercase tracking-widest font-bold">SYSTEM CATEGORY</span>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-display flex items-center gap-1.5 mt-0.5">
+                    ALL COLLECTIONS <span className="text-gold-pure">⭐</span>
+                  </h3>
+                </div>
+                <div className="text-right">
+                  <span className="text-[8.5px] font-mono text-zinc-500 block uppercase">Category Type</span>
+                  <span className="text-[10px] text-zinc-300 font-mono font-semibold">System Category (Read Only)</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                {/* 1. Upload Section */}
+                <div className="space-y-2">
+                  <label className="text-[9.5px] font-mono text-zinc-400 uppercase tracking-wider block">Image Upload</label>
+                  <div className="relative">
+                    <input 
+                      type="file"
+                      id="system-category-image-upload"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleSystemImageUpload(file);
+                      }}
+                      className="hidden"
+                    />
+                    <label 
+                      htmlFor="system-category-image-upload"
+                      className={`flex flex-col items-center justify-center p-6 border border-dashed rounded-xs cursor-pointer transition-all duration-300 ${
+                        isUploadingSystemImage 
+                          ? 'border-gold-pure/40 bg-gold-pure/5 pointer-events-none'
+                          : 'border-white/10 bg-black/20 hover:border-gold-pure/30 hover:bg-black/40'
+                      }`}
+                    >
+                      {isUploadingSystemImage ? (
+                        <>
+                          <RefreshCw className="w-5 h-5 text-gold-pure animate-spin mb-1.5" />
+                          <span className="text-[9px] font-mono text-gold-pure uppercase tracking-widest">Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-5 h-5 text-zinc-500 mb-1.5" />
+                          <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest text-center">Upload Image</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                {/* 2. Live Preview */}
+                <div className="space-y-2">
+                  <label className="text-[9.5px] font-mono text-zinc-400 uppercase tracking-wider block">Live Preview</label>
+                  <div className="h-[76px] w-full rounded-xs border border-white/5 bg-black/40 overflow-hidden flex items-center justify-center relative">
+                    {systemAllCollectionsImage ? (
+                      <img 
+                        src={systemAllCollectionsImage} 
+                        alt="All Collections Live Preview" 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <ImageIcon className="w-5 h-5 text-zinc-700 mx-auto mb-1" />
+                        <span className="text-[9px] font-mono text-zinc-500 uppercase">No Image Selected</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Actions / Save Button */}
+                <div className="space-y-2 flex flex-col justify-end h-full">
+                  <label className="text-[9.5px] font-mono text-zinc-400 uppercase tracking-wider block md:invisible">Actions</label>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={handleSaveSystemImage}
+                      disabled={isUploadingSystemImage || systemImageSaveStatus === 'saving'}
+                      className={`w-full py-2.5 px-4 rounded-xs text-[10px] font-mono uppercase font-bold tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer border ${
+                        systemImageSaveStatus === 'saving'
+                          ? 'bg-zinc-900 border-white/5 text-zinc-500 cursor-not-allowed'
+                          : systemImageSaveStatus === 'saved'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-gold-pure text-black border-gold-pure hover:bg-gold-pure/95 shadow-md shadow-gold-pure/10'
+                      }`}
+                    >
+                      {systemImageSaveStatus === 'saving' ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : systemImageSaveStatus === 'saved' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          Saved
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          Save Image
+                        </>
+                      )}
+                    </button>
+                    {systemAllCollectionsImage && (
+                      <button
+                        onClick={() => {
+                          setSystemAllCollectionsImage('');
+                          if (addLog) addLog(`Cleared All Collections custom image`, "Media Engine");
+                        }}
+                        className="w-full py-1.5 px-4 rounded-xs text-[8.5px] font-mono uppercase text-zinc-400 hover:text-white border border-white/5 hover:border-red-500/30 hover:bg-red-500/5 transition-all duration-300"
+                      >
+                        Reset to Fallback
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {filteredCategories.length === 0 ? (
               <div className="text-center py-20 bg-zinc-950 border border-white/5 rounded-xs space-y-3">
                 <FolderTree className="w-12 h-12 text-zinc-700 mx-auto" />
@@ -2986,126 +3387,214 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                 {/* Grid of the 4 Category Image Fields */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
                   {/* Thumbnail */}
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">1. Thumbnail Image (Catalog Grid)</label>
-                    <input 
-                      type="text" 
-                      value={formFeaturedImage}
-                      onChange={(e) => setFormFeaturedImage(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
-                    />
-                    <div className="flex items-center justify-between text-[8px] font-mono">
-                      <span className="text-zinc-500">Suggested: 400x400 PNG</span>
+                  <div className="space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">1. Thumbnail Image (Catalog Grid)</label>
                       <input 
-                        type="file" 
-                        accept="image/*" 
-                        id="cat-upload-thumbnail" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleRealCategoryImageUpload(file, 'thumbnail');
-                        }}
+                        type="text" 
+                        value={formFeaturedImage}
+                        onChange={(e) => setFormFeaturedImage(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
                       />
-                      <label
-                        htmlFor="cat-upload-thumbnail"
-                        className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
-                      >
-                        {isUploading && uploadDestinationField === 'thumbnail' ? 'Uploading...' : 'Upload Image'}
-                      </label>
+                      <div className="flex items-center justify-between text-[8px] font-mono mt-1">
+                        <span className="text-zinc-500">Suggested: 400x400 PNG</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id="cat-upload-thumbnail" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleRealCategoryImageUpload(file, 'thumbnail');
+                          }}
+                        />
+                        <label
+                          htmlFor="cat-upload-thumbnail"
+                          className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
+                        >
+                          {isUploading && uploadDestinationField === 'thumbnail' ? 'Uploading...' : 'Upload Image'}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Live Preview layer */}
+                    <div className="relative mt-2 rounded-xs border border-white/5 bg-zinc-950/60 overflow-hidden h-36 flex items-center justify-center group shrink-0">
+                      {formFeaturedImage ? (
+                        <SafeImage 
+                          src={formFeaturedImage} 
+                          alt="Thumbnail Preview" 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          containerClassName="w-full h-full"
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-zinc-600">
+                          <ImageIcon className="w-5 h-5 mx-auto mb-1 opacity-40 text-gold-pure" />
+                          <p className="text-[8px] font-mono uppercase tracking-wider">No Thumbnail Selected</p>
+                        </div>
+                      )}
+                      <div className="absolute top-1.5 left-1.5 bg-black/70 border border-white/10 px-1.5 py-0.5 rounded-xs pointer-events-none">
+                        <span className="text-[7px] font-mono uppercase tracking-wider text-gold-pure font-bold">Live Preview</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Desktop Banner */}
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">2. Desktop Page Banner</label>
-                    <input 
-                      type="text" 
-                      value={formBannerImage}
-                      onChange={(e) => setFormBannerImage(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
-                    />
-                    <div className="flex items-center justify-between text-[8px] font-mono">
-                      <span className="text-zinc-500">Suggested: 1920x450 JPG</span>
+                  <div className="space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">2. Desktop Page Banner</label>
                       <input 
-                        type="file" 
-                        accept="image/*" 
-                        id="cat-upload-banner" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleRealCategoryImageUpload(file, 'banner');
-                        }}
+                        type="text" 
+                        value={formBannerImage}
+                        onChange={(e) => setFormBannerImage(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
                       />
-                      <label
-                        htmlFor="cat-upload-banner"
-                        className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
-                      >
-                        {isUploading && uploadDestinationField === 'banner' ? 'Uploading...' : 'Upload Image'}
-                      </label>
+                      <div className="flex items-center justify-between text-[8px] font-mono mt-1">
+                        <span className="text-zinc-500">Suggested: 1920x450 JPG</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id="cat-upload-banner" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleRealCategoryImageUpload(file, 'banner');
+                          }}
+                        />
+                        <label
+                          htmlFor="cat-upload-banner"
+                          className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
+                        >
+                          {isUploading && uploadDestinationField === 'banner' ? 'Uploading...' : 'Upload Image'}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Live Preview layer */}
+                    <div className="relative mt-2 rounded-xs border border-white/5 bg-zinc-950/60 overflow-hidden h-36 flex items-center justify-center group shrink-0">
+                      {formBannerImage ? (
+                        <SafeImage 
+                          src={formBannerImage} 
+                          alt="Desktop Banner Preview" 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          containerClassName="w-full h-full"
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-zinc-600">
+                          <ImageIcon className="w-5 h-5 mx-auto mb-1 opacity-40 text-gold-pure" />
+                          <p className="text-[8px] font-mono uppercase tracking-wider">No Banner Selected</p>
+                        </div>
+                      )}
+                      <div className="absolute top-1.5 left-1.5 bg-black/70 border border-white/10 px-1.5 py-0.5 rounded-xs pointer-events-none">
+                        <span className="text-[7px] font-mono uppercase tracking-wider text-gold-pure font-bold">Live Preview</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Mobile Banner */}
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">3. Mobile Page Banner</label>
-                    <input 
-                      type="text" 
-                      value={formMobileBannerImage}
-                      onChange={(e) => setFormMobileBannerImage(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
-                    />
-                    <div className="flex items-center justify-between text-[8px] font-mono">
-                      <span className="text-zinc-500">Suggested: 750x350 WEBP</span>
+                  <div className="space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">3. Mobile Page Banner</label>
                       <input 
-                        type="file" 
-                        accept="image/*" 
-                        id="cat-upload-mobile-banner" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleRealCategoryImageUpload(file, 'mobileBanner');
-                        }}
+                        type="text" 
+                        value={formMobileBannerImage}
+                        onChange={(e) => setFormMobileBannerImage(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
                       />
-                      <label
-                        htmlFor="cat-upload-mobile-banner"
-                        className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
-                      >
-                        {isUploading && uploadDestinationField === 'mobileBanner' ? 'Uploading...' : 'Upload Image'}
-                      </label>
+                      <div className="flex items-center justify-between text-[8px] font-mono mt-1">
+                        <span className="text-zinc-500">Suggested: 750x350 WEBP</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id="cat-upload-mobile-banner" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleRealCategoryImageUpload(file, 'mobileBanner');
+                          }}
+                        />
+                        <label
+                          htmlFor="cat-upload-mobile-banner"
+                          className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
+                        >
+                          {isUploading && uploadDestinationField === 'mobileBanner' ? 'Uploading...' : 'Upload Image'}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Live Preview layer */}
+                    <div className="relative mt-2 rounded-xs border border-white/5 bg-zinc-950/60 overflow-hidden h-36 flex items-center justify-center group shrink-0">
+                      {formMobileBannerImage ? (
+                        <SafeImage 
+                          src={formMobileBannerImage} 
+                          alt="Mobile Banner Preview" 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          containerClassName="w-full h-full"
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-zinc-600">
+                          <ImageIcon className="w-5 h-5 mx-auto mb-1 opacity-40 text-gold-pure" />
+                          <p className="text-[8px] font-mono uppercase tracking-wider">No Mobile Banner Selected</p>
+                        </div>
+                      )}
+                      <div className="absolute top-1.5 left-1.5 bg-black/70 border border-white/10 px-1.5 py-0.5 rounded-xs pointer-events-none">
+                        <span className="text-[7px] font-mono uppercase tracking-wider text-gold-pure font-bold">Live Preview</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Homepage Display Image */}
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">4. Homepage Accent Image</label>
-                    <input 
-                      type="text" 
-                      value={formHomepageImage}
-                      onChange={(e) => setFormHomepageImage(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
-                    />
-                    <div className="flex items-center justify-between text-[8px] font-mono">
-                      <span className="text-zinc-500">Suggested: 800x600 PNG</span>
+                  <div className="space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <label className="text-zinc-400 font-mono text-[8.5px] block uppercase">4. Homepage Accent Image</label>
                       <input 
-                        type="file" 
-                        accept="image/*" 
-                        id="cat-upload-homepage" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleRealCategoryImageUpload(file, 'homepageImage');
-                        }}
+                        type="text" 
+                        value={formHomepageImage}
+                        onChange={(e) => setFormHomepageImage(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
                       />
-                      <label
-                        htmlFor="cat-upload-homepage"
-                        className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
-                      >
-                        {isUploading && uploadDestinationField === 'homepageImage' ? 'Uploading...' : 'Upload Image'}
-                      </label>
+                      <div className="flex items-center justify-between text-[8px] font-mono mt-1">
+                        <span className="text-zinc-500">Suggested: 800x600 PNG</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id="cat-upload-homepage" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleRealCategoryImageUpload(file, 'homepageImage');
+                          }}
+                        />
+                        <label
+                          htmlFor="cat-upload-homepage"
+                          className="text-gold-pure hover:text-white cursor-pointer uppercase font-bold"
+                        >
+                          {isUploading && uploadDestinationField === 'homepageImage' ? 'Uploading...' : 'Upload Image'}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Live Preview layer */}
+                    <div className="relative mt-2 rounded-xs border border-white/5 bg-zinc-950/60 overflow-hidden h-36 flex items-center justify-center group shrink-0">
+                      {formHomepageImage ? (
+                        <SafeImage 
+                          src={formHomepageImage} 
+                          alt="Homepage Accent Preview" 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          containerClassName="w-full h-full"
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-zinc-600">
+                          <ImageIcon className="w-5 h-5 mx-auto mb-1 opacity-40 text-gold-pure" />
+                          <p className="text-[8px] font-mono uppercase tracking-wider">No Accent Image Selected</p>
+                        </div>
+                      )}
+                      <div className="absolute top-1.5 left-1.5 bg-black/70 border border-white/10 px-1.5 py-0.5 rounded-xs pointer-events-none">
+                        <span className="text-[7px] font-mono uppercase tracking-wider text-gold-pure font-bold">Live Preview</span>
+                      </div>
                     </div>
                   </div>
                 </div>

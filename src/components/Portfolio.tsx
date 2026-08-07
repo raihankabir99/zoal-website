@@ -37,8 +37,7 @@ export default function Portfolio() {
   }, [allProducts]);
 
   const filteredItems = useMemo(() => {
-    const rawFiltered = activeTheme === 'all' ? galleryItems : galleryItems.filter(i => normalizeCategory(i.theme) === normalizeCategory(activeTheme));
-    return rawFiltered.filter(item => item && item.img && typeof item.img === 'string' && item.img.trim() !== '');
+    return activeTheme === 'all' ? galleryItems : galleryItems.filter(i => normalizeCategory(i.theme) === normalizeCategory(activeTheme));
   }, [activeTheme, galleryItems]);
 
   const handleNext = () => {

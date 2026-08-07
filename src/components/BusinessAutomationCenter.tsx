@@ -570,8 +570,8 @@ export default function BusinessAutomationCenter({ orders, addLog, currentUser }
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-mono text-[9.5px]">
-                    {filteredLogs.map(log => (
-                      <tr key={log.id} className="hover:bg-white/1 duration-100 text-zinc-300">
+                    {filteredLogs.map((log, idx) => (
+                      <tr key={`${log.id}-${idx}`} className="hover:bg-white/1 duration-100 text-zinc-300">
                         <td className="p-3 font-semibold text-white">{log.action}</td>
                         <td className="p-3 text-zinc-400">{log.target}</td>
                         <td className="p-3 text-gold-pure">{log.channel}</td>

@@ -68,8 +68,7 @@ export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0ia
 
 function isValidCustomUrl(url?: string): boolean {
   if (!url) return false;
-  if (url.includes('market_grocery_official') || url.includes('thoves')) return false;
-  return url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:');
+  return url.startsWith('http') || url.startsWith('/') || url.startsWith('data:') || url.startsWith('blob:');
 }
 
 export function isValidUploadedImageUrl(url?: string): boolean {
@@ -79,11 +78,21 @@ export function isValidUploadedImageUrl(url?: string): boolean {
   
   // Exclude known hardcoded static fallbacks and placeholders
   if (trimmed === ABSOLUTE_PLACEHOLDER) return false;
-  if (trimmed.includes('/images/collections/')) return false;
+  if (trimmed.includes('/images/collections/') && !trimmed.endsWith('.jpeg') && !trimmed.endsWith('.png')) return false;
   if (trimmed.includes('/local/images/hero-placeholder.webp')) return false;
 
-  // Accept valid Supabase public URLs, blob URLs, data URLs, and any valid remote HTTP/HTTPS URLs
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+  // Accept valid Supabase public URLs, local assets, blob URLs, data URLs, and remote HTTP/HTTPS URLs
+  if (
+    trimmed.startsWith('http://') || 
+    trimmed.startsWith('https://') || 
+    trimmed.startsWith('/') || 
+    trimmed.startsWith('blob:') || 
+    trimmed.startsWith('data:') ||
+    trimmed.endsWith('.jpg') ||
+    trimmed.endsWith('.jpeg') ||
+    trimmed.endsWith('.png') ||
+    trimmed.endsWith('.webp')
+  ) {
     return true;
   }
   
@@ -91,34 +100,6 @@ export function isValidUploadedImageUrl(url?: string): boolean {
 }
 
 export function getLatestMarketUploadUrl(): string | null {
-  try {
-    const raw = localStorage.getItem('zoal_global_image_pool');
-    if (raw) {
-      const stored = JSON.parse(raw);
-      if (Array.isArray(stored)) {
-        // Find the most recently uploaded custom asset under 'market'
-        const marketCustom = stored.find(img => img.category === 'market' && img.source === 'store upload' && isValidCustomUrl(img.url));
-        if (marketCustom && marketCustom.url) {
-          return marketCustom.url;
-        }
-      }
-    }
-  } catch (e) {}
-
-  try {
-    const pRaw = localStorage.getItem('zoal_custom_products');
-    if (pRaw) {
-      const pStored = JSON.parse(pRaw);
-      if (Array.isArray(pStored)) {
-        // Find the most recently uploaded custom product under 'market'
-        const marketP = pStored.find(p => p.category === 'market' && p.images && isValidCustomUrl(p.images[0]));
-        if (marketP && marketP.images && marketP.images[0]) {
-          return marketP.images[0];
-        }
-      }
-    }
-  } catch (e) {}
-
   return null;
 }
 
@@ -151,6 +132,7 @@ export function getFallbackImage(src?: string, category?: BusinessCategory): str
     if (foundKey) return IMAGE_FALLBACKS[foundKey];
   }
 
+  // Strictly use static category fallback/placeholder, NEVER use getLatestMarketUploadUrl() or dynamic pool.
   const normalizedCat = normalizeCategory(category);
   return getCategoryFallback(normalizedCat);
 }
@@ -169,30 +151,44 @@ export function normalizeCategory(category?: string | null): BusinessCategory {
 export function normalizeProductImages<T extends Partial<Product>>(product: T): T {
   if (!product) return product;
 
-  const images = Array.isArray(product.images) ? product.images.filter((img): img is string => typeof img === 'string' && img.trim() !== '') : [];
-  const image_urls = Array.isArray(product.image_urls) ? product.image_urls.filter((url): url is string => typeof url === 'string' && url.trim() !== '') : [];
+  const images = Array.isArray(product.images) 
+    ? product.images.filter((img): img is string => typeof img === 'string' && img.trim() !== '') 
+    : [];
+  const image_urls = Array.isArray(product.image_urls) 
+    ? product.image_urls.filter((url): url is string => typeof url === 'string' && url.trim() !== '') 
+    : [];
   const image = typeof product.image === 'string' ? product.image.trim() : '';
   const image_url = typeof product.image_url === 'string' ? product.image_url.trim() : '';
 
-  let primaryList: string[] = [];
+  // Determine the single most authoritative image url for this product
+  let authoritativeUrl = '';
   if (images.length > 0) {
-    primaryList = images;
+    authoritativeUrl = images[0];
   } else if (image_urls.length > 0) {
-    primaryList = image_urls;
-  } else if (image) {
-    primaryList = [image];
+    authoritativeUrl = image_urls[0];
   } else if (image_url) {
-    primaryList = [image_url];
+    authoritativeUrl = image_url;
+  } else if (image) {
+    authoritativeUrl = image;
   }
 
-  const primarySingle = primaryList[0] || image || image_url || (images[0] || (image_urls[0] || ''));
+  if (authoritativeUrl) {
+    const finalImages = images.length > 0 ? images : [authoritativeUrl];
+    return {
+      ...product,
+      images: finalImages,
+      image_urls: finalImages,
+      image: authoritativeUrl,
+      image_url: authoritativeUrl
+    };
+  }
 
   return {
     ...product,
-    images: primaryList.length > 0 ? primaryList : (product.images || []),
-    image_urls: primaryList.length > 0 ? primaryList : (product.image_urls || []),
-    image: primarySingle || product.image || '',
-    image_url: primarySingle || product.image_url || ''
+    images: product.images || [],
+    image_urls: product.image_urls || [],
+    image: product.image || '',
+    image_url: product.image_url || ''
   };
 }
 
@@ -201,14 +197,8 @@ export function resolveProductImage(
   categoryOverride?: BusinessCategory
 ): string {
   if (!product) {
-    return getFallbackImage(undefined, categoryOverride);
-  }
-
-  // Development Assertion Guard for image pipeline hardening
-  if (process.env.NODE_ENV !== 'production') {
-    if (!product.images && !product.image_urls && !product.image && !product.image_url) {
-      console.warn(`[Image Pipeline Guard] Product missing image properties:`, product.id || product.name || 'unknown');
-    }
+    const category = categoryOverride ? normalizeCategory(categoryOverride) : 'coffee';
+    return getCategoryFallback(category);
   }
 
   const category = categoryOverride ? normalizeCategory(categoryOverride) : normalizeCategory(product.category);
@@ -243,15 +233,29 @@ export function resolveProductImage(
     }
   }
 
-  // Candidate raw check for legacy static asset paths before resorting to category fallback
+  // If we have a non-empty string that isn't a valid uploaded image URL (e.g., local fallback or mapping)
   const candidateRaw =
     (Array.isArray(product.images) && product.images[0]) ||
     (Array.isArray(product.image_urls) && product.image_urls[0]) ||
     product.image ||
     product.image_url;
 
-  // 5. category fallback & 6. placeholder
-  return getFallbackImage(candidateRaw, category);
+  if (candidateRaw && typeof candidateRaw === 'string') {
+    const trimmed = candidateRaw.trim();
+    if (trimmed !== '') {
+      if (trimmed.startsWith('/images/collections/') || IMAGE_FALLBACKS[trimmed]) {
+        return getFallbackImage(trimmed, category);
+      }
+      const normalized = trimmed.replace(/^(\.\.\/)*src\/assets\/images\//, '/src/assets/images/').replace(/^(\.\.\/)*assets\/images\//, '/src/assets/images/');
+      if (IMAGE_FALLBACKS[normalized]) {
+        return IMAGE_FALLBACKS[normalized];
+      }
+    }
+  }
+
+  // Strictly return static category fallback if product has no valid/specific image.
+  // NEVER return another product's image or any latest uploaded image globally.
+  return getCategoryFallback(category);
 }
 
 interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {

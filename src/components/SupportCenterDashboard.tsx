@@ -1153,8 +1153,8 @@ export default function SupportCenterDashboard({ currentUser, orders, addLog, on
             </h3>
             
             <div className="space-y-3 max-h-60 overflow-y-auto font-mono text-[9px]">
-              {auditLogs.map(log => (
-                <div key={log.id} className="p-3 bg-black/40 border border-white/5 rounded-xs flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-zinc-400 hover:border-gold-pure/20 duration-150">
+              {auditLogs.map((log, idx) => (
+                <div key={`${log.id}-${idx}`} className="p-3 bg-black/40 border border-white/5 rounded-xs flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-zinc-400 hover:border-gold-pure/20 duration-150">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="text-white font-bold">[{log.type.toUpperCase()}]</span>

@@ -6,6 +6,7 @@ import { Product, CartItem, Order } from './types';
 import { SEED_MOCK_ORDERS } from './data';
 import { BlogPost } from './types/blog';
 import { useTranslation } from 'react-i18next';
+import PremiumBrandedLoader from './components/common/PremiumBrandedLoader';
 
 // Static / High Priority Core Viewport Imports (for zero-shift, immediate initial paint)
 import Navbar from './components/Navbar';
@@ -90,11 +91,8 @@ const TrackOrder = lazyWithRetry(() => import('./components/TrackOrder'));
 const PaymentSimulation = lazyWithRetry(() => import('./components/PaymentSimulation'));
 
 // Premium, On-Brand Suspense Loader
-const PremiumLoader = ({ message }: { message?: string }) => (
-  <div className="flex flex-col items-center justify-center min-h-[50vh] py-20 space-y-4 animate-fade-in font-sans">
-    <div className="w-8 h-8 border-2 border-[#D4AF37]/20 border-t-[#D4AF37] rounded-full animate-spin"></div>
-    <span className="text-[9px] tracking-[0.45em] text-[#D4AF37]/85 uppercase font-mono animate-pulse">{message || 'AL ZOAL PREPARING YOUR EXPERIENCE...'}</span>
-  </div>
+const PremiumLoader = ({ message, fullScreen }: { message?: string; fullScreen?: boolean }) => (
+  <PremiumBrandedLoader message={message} fullScreen={fullScreen} />
 );
 
 export default function App() {

@@ -154,13 +154,22 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
         if (target === 'thumbnail') {
           setFormState((prev: any) => ({
             ...prev,
-            images: [publicUrl, ...(prev.images || []).filter((u: string) => u !== publicUrl)]
+            images: [publicUrl, ...(prev.images || []).filter((u: string) => u !== publicUrl)],
+            image_urls: [publicUrl, ...(prev.image_urls || prev.images || []).filter((u: string) => u !== publicUrl)],
+            image: publicUrl,
+            image_url: publicUrl
           }));
         } else if (target === 'gallery') {
-          setFormState((prev: any) => ({
-            ...prev,
-            images: [...(prev.images || []), publicUrl]
-          }));
+          setFormState((prev: any) => {
+            const nextImages = [...(prev.images || []), publicUrl];
+            return {
+              ...prev,
+              images: nextImages,
+              image_urls: nextImages,
+              image: prev.image || publicUrl,
+              image_url: prev.image_url || publicUrl
+            };
+          });
         } else if (target === '360') {
           setFormState((prev: any) => ({
             ...prev,

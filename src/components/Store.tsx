@@ -378,7 +378,24 @@ export default React.memo(function Store({
                 thobes: '/assets/categories/thobes.webp'
               };
               
-              const imgSrc = (cat as any).featuredImage || imgMap[cat.id] || imgMap.all;
+              let allCollectionsImg = '';
+              if (cat.id === 'all') {
+                try {
+                  const savedKey = localStorage.getItem('zoal_all_collections_image');
+                  if (savedKey) {
+                    allCollectionsImg = savedKey;
+                  } else {
+                    const gs = localStorage.getItem('zoal_admin_global_settings');
+                    if (gs) {
+                      const parsed = JSON.parse(gs);
+                      if (parsed && parsed.allCollectionsImage) {
+                        allCollectionsImg = parsed.allCollectionsImage;
+                      }
+                    }
+                  }
+                } catch (e) {}
+              }
+              const imgSrc = allCollectionsImg || (cat as any).featuredImage || imgMap[cat.id] || imgMap.all;
               const isActive = activeCategory === cat.id;
 
               return (

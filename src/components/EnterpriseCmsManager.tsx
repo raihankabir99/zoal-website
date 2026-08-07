@@ -2432,7 +2432,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                           >
                             {desktopUploadStatus === 'uploading' ? (
                               <>
-                                <span className="animate-spin text-gold-pure">⟳</span> Uploading...
+                                <RefreshCw className="w-3 h-3 animate-spin text-gold-pure" /> Uploading...
                               </>
                             ) : heroForm.hero_image_desktop ? (
                               'Replace Image'
@@ -2510,7 +2510,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                           >
                             {mobileUploadStatus === 'uploading' ? (
                               <>
-                                <span className="animate-spin text-gold-pure">⟳</span> Uploading...
+                                <RefreshCw className="w-3 h-3 animate-spin text-gold-pure" /> Uploading...
                               </>
                             ) : heroForm.hero_image_mobile ? (
                               'Replace Image'
@@ -3836,7 +3836,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                               >
                                 {editorialDesktopUploadStatus === 'uploading' ? (
                                   <>
-                                    <span className="animate-spin text-gold-pure">⟳</span> Uploading...
+                                    <RefreshCw className="w-3 h-3 animate-spin text-gold-pure" /> Uploading...
                                   </>
                                 ) : editorialForm.desktop_image ? (
                                   'Replace Image'
@@ -3916,7 +3916,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                               >
                                 {editorialMobileUploadStatus === 'uploading' ? (
                                   <>
-                                    <span className="animate-spin text-gold-pure">⟳</span> Uploading...
+                                    <RefreshCw className="w-3 h-3 animate-spin text-gold-pure" /> Uploading...
                                   </>
                                 ) : editorialForm.mobile_image ? (
                                   'Replace Image'
@@ -5807,8 +5807,8 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                 </div>
 
                 <div className="space-y-2 max-h-[350px] overflow-y-auto scrollbar-thin divide-y divide-white/5 pr-1">
-                  {activityLogs.map(log => (
-                    <div key={log.id} className="pt-2.5 first:pt-0 space-y-1 font-mono text-[8.5px]">
+                  {activityLogs.map((log, idx) => (
+                    <div key={`${log.id}-${idx}`} className="pt-2.5 first:pt-0 space-y-1 font-mono text-[8.5px]">
                       <div className="flex justify-between items-center text-[7.5px]">
                         <span className="text-zinc-500">{log.timestamp}</span>
                         <span className="text-gold-pure uppercase font-bold">{log.affectedContent}</span>

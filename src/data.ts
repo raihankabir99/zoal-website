@@ -132,7 +132,7 @@ export const PRODUCTS: Product[] = [
     category: 'bakery',
     deliveryType: 'LOCAL_ONLY',
     images: [
-      'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800'
+      'https://images.unsplash.com/photo-1601050690597-df056fb4ce78?auto=format&fit=crop&q=80&w=800'
     ],
     specifications: {
       'Knead': 'Ultra-thin hand-rolled layered dough',
@@ -156,7 +156,7 @@ export const PRODUCTS: Product[] = [
     category: 'market',
     deliveryType: 'NATIONWIDE',
     images: [
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'
+      'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800'
     ],
     specifications: {
       'Production': 'Handpicked & Sun-dried in traditional burlap',
@@ -180,7 +180,7 @@ export const PRODUCTS: Product[] = [
     category: 'market',
     deliveryType: 'NATIONWIDE',
     images: [
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'
+      'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&q=80&w=800'
     ],
     specifications: {
       'Acacia Species': 'Acacia Senegal (Hashab Grade A)',
@@ -253,7 +253,7 @@ export const PRODUCTS: Product[] = [
     category: 'thobes',
     deliveryType: 'NATIONWIDE',
     images: [
-      'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=800'
+      'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=800'
     ],
     specifications: {
       'Fabric': '100% Premium Breathable Cotton',
@@ -277,7 +277,7 @@ export const PRODUCTS: Product[] = [
     category: 'thobes',
     deliveryType: 'NATIONWIDE',
     images: [
-      'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=800'
+      'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&q=80&w=800'
     ],
     specifications: {
       'Fabric Blend': 'Cotton-Linen mix for effortless drape',

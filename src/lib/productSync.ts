@@ -125,7 +125,16 @@ export function resolveProductConflict(local: Product, remote: Product): Product
   // Default to Last-Write-Wins for base attributes, but merge dynamic arrays
   const merged: Product = { ...remote, ...local };
 
-  // 1. Merge Reviews list to avoid losing community feedback submitted concurrently
+  // 1. IMAGE SYNC HARDENING: If local has images, ensure they are authoritative 
+  // and do not get combined with stale remote image_urls/image/image_url fields.
+  const localHasImages = Array.isArray(local.images) && local.images.length > 0;
+  if (localHasImages) {
+    merged.image_urls = local.images;
+    merged.image = local.images[0] || '';
+    merged.image_url = local.images[0] || '';
+  }
+
+  // 2. Merge Reviews list to avoid losing community feedback submitted concurrently
   if (Array.isArray(local.reviews) || Array.isArray(remote.reviews)) {
     const localReviews = local.reviews || [];
     const remoteReviews = remote.reviews || [];
@@ -296,7 +305,9 @@ function mergeProductsConflictFree(serverProducts: Product[], localProducts: Pro
         const lpTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
         const spTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();
         
-        const localHasBetterImages = (lp.images && lp.images.length > 0 && (!sp.images || sp.images.length === 0));
+        const lpHasImages = (lp.images && lp.images.length > 0) || (lp.image_urls && lp.image_urls.length > 0);
+        const spHasImages = (sp.images && sp.images.length > 0) || (sp.image_urls && sp.image_urls.length > 0);
+        const localHasBetterImages = lpHasImages && !spHasImages;
         
         if (lpTime > spTime || localHasBetterImages) {
           mergedMap.set(lp.id, lp);
