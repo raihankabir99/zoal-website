@@ -12,29 +12,14 @@ import PremiumBrandedLoader from './components/common/PremiumBrandedLoader';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Scrolltelling from './components/Scrolltelling';
-import Store from './components/Store';
-import ProductDetail from './components/ProductDetail';
-import Cart from './components/Cart';
-import Contact from './components/Contact';
-import About from './components/About';
-import Branches from './components/Branches';
-import Blog from './components/Blog';
-import FAQ from './components/FAQ';
-import Portfolio from './components/Portfolio';
 import { SafeImage, useGlobalProducts, resolveProductImage } from './imageRegistry';
-import CookieConsent from './components/CookieConsent';
 import Footer from './components/Footer';
 import { formatCurrency } from './utils';
 import { supabaseClient } from './lib/supabaseClient';
-import CheckoutSuccessModal from './components/CheckoutSuccessModal';
-import LogoutModal from './components/LogoutModal';
 import GlobalNotificationRenderer from './components/GlobalNotificationRenderer';
 import { dispatchNotification } from './lib/notificationDispatcher';
-import AuthPage from './components/AuthPage';
 import SEO from './components/SEO';
-import SupabaseStoragePanel from './components/SupabaseStoragePanel';
 import { useNotificationEngine } from './lib/notificationStore';
-import EnterpriseNotificationCenter from './components/EnterpriseNotificationCenter';
 import EnterpriseNotificationToast from './components/EnterpriseNotificationToast';
 import { filterNotificationsByRole } from './rbac/notificationRbac';
 
@@ -76,6 +61,22 @@ const lazyWithRetry = (importFn: () => Promise<any>) => {
   });
 };
 
+const Store = lazyWithRetry(() => import('./components/Store'));
+const ProductDetail = lazyWithRetry(() => import('./components/ProductDetail'));
+const Cart = lazyWithRetry(() => import('./components/Cart'));
+const Contact = lazyWithRetry(() => import('./components/Contact'));
+const About = lazyWithRetry(() => import('./components/About'));
+const Branches = lazyWithRetry(() => import('./components/Branches'));
+const Blog = lazyWithRetry(() => import('./components/Blog'));
+const FAQ = lazyWithRetry(() => import('./components/FAQ'));
+const Portfolio = lazyWithRetry(() => import('./components/Portfolio'));
+const AuthPage = lazyWithRetry(() => import('./components/AuthPage'));
+const CookieConsent = lazyWithRetry(() => import('./components/CookieConsent'));
+const CheckoutSuccessModal = lazyWithRetry(() => import('./components/CheckoutSuccessModal'));
+const LogoutModal = lazyWithRetry(() => import('./components/LogoutModal'));
+const SupabaseStoragePanel = lazyWithRetry(() => import('./components/SupabaseStoragePanel'));
+const EnterpriseNotificationCenter = lazyWithRetry(() => import('./components/EnterpriseNotificationCenter'));
+
 const Checkout = lazyWithRetry(() => import('./components/Checkout'));
 const Dashboards = lazyWithRetry(() => import('./components/Dashboards'));
 const AdminDashboard = lazyWithRetry(() => import('./components/AdminDashboard'));
@@ -91,8 +92,8 @@ const TrackOrder = lazyWithRetry(() => import('./components/TrackOrder'));
 const PaymentSimulation = lazyWithRetry(() => import('./components/PaymentSimulation'));
 
 // Premium, On-Brand Suspense Loader
-const PremiumLoader = ({ message, fullScreen }: { message?: string; fullScreen?: boolean }) => (
-  <PremiumBrandedLoader message={message} fullScreen={fullScreen} />
+const PremiumLoader = ({ message, fullScreen, inline }: { message?: string; fullScreen?: boolean; inline?: boolean }) => (
+  <PremiumBrandedLoader message={message} fullScreen={fullScreen} inline={inline} />
 );
 
 export default function App() {
@@ -400,6 +401,96 @@ function AppContent() {
     }
   }, []);
 
+  // Track visited/loaded pages to prevent redundant prefetching
+  const loadedPagesRef = useRef<Set<string>>(new Set<string>());
+
+  useEffect(() => {
+    if (currentPage) {
+      loadedPagesRef.current.add(currentPage);
+    }
+    if (selectedProduct) {
+      loadedPagesRef.current.add('product');
+    }
+    if (authModalOpen) {
+      loadedPagesRef.current.add('auth');
+    }
+  }, [currentPage, selectedProduct, authModalOpen]);
+
+  // Selective background prefetch strategy for high-priority public routes during browser idle time
+  useEffect(() => {
+    // Guardrail: Detect slow or data-saving connections
+    const shouldPrefetch = () => {
+      if (typeof navigator === 'undefined') return false;
+      const conn = (navigator as any).connection;
+      if (conn) {
+        if (conn.saveData === true) return false;
+        const type = conn.effectiveType;
+        if (type === '2g' || type === 'slow-2g' || type === '3g') return false;
+      }
+      return true;
+    };
+
+    if (!shouldPrefetch()) return;
+
+    // High-priority targets, prefetched in order of priority:
+    // 1. Store, 2. Cart, 3. ProductDetail, 4. WishlistPage, 5. About, 6. Contact, 7. Branches, 8. FAQ, 9. Portfolio, 10. AuthPage
+    const targets = [
+      { key: 'store', importFn: () => import('./components/Store') },
+      { key: 'cart', importFn: () => import('./components/Cart') },
+      { key: 'product', importFn: () => import('./components/ProductDetail') },
+      { key: 'wishlist', importFn: () => import('./components/WishlistPage') },
+      { key: 'about', importFn: () => import('./components/About') },
+      { key: 'contact', importFn: () => import('./components/Contact') },
+      { key: 'branches', importFn: () => import('./components/Branches') },
+      { key: 'faq', importFn: () => import('./components/FAQ') },
+      { key: 'portfolio', importFn: () => import('./components/Portfolio') },
+      { key: 'auth', importFn: () => import('./components/AuthPage') },
+    ];
+
+    const prefetchedKeys = new Set<string>();
+
+    const runPrefetch = () => {
+      let delay = 0;
+      targets.forEach((target) => {
+        setTimeout(() => {
+          // Skip if the user has already visited/loaded the page during this session
+          if (loadedPagesRef.current.has(target.key)) {
+            return;
+          }
+          // Skip if we already started prefetching it
+          if (prefetchedKeys.has(target.key)) {
+            return;
+          }
+
+          prefetchedKeys.add(target.key);
+
+          // Trigger background dynamic import, which registers the chunk in browser/module cache
+          target.importFn().catch(() => {
+            // Silently ignore prefetch failures to maintain zero UX impact
+          });
+        }, delay);
+
+        delay += 800; // Stagger each request by 800ms to guarantee zero network competition
+      });
+    };
+
+    // Use requestIdleCallback if available, fallback to 2.5s setTimeout
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = (window as any).requestIdleCallback(() => {
+        // Stagger execution after the initial idle event
+        setTimeout(runPrefetch, 1000);
+      }, { timeout: 5000 });
+      return () => {
+        if ('cancelIdleCallback' in window) {
+          (window as any).cancelIdleCallback(idleId);
+        }
+      };
+    } else {
+      const timerId = setTimeout(runPrefetch, 2500);
+      return () => clearTimeout(timerId);
+    }
+  }, []);
+
   const handleSetCurrentPage = useCallback((page: string) => {
     setCurrentPage(page);
     setSelectedProduct(null);
@@ -704,6 +795,44 @@ function AppContent() {
     return () => window.removeEventListener('zoal-route-change', handleRouteChange);
   }, []);
 
+  // Protected route access control with redirection and auto-trigger login prompt
+  useEffect(() => {
+    if (!isAuthLoading) {
+      if (currentPage === 'dashboard' && !currentUser) {
+        setCurrentPage('home');
+        setAuthModalOpen(true);
+        dispatchNotification({
+          type: 'system',
+          variant: 'toast',
+          title: 'Authentication Required',
+          message: 'Please sign in to access your dashboard.'
+        });
+      } else if (currentPage === 'admin') {
+        const role = currentUser?.role?.toLowerCase();
+        const isAdmin = role && ['owner', 'admin', 'manager'].includes(role);
+        if (!isAdmin) {
+          setCurrentPage('home');
+          if (!currentUser) {
+            setAuthModalOpen(true);
+            dispatchNotification({
+              type: 'system',
+              variant: 'toast',
+              title: 'Authentication Required',
+              message: 'Please sign in to access the admin area.'
+            });
+          } else {
+            dispatchNotification({
+              type: 'system',
+              variant: 'toast',
+              title: 'Access Denied',
+              message: 'You do not have permission to access the admin panel.'
+            });
+          }
+        }
+      }
+    }
+  }, [isAuthLoading, currentPage, currentUser, setAuthModalOpen]);
+
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
 
@@ -882,7 +1011,9 @@ function AppContent() {
     firstThreeHighlights: popularHighlights.slice(0, 3).map(p => ({ id: p.id, name: p.name, isFeatured: p.isFeatured, popular: p.popular }))
   });
 
-  if (isAuthLoading) {
+  const isProtectedPage = currentPage === 'admin' || currentPage === 'dashboard';
+
+  if (isAuthLoading && isProtectedPage) {
     return (
       <div className="bg-zinc-950 text-white min-h-screen flex items-center justify-center font-sans">
         <PremiumLoader message={authStatusMessage} />
@@ -928,7 +1059,7 @@ function AppContent() {
       )}
 
       {/* RENDER ACTIVE SCREEN CONTROLLER */}
-      <Suspense fallback={<PremiumLoader />}>
+      <Suspense fallback={<PremiumLoader inline={true} />}>
         {selectedProduct ? (
         <ProductDetail
           product={selectedProduct}
@@ -1465,43 +1596,51 @@ function AppContent() {
       />
 
       {/* Luxury Success Modal & Auto-dismiss Stack */}
-      <CheckoutSuccessModal
-        isOpen={checkoutSuccessModalOpen}
-        onClose={handleCloseSuccessModal}
-        onContinueShopping={handleContinueShopping}
-        onViewOrders={handleViewOrders}
-        order={activeSuccessOrder}
-      />
+      <Suspense fallback={null}>
+        <CheckoutSuccessModal
+          isOpen={checkoutSuccessModalOpen}
+          onClose={handleCloseSuccessModal}
+          onContinueShopping={handleContinueShopping}
+          onViewOrders={handleViewOrders}
+          order={activeSuccessOrder}
+        />
+      </Suspense>
 
       {/* Premium Luxury Logout Modal (Refined Boutique Experience) */}
-      <LogoutModal
-        isOpen={logoutModalOpen}
-        status={logoutModalStatus}
-        onClose={() => setLogoutModalOpen(false)}
-        onConfirm={handleConfirmLogout}
-        onSuccessRedirect={handleLogoutSuccessRedirect}
-      />
+      <Suspense fallback={null}>
+        <LogoutModal
+          isOpen={logoutModalOpen}
+          status={logoutModalStatus}
+          onClose={() => setLogoutModalOpen(false)}
+          onConfirm={handleConfirmLogout}
+          onSuccessRedirect={handleLogoutSuccessRedirect}
+        />
+      </Suspense>
 
-      <EnterpriseNotificationCenter
-        isOpen={notificationCenterOpen && !!currentUser}
-        onClose={() => setNotificationCenterOpen(false)}
-        notifications={filteredNotifications}
-        unreadCount={userUnreadCount}
-        onMarkAsRead={notificationEngine.markAsRead}
-        onMarkAllAsRead={notificationEngine.markAllAsRead}
-        onArchive={notificationEngine.archiveNotification}
-        onDelete={notificationEngine.deleteNotification}
-        onClearAll={notificationEngine.clearAll}
-        auditReport={notificationEngine.auditReport}
-        soundEnabled={notificationEngine.soundEnabled}
-        setSoundEnabled={notificationEngine.setSoundEnabled}
-        isOnline={notificationEngine.isOnline}
-        connectionStatus={notificationEngine.connectionStatus}
-        currentUser={currentUser}
-        onNavigate={handleNotificationNavigate}
-      />
+      <Suspense fallback={null}>
+        <EnterpriseNotificationCenter
+          isOpen={notificationCenterOpen && !!currentUser}
+          onClose={() => setNotificationCenterOpen(false)}
+          notifications={filteredNotifications}
+          unreadCount={userUnreadCount}
+          onMarkAsRead={notificationEngine.markAsRead}
+          onMarkAllAsRead={notificationEngine.markAllAsRead}
+          onArchive={notificationEngine.archiveNotification}
+          onDelete={notificationEngine.deleteNotification}
+          onClearAll={notificationEngine.clearAll}
+          auditReport={notificationEngine.auditReport}
+          soundEnabled={notificationEngine.soundEnabled}
+          setSoundEnabled={notificationEngine.setSoundEnabled}
+          isOnline={notificationEngine.isOnline}
+          connectionStatus={notificationEngine.connectionStatus}
+          currentUser={currentUser}
+          onNavigate={handleNotificationNavigate}
+        />
+      </Suspense>
 
-      <CookieConsent />
+      <Suspense fallback={null}>
+        <CookieConsent />
+      </Suspense>
 
       {(currentUser as any)?.id === 'dev-preview' && (
         <div className="fixed bottom-6 left-6 z-[100] bg-zinc-950/95 border border-amber-500/30 p-4 rounded-md shadow-2xl backdrop-blur-md max-w-xs text-left text-xs font-sans pointer-events-auto">

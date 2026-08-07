@@ -286,21 +286,35 @@ export async function triggerRetryLoop() {
 
 function mergeProductsConflictFree(serverProducts: Product[], localProducts: Product[]): Product[] {
   const mergedMap = new Map<string, Product>();
+  const pendingQueue = getPendingQueue();
+  const pendingSaveIds = new Set(pendingQueue.filter(op => op.type === 'save').map(op => op.productId));
+  const pendingDeleteIds = new Set(pendingQueue.filter(op => op.type === 'delete').map(op => op.productId));
 
   // Initialize with server products
   for (const sp of serverProducts) {
     if (sp && sp.id) {
+      // If there is a pending delete for this product, do not include it
+      if (pendingDeleteIds.has(sp.id)) {
+        continue;
+      }
       mergedMap.set(sp.id, sp);
     }
   }
 
-  // Override with local products ONLY if the local product is newer or has newer image data
+  // Override with local products ONLY if the local product is newer or has newer image data, or is a legitimate unsynced product
   for (const lp of localProducts) {
     if (lp && lp.id) {
+      // If there is a pending delete for this product, do not include it
+      if (pendingDeleteIds.has(lp.id)) {
+        continue;
+      }
+
       const sp = mergedMap.get(lp.id);
       if (!sp) {
-        // If it doesn't exist on server (optimistic insert), keep local
-        mergedMap.set(lp.id, lp);
+        // Keep local product ONLY if it is a legitimate unsynced product (exists in the pending save queue)
+        if (pendingSaveIds.has(lp.id)) {
+          mergedMap.set(lp.id, lp);
+        }
       } else {
         const lpTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
         const spTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();

@@ -627,15 +627,15 @@ function isCachedInstantly(url: string): boolean {
 export function getCategoryFallback(category?: BusinessCategory): string {
   switch (category) {
     case 'coffee':
-      return 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=800';
+      return '/assets/categories/coffee.webp';
     case 'bakery':
-      return '/images/collections/bakery.jpeg';
+      return '/assets/categories/bakery.webp';
     case 'market':
-      return '/images/collections/market.jpeg';
+      return '/assets/categories/market.webp';
     case 'fashion':
-      return '/images/collections/premium.jpeg';
+      return '/assets/categories/fashion.webp';
     case 'thobes':
-      return '/images/collections/thobes.jpeg';
+      return '/assets/categories/thobes.webp';
     default:
       return ABSOLUTE_PLACEHOLDER;
   }

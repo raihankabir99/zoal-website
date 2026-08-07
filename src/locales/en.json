@@ -251,8 +251,8 @@
     "featured": "Featured",
     "price_low_to_high": "Price: Low to High",
     "price_high_to_low": "Price: High to Low",
-    "no_matching_curations": "No Matching Custom Curations",
-    "clear_filters_desc": "Please clear your custom filters or type alternative descriptors to matching our tailored inventory records.",
+    "no_matching_curations": "Nothing Matches Your Selection",
+    "clear_filters_desc": "We couldn’t find products that match your current preferences. Try refining your filters or exploring another collection.",
     "popular_choice": "POPULAR CHOICE",
     "select_premium_setup": "Select Premium Setup:"
   },

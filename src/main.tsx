@@ -5,8 +5,14 @@ import './index.css';
 import './i18n';
 import { initializeAnalytics } from './analytics';
 
-// Initialize all analytics integrations globally once
-initializeAnalytics();
+// Defer non-critical startup analytics to run in browser idle time to optimize initial FCP/LCP
+if (typeof window !== 'undefined') {
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(() => initializeAnalytics());
+  } else {
+    setTimeout(() => initializeAnalytics(), 1000);
+  }
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { 
-  Search, SlidersHorizontal, Heart, ShoppingBag, Eye, X 
+  Search, SlidersHorizontal, Heart, ShoppingBag, Eye, X, SearchX 
 } from 'lucide-react';
 import { Product, BusinessCategory } from '../types';
 import ScrollZoomImage from './ScrollZoomImage';
@@ -48,6 +48,33 @@ export default React.memo(function Store({
 
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const categories = useMemo(() => {
+    const imgMap: Record<string, string> = {
+      all: '/assets/categories/all.webp',
+      coffee: '/assets/categories/coffee.webp',
+      bakery: '/assets/categories/bakery.webp',
+      market: '/assets/categories/market.webp',
+      fashion: '/assets/categories/fashion.webp',
+      thobes: '/assets/categories/thobes.webp'
+    };
+
+    const isImgValid = (val: any): boolean => {
+      if (!val || typeof val !== 'string') return false;
+      const t = val.trim();
+      if (!t || t === 'null' || t === 'undefined' || t === 'none' || t === '[object Object]') return false;
+      if (t.startsWith('/images/collections/') || t.startsWith('/images/about/')) return false;
+      return true;
+    };
+
+    const getResolvedImage = (c: any, catId: string): string => {
+      const candidates = [c.featuredImage, c.bannerImage, c.image, c.imageUrl];
+      for (const val of candidates) {
+        if (isImgValid(val)) {
+          return val.trim();
+        }
+      }
+      return imgMap[catId] || imgMap.all;
+    };
+
     try {
       const raw = localStorage.getItem('zoal_admin_categories');
       if (raw) {
@@ -55,7 +82,7 @@ export default React.memo(function Store({
         const published = parsed.filter((c: any) => c.status === 'Published' || c.status === undefined);
         if (published.length > 0) {
           return [
-            { id: 'all', name: t('store.category.all'), featuredImage: undefined },
+            { id: 'all', name: t('store.category.all'), featuredImage: imgMap.all },
             ...published.map((c: any) => {
               const catId = c.slug || c.id;
               const key = `store.category.${catId}`;
@@ -66,8 +93,9 @@ export default React.memo(function Store({
               }
               return { 
                 id: catId, 
+                slug: c.slug,
                 name: localizedName,
-                featuredImage: c.featuredImage || c.bannerImage || c.image || c.imageUrl
+                featuredImage: getResolvedImage(c, catId)
               };
             })
           ];
@@ -75,12 +103,12 @@ export default React.memo(function Store({
       }
     } catch (e) {}
     return [
-      { id: 'all', name: t('store.category.all'), featuredImage: undefined },
-      { id: 'coffee', name: t('store.category.coffee'), featuredImage: undefined },
-      { id: 'bakery', name: t('store.category.bakery'), featuredImage: undefined },
-      { id: 'market', name: t('store.category.market'), featuredImage: undefined },
-      { id: 'fashion', name: t('store.category.fashion'), featuredImage: undefined },
-      { id: 'thobes', name: t('store.category.thobes'), featuredImage: undefined },
+      { id: 'all', name: t('store.category.all'), featuredImage: imgMap.all },
+      { id: 'coffee', name: t('store.category.coffee'), featuredImage: imgMap.coffee },
+      { id: 'bakery', name: t('store.category.bakery'), featuredImage: imgMap.bakery },
+      { id: 'market', name: t('store.category.market'), featuredImage: imgMap.market },
+      { id: 'fashion', name: t('store.category.fashion'), featuredImage: imgMap.fashion },
+      { id: 'thobes', name: t('store.category.thobes'), featuredImage: imgMap.thobes },
     ];
   }, [t, isAr, i18n]);
 
@@ -240,19 +268,19 @@ export default React.memo(function Store({
     if (!imgUrl) {
       switch (activeCategory) {
         case 'coffee':
-          imgUrl = 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=1200';
+          imgUrl = '/assets/categories/coffee.webp';
           break;
         case 'bakery':
-          imgUrl = '/images/collections/bakery.jpeg';
+          imgUrl = '/assets/categories/bakery.webp';
           break;
         case 'market':
-          imgUrl = '/images/collections/market.jpeg';
+          imgUrl = '/assets/categories/market.webp';
           break;
         case 'fashion':
-          imgUrl = '/images/collections/premium.jpeg';
+          imgUrl = '/assets/categories/fashion.webp';
           break;
         case 'thobes':
-          imgUrl = '/images/collections/thobes.jpeg';
+          imgUrl = '/assets/categories/thobes.webp';
           break;
       }
     }
@@ -395,7 +423,7 @@ export default React.memo(function Store({
                   }
                 } catch (e) {}
               }
-              const imgSrc = allCollectionsImg || (cat as any).featuredImage || imgMap[cat.id] || imgMap.all;
+              const imgSrc = allCollectionsImg || (cat as any).featuredImage || imgMap[(cat as any).slug || cat.id] || imgMap.all;
               const isActive = activeCategory === cat.id;
 
               return (
@@ -550,7 +578,7 @@ export default React.memo(function Store({
         {/* Dynamic products list grid */}
         {filteredProducts.length === 0 ? (
           <div className="text-center py-24 border border-dashed border-white/5 rounded-sm p-8 bg-zinc-950/20">
-            <SlidersHorizontal className="w-10 h-10 text-gold-pure/40 mx-auto mb-4 animate-bounce" />
+            <SearchX className="w-10 h-10 text-gold-pure/40 mx-auto mb-4 animate-pulse" />
             <span className="font-display text-sm tracking-widest uppercase text-white block mb-2">
               {t('store.no_matching_curations')}
             </span>

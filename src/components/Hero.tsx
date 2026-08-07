@@ -99,6 +99,21 @@ export default React.memo(function Hero({ setCurrentPage, setSelectedCategoryFil
     }
   });
 
+  const [loadAllSlides, setLoadAllSlides] = useState(false);
+
+  useEffect(() => {
+    // Defer rendering of secondary slides to guarantee zero network competition during initial paint
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        const id = window.requestIdleCallback(() => setLoadAllSlides(true));
+        return () => window.cancelIdleCallback(id);
+      } else {
+        const id = setTimeout(() => setLoadAllSlides(true), 1500);
+        return () => clearTimeout(id);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const handleSettingsUpdate = () => {
       try {
@@ -636,6 +651,7 @@ export default React.memo(function Hero({ setCurrentPage, setSelectedCategoryFil
       <div className="absolute inset-0 z-0">
         {slides.map((slide, index) => {
           const isCurrent = index === activeSlide;
+          if (!isCurrent && !loadAllSlides) return null;
           const speedSec = (carouselSettings.speed || 1000) / 1000;
           const effectClass = carouselSettings.effect === 'zoom'
             ? (isCurrent ? 'opacity-65 scale-100' : 'opacity-0 scale-105')
@@ -658,7 +674,7 @@ export default React.memo(function Hero({ setCurrentPage, setSelectedCategoryFil
                 alt={`${slide.tag} - ${slide.line1} ${slide.line2} ${slide.line3}`}
                 containerClassName="absolute inset-0 w-full h-full z-0"
                 className="w-full h-full object-cover select-none pointer-events-none"
-                priority={true}
+                priority={isCurrent}
               />
             </div>
           );

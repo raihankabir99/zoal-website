@@ -1,7 +1,5 @@
 // @ts-nocheck
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import {
   User, Shield, Landmark, BarChart3, Package, Truck, Compass, Languages,
   MapPin, CheckCircle, Users, RefreshCw, Star, ArrowUpRight, TrendingUp, Sparkles, Bell,
@@ -12,39 +10,61 @@ import {
   Layers, Video, MessageSquare, UploadCloud, Globe, LifeBuoy, HardDrive, Camera, Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, LineChart, Line } from 'recharts';
 import { Product, Order, BusinessCategory, Question, DeliveryType, ProductVariant, Review } from '../types';
 import { useGlobalProducts, updateProductInventory, SafeImage, resolveProductImage, normalizeCategory } from '../imageRegistry';
 import { saveProductToSupabase, deleteProductFromSupabase, triggerProductFetch } from '../lib/productSync';
 import { formatCurrency } from '../utils';
 import { BRANDING } from '../constants';
-import { PmsSubTabs } from './PmsSubTabs';
-import { EnterpriseProductImportCenter } from './EnterpriseProductImportCenter';
-import { CampaignsMarketingPanel } from './CampaignsMarketingPanel';
-import { CategoryManagement } from './CategoryManagement';
-import { BrandManagement } from './BrandManagement';
-import EnterpriseOrderManagement, { generatePrintableInvoiceHtml, generatePrintableReceiptHtml } from './EnterpriseOrderManagement';
-import { downloadHtmlAsPdf } from '../lib/pdf';
-import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
-import EnterpriseCrm from './EnterpriseCrm';
-import EnterpriseCmsManager from './EnterpriseCmsManager';
-import { EnterpriseBlogManager } from './EnterpriseBlogManager';
-import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
-import SupportCenterDashboard from './SupportCenterDashboard';
-import { ProductWorkspaceForm } from './ProductWorkspaceForm';
-import SupabaseStoragePanel from './SupabaseStoragePanel';
-import MerchantAssetsStudio from './MerchantAssetsStudio';
-import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
-import { WarehouseManagement } from './WarehouseManagement';
-import { EnterpriseAiWorkspace } from './EnterpriseAiWorkspace';
-import { EnterpriseAiReviewCenter } from './EnterpriseAiReviewCenter';
-import { EnterpriseRegionalAnalytics } from './EnterpriseRegionalAnalytics';
-import { EnterpriseKpiDashboard } from './EnterpriseKpiDashboard';
-import { EnterpriseForecastDashboard } from './EnterpriseForecastDashboard';
-import { EnterpriseAiExecutiveBriefing } from './EnterpriseAiExecutiveBriefing';
-import { EnterpriseDecisionSimulation } from './EnterpriseDecisionSimulation';
-import { EnterpriseGrowthAnalytics } from './EnterpriseGrowthAnalytics';
 
+const lazyWithRetry = (importFn: () => Promise<any>) => {
+  return React.lazy(() => {
+    return new Promise<any>((resolve) => {
+      let retriesLeft = 5;
+      const attempt = () => {
+        importFn()
+          .then(resolve)
+          .catch((error) => {
+            if (retriesLeft <= 0) {
+              console.error("Critical: Failed to load component.", error);
+              resolve({ default: () => <div className="p-8 text-zinc-500 text-xs">Failed to load section. Please refresh.</div> });
+              return;
+            }
+            retriesLeft--;
+            setTimeout(attempt, 1000);
+          });
+      };
+      attempt();
+    });
+  });
+};
+
+const PmsSubTabs = lazyWithRetry(() => import('./PmsSubTabs').then(m => ({ default: m.PmsSubTabs })));
+const EnterpriseProductImportCenter = lazyWithRetry(() => import('./EnterpriseProductImportCenter').then(m => ({ default: m.EnterpriseProductImportCenter })));
+const CampaignsMarketingPanel = lazyWithRetry(() => import('./CampaignsMarketingPanel').then(m => ({ default: m.CampaignsMarketingPanel })));
+const CategoryManagement = lazyWithRetry(() => import('./CategoryManagement').then(m => ({ default: m.CategoryManagement })));
+const BrandManagement = lazyWithRetry(() => import('./BrandManagement').then(m => ({ default: m.BrandManagement })));
+const EnterpriseOrderManagement = lazyWithRetry(() => import('./EnterpriseOrderManagement'));
+const EnterpriseInventoryManagement = lazyWithRetry(() => import('./EnterpriseInventoryManagement'));
+const EnterpriseCrm = lazyWithRetry(() => import('./EnterpriseCrm'));
+const EnterpriseCmsManager = lazyWithRetry(() => import('./EnterpriseCmsManager'));
+const EnterpriseBlogManager = lazyWithRetry(() => import('./EnterpriseBlogManager').then(m => ({ default: m.EnterpriseBlogManager })));
+const SupportCenterDashboard = lazyWithRetry(() => import('./SupportCenterDashboard'));
+const ProductWorkspaceForm = lazyWithRetry(() => import('./ProductWorkspaceForm').then(m => ({ default: m.ProductWorkspaceForm })));
+const SupabaseStoragePanel = lazyWithRetry(() => import('./SupabaseStoragePanel'));
+const MerchantAssetsStudio = lazyWithRetry(() => import('./MerchantAssetsStudio'));
+const WarehouseManagement = lazyWithRetry(() => import('./WarehouseManagement').then(m => ({ default: m.WarehouseManagement })));
+const EnterpriseAiWorkspace = lazyWithRetry(() => import('./EnterpriseAiWorkspace').then(m => ({ default: m.EnterpriseAiWorkspace })));
+const EnterpriseAiReviewCenter = lazyWithRetry(() => import('./EnterpriseAiReviewCenter').then(m => ({ default: m.EnterpriseAiReviewCenter })));
+const EnterpriseRegionalAnalytics = lazyWithRetry(() => import('./EnterpriseRegionalAnalytics').then(m => ({ default: m.EnterpriseRegionalAnalytics })));
+const EnterpriseKpiDashboard = lazyWithRetry(() => import('./EnterpriseKpiDashboard').then(m => ({ default: m.EnterpriseKpiDashboard })));
+const EnterpriseForecastDashboard = lazyWithRetry(() => import('./EnterpriseForecastDashboard').then(m => ({ default: m.EnterpriseForecastDashboard })));
+const EnterpriseAiExecutiveBriefing = lazyWithRetry(() => import('./EnterpriseAiExecutiveBriefing').then(m => ({ default: m.EnterpriseAiExecutiveBriefing })));
+const EnterpriseDecisionSimulation = lazyWithRetry(() => import('./EnterpriseDecisionSimulation').then(m => ({ default: m.EnterpriseDecisionSimulation })));
+const EnterpriseGrowthAnalytics = lazyWithRetry(() => import('./EnterpriseGrowthAnalytics').then(m => ({ default: m.EnterpriseGrowthAnalytics })));
+const AnalyticsOverview = lazyWithRetry(() => import('./dashboard/AnalyticsOverview'));
+
+import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
+import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 import { useBranding } from './BrandingContext';
 import { useNotificationEngine } from '../lib/notificationStore';
 import { ConfirmationModal } from './common/ConfirmationModal';
@@ -175,17 +195,34 @@ export default function AdminDashboard({
 
   // Local state for categories (loaded from localStorage or default)
   const [categories, setCategories] = useState<any[]>(() => {
+    let list: any[] = [];
     try {
       const raw = localStorage.getItem('zoal_admin_categories');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        list = JSON.parse(raw);
+      }
     } catch (e) {}
-    return [
-      { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3 },
-      { id: 'cat-2', name: 'Sudanese Bakery', slug: 'bakery', parent: null, description: 'Pillowy hearth-fired Hoboz breads, sesame crackers, and traditional Ghoriba cookies baked fresh daily.', sortOrder: 2, count: 3 },
-      { id: 'cat-3', name: 'Traditional Organic Market', slug: 'market', parent: null, description: 'Direct-trade organic Sudanese botanical herbs, premium Gum Arabic crystals, and whole Karkadeh hibiscus blossoms.', sortOrder: 3, count: 2 },
-      { id: 'cat-4', name: 'Premium Sudanese Toob', slug: 'fashion', parent: null, description: 'Hand-woven formal Toob gowns of fine organic drapes, silk threads, and geometric gold border embroidery.', sortOrder: 4, count: 1 },
-      { id: 'cat-5', name: 'Luxury Men\'s Thobes', slug: 'thobes', parent: null, description: 'Master tailored premium Sudanese and Gulf thobes structured from fine imported Italian cottons.', sortOrder: 5, count: 2 }
+
+    const defaults = [
+      { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3, featuredImage: '/assets/categories/coffee.webp' },
+      { id: 'cat-2', name: 'Sudanese Bakery', slug: 'bakery', parent: null, description: 'Pillowy hearth-fired Hoboz breads, sesame crackers, and traditional Ghoriba cookies baked fresh daily.', sortOrder: 2, count: 3, featuredImage: '/assets/categories/bakery.webp' },
+      { id: 'cat-3', name: 'Traditional Organic Market', slug: 'market', parent: null, description: 'Direct-trade organic Sudanese botanical herbs, premium Gum Arabic crystals, and whole Karkadeh hibiscus blossoms.', sortOrder: 3, count: 2, featuredImage: '/assets/categories/market.webp' },
+      { id: 'cat-4', name: 'Premium Sudanese Toob', slug: 'fashion', parent: null, description: 'Hand-woven formal Toob gowns of fine organic drapes, silk threads, and geometric gold border embroidery.', sortOrder: 4, count: 1, featuredImage: '/assets/categories/fashion.webp' },
+      { id: 'cat-5', name: 'Luxury Men\'s Thobes', slug: 'thobes', parent: null, description: 'Master tailored premium Sudanese and Gulf thobes structured from fine imported Italian cottons.', sortOrder: 5, count: 2, featuredImage: '/assets/categories/thobes.webp' }
     ];
+
+    if (list && list.length > 0) {
+      // Normalize existing categories only if they are missing image fields entirely
+      return list.map((c: any) => {
+        const slug = c.slug || c.id;
+        const defaultMatch = defaults.find(d => d.slug === slug);
+        if (defaultMatch && !c.featuredImage && !c.bannerImage && !c.image && !c.imageUrl) {
+          return { ...c, featuredImage: defaultMatch.featuredImage };
+        }
+        return c;
+      });
+    }
+    return defaults;
   });
 
   // Local state for brands
@@ -1428,71 +1465,83 @@ export default function AdminDashboard({
     return str;
   };
 
-  const handleExportCSV = () => {
-    const fields = [
-      'name', 'sku', 'barcode', 'brand', 'category', 'price', 'salePrice', 
-      'inventory', 'status', 'isFeatured', 'warehouseLocation', 'description', 'images',
-      'seoSlug', 'seoMetaTitle', 'seoMetaDesc', 'seoMetaKeywords', 'seoCanonicalUrl', 
-      'seoOpenGraphImage', 'seoSchemaProductData', 'seoRobots', 'seoTwitterCard', 'seoFocusKeyword',
-      'seoOgTitle', 'seoOgDesc', 'seoTwitterTitle', 'seoTwitterDesc', 'seoTwitterImage', 
-      'seoArabicSlug', 'seoEnglishSlug'
-    ];
-    
-    const csvData = allProducts.map(p => {
-      const row: any = {};
-      fields.forEach(f => {
-        if (f === 'images') {
-          const imgStr = Array.isArray(p.images) ? p.images.join(',') : (p.images || '');
-          row[f] = escapeCsvCell(imgStr);
-        } else {
-          row[f] = escapeCsvCell(p[f]);
-        }
+  const handleExportCSV = async () => {
+    try {
+      const Papa = (await import('papaparse')).default;
+      const fields = [
+        'name', 'sku', 'barcode', 'brand', 'category', 'price', 'salePrice', 
+        'inventory', 'status', 'isFeatured', 'warehouseLocation', 'description', 'images',
+        'seoSlug', 'seoMetaTitle', 'seoMetaDesc', 'seoMetaKeywords', 'seoCanonicalUrl', 
+        'seoOpenGraphImage', 'seoSchemaProductData', 'seoRobots', 'seoTwitterCard', 'seoFocusKeyword',
+        'seoOgTitle', 'seoOgDesc', 'seoTwitterTitle', 'seoTwitterDesc', 'seoTwitterImage', 
+        'seoArabicSlug', 'seoEnglishSlug'
+      ];
+      
+      const csvData = allProducts.map(p => {
+        const row: any = {};
+        fields.forEach(f => {
+          if (f === 'images') {
+            const imgStr = Array.isArray(p.images) ? p.images.join(',') : (p.images || '');
+            row[f] = escapeCsvCell(imgStr);
+          } else {
+            row[f] = escapeCsvCell(p[f]);
+          }
+        });
+        return row;
       });
-      return row;
-    });
 
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `products-${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setIsExportMenuOpen(false);
-    addLog('Exported all products as CSV');
+      const csv = Papa.unparse(csvData);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `products-${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setIsExportMenuOpen(false);
+      addLog('Exported all products as CSV');
+    } catch (err) {
+      console.error('Export CSV failed:', err);
+      alert('Failed to export CSV.');
+    }
   };
 
-  const handleExportExcel = () => {
-    const fields = [
-      'name', 'sku', 'barcode', 'brand', 'category', 'price', 'salePrice', 
-      'inventory', 'status', 'isFeatured', 'warehouseLocation', 'description', 'images',
-      'seoSlug', 'seoMetaTitle', 'seoMetaDesc', 'seoMetaKeywords', 'seoCanonicalUrl', 
-      'seoOpenGraphImage', 'seoSchemaProductData', 'seoRobots', 'seoTwitterCard', 'seoFocusKeyword',
-      'seoOgTitle', 'seoOgDesc', 'seoTwitterTitle', 'seoTwitterDesc', 'seoTwitterImage', 
-      'seoArabicSlug', 'seoEnglishSlug'
-    ];
-    
-    const excelData = allProducts.map(p => {
-      const row: any = {};
-      fields.forEach(f => {
-        if (f === 'images') {
-          row[f] = Array.isArray(p.images) ? p.images.join(',') : (p.images || '');
-        } else {
-          row[f] = p[f];
-        }
+  const handleExportExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const fields = [
+        'name', 'sku', 'barcode', 'brand', 'category', 'price', 'salePrice', 
+        'inventory', 'status', 'isFeatured', 'warehouseLocation', 'description', 'images',
+        'seoSlug', 'seoMetaTitle', 'seoMetaDesc', 'seoMetaKeywords', 'seoCanonicalUrl', 
+        'seoOpenGraphImage', 'seoSchemaProductData', 'seoRobots', 'seoTwitterCard', 'seoFocusKeyword',
+        'seoOgTitle', 'seoOgDesc', 'seoTwitterTitle', 'seoTwitterDesc', 'seoTwitterImage', 
+        'seoArabicSlug', 'seoEnglishSlug'
+      ];
+      
+      const excelData = allProducts.map(p => {
+        const row: any = {};
+        fields.forEach(f => {
+          if (f === 'images') {
+            row[f] = Array.isArray(p.images) ? p.images.join(',') : (p.images || '');
+          } else {
+            row[f] = p[f];
+          }
+        });
+        return row;
       });
-      return row;
-    });
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Products');
-    XLSX.writeFile(workbook, `products-${new Date().toISOString().split('T')[0]}.xlsx`);
-    setIsExportMenuOpen(false);
-    addLog('Exported all products as Excel');
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Products');
+      XLSX.writeFile(workbook, `products-${new Date().toISOString().split('T')[0]}.xlsx`);
+      setIsExportMenuOpen(false);
+      addLog('Exported all products as Excel');
+    } catch (err) {
+      console.error('Export Excel failed:', err);
+      alert('Failed to export Excel.');
+    }
   };
 
   const handleBulkExport = () => {
@@ -1587,7 +1636,7 @@ export default function AdminDashboard({
             return;
           }
 
-          worker.onmessage = (e) => {
+          worker.onmessage = async (e) => {
             URL.revokeObjectURL(workerUrl);
             excelWorkerRef.current = null;
             worker.terminate();
@@ -1602,6 +1651,7 @@ export default function AdminDashboard({
             } else if (e.data && e.data.fallback) {
               // Fallback to main thread if XLSX CDN is blocked or unavailable in Worker
               try {
+                const XLSX = await import('xlsx');
                 const wb = XLSX.read(buffer, { type: 'array' });
                 const wsname = wb.SheetNames[0];
                 const ws = wb.Sheets[wsname];
@@ -1853,6 +1903,7 @@ export default function AdminDashboard({
 
     try {
       if (fileExt === 'csv') {
+        const Papa = (await import('papaparse')).default;
         Papa.parse(file, {
           header: true,
           skipEmptyLines: true,
@@ -2831,268 +2882,142 @@ export default function AdminDashboard({
         >
           
           {/* I. TAB: DASHBOARD OVERVIEW */}
+          {/* I. TAB: DASHBOARD OVERVIEW */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-8 animate-fade-in">
-              {/* Header Title Section */}
-              <div className="flex flex-row items-center justify-between gap-3 border-b border-white/5 pb-4 w-full max-w-full overflow-hidden">
-                <div className="min-w-0 flex-1 overflow-hidden pr-2">
-                  <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-display block mb-1">ZOAL Sovereign Control</span>
-                  <h2 className="text-sm sm:text-xl lg:text-2xl font-bold tracking-tight sm:tracking-widest font-display uppercase text-white truncate leading-tight">
-                    {currentUser?.role === 'owner' ? 'OWNER' : currentUser?.role === 'admin' ? 'ADMINISTRATOR' : currentUser?.role === 'manager' ? 'MANAGER' : currentUser?.role === 'staff' ? 'STAFF' : 'ADMINISTRATOR'} DASHBOARD
-                  </h2>
-                </div>
-                {/* Sync & Refresh Actions */}
-                <div className="flex items-center shrink-0">
-                  <button 
-                    onClick={() => {
-                      addLog('Triggered Manual Supabase Re-Sync');
-                      alert('Supabase master records verified and up-to-date!');
-                    }}
-                    className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
-                  >
-                    <RefreshCw className="w-3 h-3 text-gold-pure" /> Refresh Data
-                  </button>
-                </div>
-              </div>
-
-              {/* 1. Analytics Widgets Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
-                  <div className="flex justify-between items-center text-zinc-500">
-                    <span className="text-[9px] tracking-widest uppercase font-mono">TOTAL REVENUE</span>
-                    <TrendingUp className="w-4 h-4 text-gold-pure" />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Analytical Intelligence...</div>}>
+              <div className="space-y-8 animate-fade-in">
+                {/* Header Title Section */}
+                <div className="flex flex-row items-center justify-between gap-3 border-b border-white/5 pb-4 w-full max-w-full overflow-hidden">
+                  <div className="min-w-0 flex-1 overflow-hidden pr-2">
+                    <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-display block mb-1">ZOAL Sovereign Control</span>
+                    <h2 className="text-sm sm:text-xl lg:text-2xl font-bold tracking-tight sm:tracking-widest font-display uppercase text-white truncate leading-tight">
+                      {currentUser?.role === 'owner' ? 'OWNER' : currentUser?.role === 'admin' ? 'ADMINISTRATOR' : currentUser?.role === 'manager' ? 'MANAGER' : currentUser?.role === 'staff' ? 'STAFF' : 'ADMINISTRATOR'} DASHBOARD
+                    </h2>
                   </div>
-                  <span className="text-2xl sm:text-3xl font-mono text-gold-pure font-bold block">
-                    {formatCurrency(metrics.totalRevenue)} SAR
-                  </span>
-                  <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5">
-                    <span>Monthly quota: {formatCurrency(metrics.monthlySales)} SAR</span>
-                    <span className="text-emerald-400 font-bold">+18.4%</span>
+                  {/* Sync & Refresh Actions */}
+                  <div className="flex items-center shrink-0">
+                    <button 
+                      onClick={() => {
+                        addLog('Triggered Manual Supabase Re-Sync');
+                        alert('Supabase master records verified and up-to-date!');
+                      }}
+                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      <RefreshCw className="w-3 h-3 text-gold-pure" /> Refresh Data
+                    </button>
                   </div>
                 </div>
 
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
-                  <div className="flex justify-between items-center text-zinc-500">
-                    <span className="text-[9px] tracking-widest uppercase font-mono">TOTAL ORDERS</span>
-                    <ClipboardList className="w-4 h-4 text-[#AA8C2C]" />
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">
-                    {metrics.totalOrders} Orders
-                  </span>
-                  <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5">
-                    <span>Active Pending: {metrics.pendingOrders}</span>
-                    <span className="text-amber-400 font-bold">Processing: {metrics.preparingOrders}</span>
-                  </div>
-                </div>
+                <AnalyticsOverview 
+                  metrics={metrics}
+                  revenueTrendData={revenueTrendData}
+                  categoryPerformanceData={categoryPerformanceData}
+                  formatCurrency={formatCurrency}
+                />
 
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
-                  <div className="flex justify-between items-center text-zinc-500">
-                    <span className="text-[9px] tracking-widest uppercase font-mono">TOTAL CUSTOMERS</span>
-                    <Users className="w-4 h-4 text-zinc-400" />
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">
-                    {metrics.totalCustomers} Accounts
-                  </span>
-                  <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5">
-                    <span>Active Staff: {metrics.totalStaff}</span>
-                    <span className="text-gold-pure font-bold">100% Verified</span>
-                  </div>
-                </div>
-
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
-                  <div className="flex justify-between items-center text-zinc-500">
-                    <span className="text-[9px] tracking-widest uppercase font-mono">TOTAL PRODUCTS</span>
-                    <Package className="w-4 h-4 text-zinc-400" />
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">
-                    {metrics.totalProductsCount} Catalog Items
-                  </span>
-                  <div className="flex justify-between text-[8.5px] font-mono pt-1 border-t border-white/5">
-                    <span className="text-zinc-500">Out of Stock: {metrics.outOfStockCount}</span>
-                    <span className={metrics.lowStockCount > 0 ? 'text-red-400 font-bold animate-pulse' : 'text-zinc-500'}>
-                      Low Stock Alert: {metrics.lowStockCount}
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* 2. Interactive Analytical Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                
-                {/* Chart 1: Revenue & Order yield area (columns 1 to 8) */}
-                <div className="lg:col-span-8 bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4 text-left">
-                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                    <h3 className="text-white text-[10px] font-display uppercase tracking-widest flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-gold-pure" /> Net Revenues Trend Analysis
-                    </h3>
-                    <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Live List Feed</span>
-                  </div>
-
-                  <div className="h-[250px] w-full text-xs font-mono">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={revenueTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorAdminRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.4} />
-                            <stop offset="95%" stopColor="#D4AF37" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="name" stroke="#222" tick={{ fill: '#666', fontSize: 10 }} />
-                        <YAxis stroke="#222" tick={{ fill: '#666', fontSize: 10 }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#090909', borderColor: '#222', color: '#fff' }} />
-                        <Area type="monotone" dataKey="sales" stroke="#D4AF37" strokeWidth={2} fillOpacity={1} fill="url(#colorAdminRev)" name="Revenues (SAR)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Chart 2: Category Pie share (columns 9 to 12) */}
-                <div className="lg:col-span-4 bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4 text-left">
-                  <h3 className="text-white text-[10px] font-display uppercase tracking-widest border-b border-white/5 pb-3">
-                    CATEGORIES BREAKDOWN
-                  </h3>
-
-                  <div className="h-[180px] w-full flex items-center justify-center relative">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryPerformanceData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={70}
-                          paddingAngle={3}
-                          dataKey="value"
+                {/* 3. Bottom Columns: Quick Action and Recent Widgets */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
+                  
+                  {/* Column A: Recent Orders List */}
+                  <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
+                    <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                      <h3 className="text-white text-[10px] font-display uppercase tracking-widest">Recent Orders</h3>
+                      <button onClick={() => setActiveTab('orders')} className="text-[8px] uppercase font-mono text-gold-pure hover:text-white">View All</button>
+                    </div>
+                    <div className="space-y-3.5">
+                      {orders.slice(0, 4).map(o => (
+                        <div 
+                          key={o.id} 
+                          onClick={() => { setSelectedOrder(o); setActiveTab('orders'); }}
+                          className="flex justify-between items-center p-2.5 bg-black/40 border border-white/5 hover:border-gold-pure/30 rounded-xs duration-300 cursor-pointer"
                         >
-                          {categoryPerformanceData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip contentStyle={{ backgroundColor: '#090909', borderColor: '#222' }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <p className="absolute text-[9px] uppercase font-display tracking-widest text-gold-pure font-bold">5 Categories</p>
-                  </div>
-
-                  {/* Legends */}
-                  <div className="space-y-2 text-[9px] font-mono">
-                    {categoryPerformanceData.map((entry, idx) => (
-                      <div key={idx} className="flex justify-between items-center">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                          <span className="text-zinc-500 font-sans">{entry.name}</span>
-                        </div>
-                        <span className="text-white font-bold">{entry.value} items</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* 3. Bottom Columns: Quick Action and Recent Widgets */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
-                
-                {/* Column A: Recent Orders List */}
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
-                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                    <h3 className="text-white text-[10px] font-display uppercase tracking-widest">Recent Orders</h3>
-                    <button onClick={() => setActiveTab('orders')} className="text-[8px] uppercase font-mono text-gold-pure hover:text-white">View All</button>
-                  </div>
-                  <div className="space-y-3.5">
-                    {orders.slice(0, 4).map(o => (
-                      <div 
-                        key={o.id} 
-                        onClick={() => { setSelectedOrder(o); setActiveTab('orders'); }}
-                        className="flex justify-between items-center p-2.5 bg-black/40 border border-white/5 hover:border-gold-pure/30 rounded-xs duration-300 cursor-pointer"
-                      >
-                        <div>
-                          <span className="text-[10px] font-mono text-white font-bold block">{o.id}</span>
-                          <span className="text-[8.5px] text-zinc-500 font-sans block">{o.customerName} • {o.items.length} items</span>
-                        </div>
-                        <div className="text-right space-y-1">
-                          <span className="text-[10px] font-mono text-gold-pure font-bold block">{formatCurrency(o.total)} SAR</span>
-                          <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[7px] uppercase font-mono ${
-                            o.status === 'Completed' ? 'bg-emerald-900/20 text-emerald-400' :
-                            o.status === 'Cancelled' ? 'bg-rose-900/20 text-rose-400' :
-                            'bg-amber-900/20 text-amber-400 animate-pulse'
-                          }`}>
-                            {o.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Column B: Recent Activity logs */}
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
-                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                    <h3 className="text-white text-[10px] font-display uppercase tracking-widest">System Activity Logs</h3>
-                    <button onClick={() => setActiveTab('logs')} className="text-[8px] uppercase font-mono text-zinc-500 hover:text-white">Audit</button>
-                  </div>
-                  <div className="space-y-3 font-mono text-[9px]">
-                    {systemLogs.slice(0, 5).map((log, idx) => (
-                      <div key={`${log.id}-${idx}`} className="p-2 bg-black/40 border border-white/5 rounded-xs flex items-start gap-2 text-zinc-400">
-                        <Activity className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
-                          <div className="flex justify-between text-[8px] text-zinc-500 w-full gap-2">
-                            <span>{log.user} • {log.ip}</span>
-                            <span>{log.time.split(',')[1]}</span>
+                          <div>
+                            <span className="text-[10px] font-mono text-white font-bold block">{o.id}</span>
+                            <span className="text-[8.5px] text-zinc-500 font-sans block">{o.customerName} • {o.items.length} items</span>
                           </div>
-                          <p className="text-white font-sans">{log.action}</p>
+                          <div className="text-right space-y-1">
+                            <span className="text-[10px] font-mono text-gold-pure font-bold block">{formatCurrency(o.total)} SAR</span>
+                            <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[7px] uppercase font-mono ${
+                              o.status === 'Completed' ? 'bg-emerald-900/20 text-emerald-400' :
+                              o.status === 'Cancelled' ? 'bg-rose-900/20 text-rose-400' :
+                              'bg-amber-900/20 text-amber-400 animate-pulse'
+                            }`}>
+                              {o.status}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Column C: Quick Action Panel */}
-                <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
-                  <div className="border-b border-white/5 pb-2">
-                    <h3 className="text-white text-[10px] font-display uppercase tracking-widest">QUICK ACTIONS</h3>
+                  {/* Column B: System Activity Logs */}
+                  <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
+                    <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                      <h3 className="text-white text-[10px] font-display uppercase tracking-widest">System Activity Logs</h3>
+                      <button onClick={() => setActiveTab('logs')} className="text-[8px] uppercase font-mono text-zinc-500 hover:text-white">Audit</button>
+                    </div>
+                    <div className="space-y-3 font-mono text-[9px]">
+                      {systemLogs.slice(0, 5).map((log, idx) => (
+                        <div key={`${log.id}-${idx}`} className="p-2 bg-black/40 border border-white/5 rounded-xs flex items-start gap-2 text-zinc-400">
+                          <Activity className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <div className="flex justify-between text-[8px] text-zinc-500 w-full gap-2">
+                              <span>{log.user} • {log.ip}</span>
+                              <span>{log.time.split(',')[1]}</span>
+                            </div>
+                            <p className="text-white font-sans">{log.action}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <button 
-                      onClick={() => { startCreateProduct(); setActiveTab('products'); }}
-                      className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
-                    >
-                      <Plus className="w-5 h-5 mx-auto text-gold-pure" />
-                      <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Add Product</span>
-                    </button>
-                    <button 
-                      onClick={() => handleAddCategory()}
-                      className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
-                    >
-                      <FolderTree className="w-5 h-5 mx-auto text-gold-pure" />
-                      <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Add Category</span>
-                    </button>
-                    <button 
-                      onClick={() => handleAddBrand()}
-                      className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
-                    >
-                      <Tag className="w-5 h-5 mx-auto text-gold-pure" />
-                      <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Add Brand</span>
-                    </button>
-                    <button 
-                      onClick={handleBulkExport}
-                      className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
-                    >
-                      <Download className="w-5 h-5 mx-auto text-zinc-400" />
-                      <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Bulk Export</span>
-                    </button>
-                  </div>
-                </div>
 
+                  {/* Column C: Quick Action Panel */}
+                  <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
+                    <div className="border-b border-white/5 pb-2">
+                      <h3 className="text-white text-[10px] font-display uppercase tracking-widest">QUICK ACTIONS</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <button 
+                        onClick={() => { startCreateProduct(); setActiveTab('products'); }}
+                        className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-5 h-5 mx-auto text-gold-pure" />
+                        <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Add Product</span>
+                      </button>
+                      <button 
+                        onClick={() => handleAddCategory()}
+                        className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
+                      >
+                        <FolderTree className="w-5 h-5 mx-auto text-gold-pure" />
+                        <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Add Category</span>
+                      </button>
+                      <button 
+                        onClick={() => handleAddBrand()}
+                        className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
+                      >
+                        <Tag className="w-5 h-5 mx-auto text-gold-pure" />
+                        <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Add Brand</span>
+                      </button>
+                      <button 
+                        onClick={handleBulkExport}
+                        className="p-4 bg-black border border-white/5 hover:border-gold-pure/40 rounded-xs text-center space-y-2 cursor-pointer transition-colors"
+                      >
+                        <Download className="w-5 h-5 mx-auto text-zinc-400" />
+                        <span className="text-[8.5px] uppercase tracking-widest font-bold text-white block">Bulk Export</span>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
               </div>
-            </div>
+            </React.Suspense>
           )}
 
           {/* II. TAB: PRODUCTS CATALOG (CRUD) */}
           {activeTab === 'products' && (
-            <div className="space-y-6 text-left animate-fade-in">
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Initializing Catalog Workbench...</div>}>
+              <div className="space-y-6 text-left animate-fade-in">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
                 <div>
                   <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">ZOAL STORE</span>
@@ -4252,53 +4177,90 @@ export default function AdminDashboard({
               />
             </div>
           )}
-        </div>
-      )}
+              </div>
+            </React.Suspense>
+          )}
 
           {/* III. TAB: CATEGORIES DIV (CRUD) */}
           {activeTab === 'categories' && (
-            <CategoryManagement 
-              categories={categories}
-              setCategories={setCategories}
-              allProducts={allProducts}
-              addLog={addLog}
-            />
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Initializing Taxonomy...</div>}>
+              <CategoryManagement 
+                categories={categories}
+                setCategories={setCategories}
+                allProducts={allProducts}
+                addLog={addLog}
+              />
+            </React.Suspense>
           )}
           
-          {activeTab === 'ai_center' && <EnterpriseAiWorkspace />}
-          {activeTab === 'ai_review_center' && (
-            <EnterpriseAiReviewCenter 
-              currentUser={{
-                name: currentUser?.email?.split('@')[0] || 'Admin',
-                role: currentUser?.role || 'admin'
-              }}
-              addLog={addLog}
-            />
+          {activeTab === 'ai_center' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Booting AI Core...</div>}>
+              <EnterpriseAiWorkspace />
+            </React.Suspense>
           )}
-          {activeTab === 'blog_cms' && <EnterpriseBlogManager />}
-          {activeTab === 'regional' && <EnterpriseRegionalAnalytics />}
-          {activeTab === 'kpi' && <EnterpriseKpiDashboard />}
-          {activeTab === 'forecast' && <EnterpriseForecastDashboard />}
-          {activeTab === 'briefing' && <EnterpriseAiExecutiveBriefing />}
-          {activeTab === 'decision' && <EnterpriseDecisionSimulation />}
+          {activeTab === 'ai_review_center' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Initializing Neural Review...</div>}>
+              <EnterpriseAiReviewCenter 
+                currentUser={{
+                  name: currentUser?.email?.split('@')[0] || 'Admin',
+                  role: currentUser?.role || 'admin'
+                }}
+                addLog={addLog}
+              />
+            </React.Suspense>
+          )}
+          {activeTab === 'blog_cms' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Editorial System...</div>}>
+              <EnterpriseBlogManager />
+            </React.Suspense>
+          )}
+          {activeTab === 'regional' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Mapping Regional Intelligence...</div>}>
+              <EnterpriseRegionalAnalytics />
+            </React.Suspense>
+          )}
+          {activeTab === 'kpi' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Calculating Global KPIs...</div>}>
+              <EnterpriseKpiDashboard />
+            </React.Suspense>
+          )}
+          {activeTab === 'forecast' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Processing Market Forecasts...</div>}>
+              <EnterpriseForecastDashboard />
+            </React.Suspense>
+          )}
+          {activeTab === 'briefing' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Synthesizing Executive Briefing...</div>}>
+              <EnterpriseAiExecutiveBriefing />
+            </React.Suspense>
+          )}
+          {activeTab === 'decision' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Simulation Engine...</div>}>
+              <EnterpriseDecisionSimulation />
+            </React.Suspense>
+          )}
 
           {/* IV. TAB: BRANDS */}
           {activeTab === 'brands' && (
-            <BrandManagement 
-              brands={brands}
-              setBrands={setBrands}
-              allProducts={allProducts}
-              addLog={addLog}
-            />
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Brand Identity...</div>}>
+              <BrandManagement 
+                brands={brands}
+                setBrands={setBrands}
+                allProducts={allProducts}
+                addLog={addLog}
+              />
+            </React.Suspense>
           )}
 
           {/* V. TAB: CUSTOMER ORDERS */}
           {activeTab === 'orders' && (
-            <EnterpriseOrderManagement
-              currentUser={currentUser}
-              orders={orders}
-              setOrders={setOrders}
-            />
+            <React.Suspense fallback={<div className="p-12 text-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Order Management...</div>}>
+              <EnterpriseOrderManagement
+                currentUser={currentUser}
+                orders={orders}
+                setOrders={setOrders}
+              />
+            </React.Suspense>
           )}
 
           {/* DEPRECATED ADMIN ORDER VIEW */}
@@ -4913,21 +4875,25 @@ export default function AdminDashboard({
 
           {/* VI. TAB: INVENTORY MATRIX */}
           {activeTab === 'inventory' && (
-            <EnterpriseInventoryManagement
-              currentUser={currentUser}
-              products={allProducts}
-              orders={orders}
-              setOrders={setOrders}
-            />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Inventory Systems...</div>}>
+              <EnterpriseInventoryManagement
+                currentUser={currentUser}
+                products={allProducts}
+                orders={orders}
+                setOrders={setOrders}
+              />
+            </React.Suspense>
           )}
 
           {/* VII. TAB: CUSTOMERS DIRECTORY */}
           {activeTab === 'customers' && (
-            <EnterpriseCrm
-              currentUser={currentUser}
-              orders={orders}
-              addLog={addLog}
-            />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Loading Customer Relations...</div>}>
+              <EnterpriseCrm
+                currentUser={currentUser}
+                orders={orders}
+                addLog={addLog}
+              />
+            </React.Suspense>
           )}
 
           {/* VIII. TAB: ARTISANAL STAFF MATRIX */}
@@ -5416,61 +5382,65 @@ export default function AdminDashboard({
 
           {/* IX. TAB: WEBSITE CMS MANAGE HOMEPAGE */}
           {activeTab === 'cms' && (
-            <EnterpriseCmsManager
-              currentUser={currentUser}
-              addLog={addLog}
-              onSave={(settings) => {
-                setCmsSettings((prev: any) => ({
-                  ...prev,
-                  heroHeading: settings.banners[0]?.title || prev.heroHeading,
-                  heroSubheading: settings.banners[0]?.description || prev.heroSubheading,
-                  heroImage: settings.banners[0]?.bgImage || prev.heroImage,
-                  aboutContent: settings.webPages.find((p: any) => p.key === 'about')?.content || prev.aboutContent,
-                  privacyPolicy: settings.webPages.find((p: any) => p.key === 'privacy')?.content || prev.privacyPolicy,
-                  shippingPolicy: settings.webPages.find((p: any) => p.key === 'shipping')?.content || prev.shippingPolicy,
-                  flashSaleText: settings.announcement.text || prev.flashSaleText,
-                  flashSalePercentage: settings.popup.couponCode ? 15 : prev.flashSalePercentage,
-                  flashSaleCountdown: settings.announcement.countdownEnd?.slice(0, 10) || prev.flashSaleCountdown,
-                  seoTitle: settings.webPages[0]?.seoTitle || prev.seoTitle,
-                  seoDesc: settings.webPages[0]?.seoDesc || prev.seoDesc,
-                  activeSections: {
-                    hero: settings.homepageSections.find((s: any) => s.id === 'hero')?.enabled ?? true,
-                    categories: settings.homepageSections.find((s: any) => s.id === 'featured_categories')?.enabled ?? true,
-                    about: settings.homepageSections.find((s: any) => s.id === 'coffee_heritage')?.enabled ?? true,
-                    coffee: settings.homepageSections.find((s: any) => s.id === 'coffee_heritage')?.enabled ?? true,
-                    grocery: settings.homepageSections.find((s: any) => s.id === 'grocery_market')?.enabled ?? true,
-                    fashion: settings.homepageSections.find((s: any) => s.id === 'featured_products')?.enabled ?? true,
-                    flashSale: settings.homepageSections.find((s: any) => s.id === 'flash_sale')?.enabled ?? true,
-                    testimonials: settings.homepageSections.find((s: any) => s.id === 'testimonials')?.enabled ?? true
-                  }
-                }));
-              }}
-            />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Initializing Sovereign CMS...</div>}>
+              <EnterpriseCmsManager
+                currentUser={currentUser}
+                addLog={addLog}
+                onSave={(settings) => {
+                  setCmsSettings((prev: any) => ({
+                    ...prev,
+                    heroHeading: settings.banners[0]?.title || prev.heroHeading,
+                    heroSubheading: settings.banners[0]?.description || prev.heroSubheading,
+                    heroImage: settings.banners[0]?.bgImage || prev.heroImage,
+                    aboutContent: settings.webPages.find((p: any) => p.key === 'about')?.content || prev.aboutContent,
+                    privacyPolicy: settings.webPages.find((p: any) => p.key === 'privacy')?.content || prev.privacyPolicy,
+                    shippingPolicy: settings.webPages.find((p: any) => p.key === 'shipping')?.content || prev.shippingPolicy,
+                    flashSaleText: settings.announcement.text || prev.flashSaleText,
+                    flashSalePercentage: settings.popup.couponCode ? 15 : prev.flashSalePercentage,
+                    flashSaleCountdown: settings.announcement.countdownEnd?.slice(0, 10) || prev.flashSaleCountdown,
+                    seoTitle: settings.webPages[0]?.seoTitle || prev.seoTitle,
+                    seoDesc: settings.webPages[0]?.seoDesc || prev.seoDesc,
+                    activeSections: {
+                      hero: settings.homepageSections.find((s: any) => s.id === 'hero')?.enabled ?? true,
+                      categories: settings.homepageSections.find((s: any) => s.id === 'featured_categories')?.enabled ?? true,
+                      about: settings.homepageSections.find((s: any) => s.id === 'coffee_heritage')?.enabled ?? true,
+                      coffee: settings.homepageSections.find((s: any) => s.id === 'coffee_heritage')?.enabled ?? true,
+                      grocery: settings.homepageSections.find((s: any) => s.id === 'grocery_market')?.enabled ?? true,
+                      fashion: settings.homepageSections.find((s: any) => s.id === 'featured_products')?.enabled ?? true,
+                      flashSale: settings.homepageSections.find((s: any) => s.id === 'flash_sale')?.enabled ?? true,
+                      testimonials: settings.homepageSections.find((s: any) => s.id === 'testimonials')?.enabled ?? true
+                    }
+                  }));
+                }}
+              />
+            </React.Suspense>
           )}
 
           {/* X. TAB: CAMPAIGNS & MARKETING */}
           {activeTab === 'marketing' && (
-            <CampaignsMarketingPanel
-              coupons={coupons}
-              setCoupons={setCoupons}
-              campaigns={campaigns}
-              setCampaigns={setCampaigns}
-              banners={banners}
-              setBanners={setBanners}
-              subscribers={subscribers}
-              setSubscribers={setSubscribers}
-              allProducts={allProducts}
-              saveProductFields={saveProductFields}
-              addLog={addLog}
-              isAddCampaignOpen={isAddCampaignOpen}
-              setIsAddCampaignOpen={setIsAddCampaignOpen}
-              isAddBannerOpen={isAddBannerOpen}
-              setIsAddBannerOpen={setIsAddBannerOpen}
-              marketingSubTab={marketingSubTab}
-              setMarketingSubTab={setMarketingSubTab}
-              mktProductSearch={mktProductSearch}
-              setMktProductSearch={setMktProductSearch}
-            />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Launching Marketing Engine...</div>}>
+              <CampaignsMarketingPanel
+                coupons={coupons}
+                setCoupons={setCoupons}
+                campaigns={campaigns}
+                setCampaigns={setCampaigns}
+                banners={banners}
+                setBanners={setBanners}
+                subscribers={subscribers}
+                setSubscribers={setSubscribers}
+                allProducts={allProducts}
+                saveProductFields={saveProductFields}
+                addLog={addLog}
+                isAddCampaignOpen={isAddCampaignOpen}
+                setIsAddCampaignOpen={setIsAddCampaignOpen}
+                isAddBannerOpen={isAddBannerOpen}
+                setIsAddBannerOpen={setIsAddBannerOpen}
+                marketingSubTab={marketingSubTab}
+                setMarketingSubTab={setMarketingSubTab}
+                mktProductSearch={mktProductSearch}
+                setMktProductSearch={setMktProductSearch}
+              />
+            </React.Suspense>
           )}
 
           {/* XI. TAB: REPORTS SECTOR */}
@@ -7027,60 +6997,66 @@ export default function AdminDashboard({
 
           {/* XVII. TAB: SUPPORT CENTER DASHBOARD */}
           {activeTab === 'support' && (
-            <SupportCenterDashboard
-              currentUser={currentUser!}
-              orders={orders}
-              addLog={addLog}
-              onBack={() => setActiveTab('dashboard')}
-            />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Initializing Support Infrastructure...</div>}>
+              <SupportCenterDashboard
+                currentUser={currentUser!}
+                orders={orders}
+                addLog={addLog}
+                onBack={() => setActiveTab('dashboard')}
+              />
+            </React.Suspense>
           )}
 
           {/* XVIII. TAB: SUPABASE ENTERPRISE STORAGE */}
           {activeTab === 'media' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">MEDIA MANAGEMENT</span>
-                  <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">MEDIA HUB</h2>
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Syncing Media Assets...</div>}>
+              <div className="space-y-6 text-left animate-fade-in font-sans">
+                <div className="border-b border-white/5 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">MEDIA MANAGEMENT</span>
+                    <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">MEDIA HUB</h2>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setMediaSubTab('library')}
+                      className={`py-1.5 px-3 rounded-xs border text-[9px] uppercase font-mono tracking-widest font-bold transition-all cursor-pointer ${
+                        mediaSubTab === 'library' 
+                          ? 'bg-gold-pure text-black border-gold-pure' 
+                          : 'bg-zinc-950 text-zinc-400 border-white/5 hover:text-white'
+                      }`}
+                    >
+                      All Media
+                    </button>
+                    <button
+                      onClick={() => setMediaSubTab('storage')}
+                      className={`py-1.5 px-3 rounded-xs border text-[9px] uppercase font-mono tracking-widest font-bold transition-all cursor-pointer ${
+                        mediaSubTab === 'storage' 
+                          ? 'bg-gold-pure text-black border-gold-pure' 
+                          : 'bg-zinc-950 text-zinc-400 border-white/5 hover:text-white'
+                      }`}
+                    >
+                      Cloud Drive
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setMediaSubTab('library')}
-                    className={`py-1.5 px-3 rounded-xs border text-[9px] uppercase font-mono tracking-widest font-bold transition-all cursor-pointer ${
-                      mediaSubTab === 'library' 
-                        ? 'bg-gold-pure text-black border-gold-pure' 
-                        : 'bg-zinc-950 text-zinc-400 border-white/5 hover:text-white'
-                    }`}
-                  >
-                    All Media
-                  </button>
-                  <button
-                    onClick={() => setMediaSubTab('storage')}
-                    className={`py-1.5 px-3 rounded-xs border text-[9px] uppercase font-mono tracking-widest font-bold transition-all cursor-pointer ${
-                      mediaSubTab === 'storage' 
-                        ? 'bg-gold-pure text-black border-gold-pure' 
-                        : 'bg-zinc-950 text-zinc-400 border-white/5 hover:text-white'
-                    }`}
-                  >
-                    Cloud Drive
-                  </button>
-                </div>
-              </div>
 
-              {mediaSubTab === 'library' ? (
-                <MerchantAssetsStudio />
-              ) : (
-                <SupabaseStoragePanel />
-              )}
-            </div>
+                {mediaSubTab === 'library' ? (
+                  <MerchantAssetsStudio />
+                ) : (
+                  <SupabaseStoragePanel />
+                )}
+              </div>
+            </React.Suspense>
           )}
 
           {/* XIX. UNIFIED ENTERPRISE & EXECUTIVE MODULES */}
           {activeTab === 'warehouses' && (
-            <WarehouseManagement 
-              allProducts={allProducts} 
-              addLog={addLog} 
-            />
+            <React.Suspense fallback={<div className="h-96 flex items-center justify-center text-zinc-500 uppercase tracking-widest text-[10px] animate-pulse">Optimizing Warehouse Logistics...</div>}>
+              <WarehouseManagement 
+                allProducts={allProducts} 
+                addLog={addLog} 
+              />
+            </React.Suspense>
           )}
 
           {activeTab === 'coupons' && (
