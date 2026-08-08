@@ -824,7 +824,12 @@ async function handleSessionSync(req: any, res: any) {
       token = headerValue.substring(7);
     }
 
-    if (token === 'dev-preview-token') {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      process.env.AI_STUDIO_DEV_MODE === 'true' &&
+      process.env.DEV_ADMIN_BYPASS === 'true' &&
+      token === 'dev-preview-token'
+    ) {
       return res.json({
         success: true,
         user: {
@@ -871,8 +876,10 @@ app.post('/api/auth/session', handleSessionSync);
 
 // Development Configuration & Bypass Verification
 app.get('/api/auth/dev-config', (req, res) => {
-  // Always enable Dev Mode for the AI Studio preview environment to provide an instant, fully functional admin/owner workspace out of the box.
-  const isDevMode = true;
+  const isDevMode =
+    process.env.NODE_ENV !== 'production' &&
+    process.env.AI_STUDIO_DEV_MODE === 'true' &&
+    process.env.DEV_ADMIN_BYPASS === 'true';
 
   if (isDevMode) {
     return res.json({

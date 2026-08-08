@@ -431,7 +431,10 @@ export async function authenticateRequest(req: any, res: Response, next: NextFun
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
   
-  if (headerValue === 'Bearer dev-preview-token') {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    headerValue === 'Bearer dev-preview-token'
+  ) {
     req.user = {
       id: 'dev-preview',
       email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
