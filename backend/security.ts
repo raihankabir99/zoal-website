@@ -127,19 +127,38 @@ export function csrfProtectionMiddleware(req: Request, res: Response, next: Next
 export function sanitizeValue(input: any, key?: string): any {
   if (typeof input === 'string') {
     // List of fields that should not have forward slashes encoded
-    const skipFields = new Set([
+    const skipSlashFields = new Set([
       'desktop_image', 'mobile_image', 'hero_image_desktop', 'hero_image_mobile',
       'image', 'image_url', 'thumbnail', 'thumbnail_url',
       'banner', 'banner_image', 'logo', 'logo_url',
-      'icon', 'avatar', 'og_image', 'canonical_url', 'url', 'src', 'background_image'
+      'icon', 'avatar', 'og_image', 'canonical_url', 'url', 'src', 'background_image',
+      'images', 'image_urls', 'images360', 'gallery', 'image_urls_arr'
     ]);
 
-    if (key) {
-    }
+    // Check if key is in skip list, OR if string value itself is a URL / image / asset path
+    const isUrlValue =
+      (key && skipSlashFields.has(key)) ||
+      input.startsWith('http://') ||
+      input.startsWith('https://') ||
+      input.startsWith('blob:') ||
+      input.startsWith('data:') ||
+      input.startsWith('/') ||
+      input.includes('supabase.co') ||
+      input.includes('storage/v1/object') ||
+      /&#x2F;/i.test(input);
 
-    // If this is a known URL field, we skip the HTML entity encoding
-    if (key && skipFields.has(key)) {
-      return input;
+    if (isUrlValue) {
+      // Unescape any previously corrupted slashes
+      let cleaned = input.replace(/&#x2F;/gi, '/');
+      // If the URL string contains dangerous script tags or HTML characters, sanitize them without altering slashes
+      if (/[<>"']/.test(cleaned)) {
+        cleaned = cleaned
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#x27;');
+      }
+      return cleaned;
     }
 
     // Transform characters used in HTML/JS injection attacks into safe HTML entities
@@ -155,7 +174,7 @@ export function sanitizeValue(input: any, key?: string): any {
   }
 
   if (Array.isArray(input)) {
-    return input.map(item => sanitizeValue(item));
+    return input.map(item => sanitizeValue(item, key));
   }
 
   if (typeof input === 'object' && input !== null) {

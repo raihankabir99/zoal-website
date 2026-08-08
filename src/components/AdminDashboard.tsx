@@ -204,24 +204,56 @@ export default function AdminDashboard({
     } catch (e) {}
 
     const defaults = [
-      { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3, featuredImage: '/assets/categories/coffee.webp' },
-      { id: 'cat-2', name: 'Sudanese Bakery', slug: 'bakery', parent: null, description: 'Pillowy hearth-fired Hoboz breads, sesame crackers, and traditional Ghoriba cookies baked fresh daily.', sortOrder: 2, count: 3, featuredImage: '/assets/categories/bakery.webp' },
-      { id: 'cat-3', name: 'Traditional Organic Market', slug: 'market', parent: null, description: 'Direct-trade organic Sudanese botanical herbs, premium Gum Arabic crystals, and whole Karkadeh hibiscus blossoms.', sortOrder: 3, count: 2, featuredImage: '/assets/categories/market.webp' },
-      { id: 'cat-4', name: 'Premium Sudanese Toob', slug: 'fashion', parent: null, description: 'Hand-woven formal Toob gowns of fine organic drapes, silk threads, and geometric gold border embroidery.', sortOrder: 4, count: 1, featuredImage: '/assets/categories/fashion.webp' },
-      { id: 'cat-5', name: 'Luxury Men\'s Thobes', slug: 'thobes', parent: null, description: 'Master tailored premium Sudanese and Gulf thobes structured from fine imported Italian cottons.', sortOrder: 5, count: 2, featuredImage: '/assets/categories/thobes.webp' }
+      { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png' },
+      { id: 'cat-2', name: 'Sudanese Bakery', slug: 'bakery', parent: null, description: 'Pillowy hearth-fired Hoboz breads, sesame crackers, and traditional Ghoriba cookies baked fresh daily.', sortOrder: 2, count: 3, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067395955_backery_snackes.jpeg' },
+      { id: 'cat-3', name: 'Traditional Organic Market', slug: 'market', parent: null, description: 'Direct-trade organic Sudanese botanical herbs, premium Gum Arabic crystals, and whole Karkadeh hibiscus blossoms.', sortOrder: 3, count: 2, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg' },
+      { id: 'cat-4', name: 'Premium Sudanese Toob', slug: 'fashion', parent: null, description: 'Hand-woven formal Toob gowns of fine organic drapes, silk threads, and geometric gold border embroidery.', sortOrder: 4, count: 1, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png' },
+      { id: 'cat-5', name: 'Luxury Men\'s Thobes', slug: 'thobes', parent: null, description: 'Master tailored premium Sudanese and Gulf thobes structured from fine imported Italian cottons.', sortOrder: 5, count: 2, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067315275_thoves.1.jpeg' }
     ];
 
+    try {
+      const existingAll = localStorage.getItem('zoal_all_collections_image');
+      if (!existingAll || existingAll.includes('/assets/') || existingAll.includes('/images/')) {
+        localStorage.setItem('zoal_all_collections_image', 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png');
+      }
+    } catch (e) {}
+
     if (list && list.length > 0) {
-      // Normalize existing categories only if they are missing image fields entirely
-      return list.map((c: any) => {
+      // Normalize existing categories to reconnect Supabase Storage URLs if missing or static asset fallback
+      const normalized = list.map((c: any) => {
         const slug = c.slug || c.id;
-        const defaultMatch = defaults.find(d => d.slug === slug);
-        if (defaultMatch && !c.featuredImage && !c.bannerImage && !c.image && !c.imageUrl) {
-          return { ...c, featuredImage: defaultMatch.featuredImage };
+        const defaultMatch = defaults.find(d => d.slug === slug || d.id === c.id);
+        if (defaultMatch) {
+          const hasValidImg = c.featuredImage && typeof c.featuredImage === 'string' && !c.featuredImage.includes('/assets/') && !c.featuredImage.includes('/images/');
+          const hasValidBanner = c.bannerImage && typeof c.bannerImage === 'string' && !c.bannerImage.includes('/assets/') && !c.bannerImage.includes('/images/');
+          
+          let resolvedImg = hasValidImg ? c.featuredImage : defaultMatch.featuredImage;
+          let resolvedBanner = hasValidBanner ? c.bannerImage : (defaultMatch.bannerImage || c.bannerImage || defaultMatch.featuredImage);
+
+          // Healing check: if images were consolidated/corrupted by previous bug, restore correct independent defaults
+          if (resolvedImg === resolvedBanner && defaultMatch.featuredImage !== defaultMatch.bannerImage) {
+            resolvedImg = defaultMatch.featuredImage;
+            resolvedBanner = defaultMatch.bannerImage;
+          }
+
+          return {
+            ...c,
+            featuredImage: resolvedImg,
+            bannerImage: resolvedBanner,
+            image: resolvedImg,
+            imageUrl: resolvedImg
+          };
         }
         return c;
       });
+      try {
+        localStorage.setItem('zoal_admin_categories', JSON.stringify(normalized));
+      } catch (e) {}
+      return normalized;
     }
+    try {
+      localStorage.setItem('zoal_admin_categories', JSON.stringify(defaults));
+    } catch (e) {}
     return defaults;
   });
 
@@ -787,10 +819,12 @@ export default function AdminDashboard({
         const fullProduct = { ...cachedProd, ...updatedFields };
         
         // Ensure image consistency if images are updated
-        if (Array.isArray(updatedFields.images)) {
+        if (Array.isArray(updatedFields.images) && (updatedFields.images.length > 0 || updatedFields.explicitImageDeletion === true)) {
           fullProduct.image_urls = updatedFields.images;
-          fullProduct.image = updatedFields.images[0] || '';
-          fullProduct.image_url = updatedFields.images[0] || '';
+          fullProduct.image = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image || ''));
+          fullProduct.image_url = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image_url || ''));
+          fullProduct.imageUrl = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.imageUrl || ''));
+          fullProduct.thumbnail = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.thumbnail || ''));
         }
 
         saveProductToSupabase(fullProduct);
@@ -803,10 +837,12 @@ export default function AdminDashboard({
       };
 
       // Ensure image consistency if images are updated
-      if (Array.isArray(updatedFields.images)) {
+      if (Array.isArray(updatedFields.images) && (updatedFields.images.length > 0 || updatedFields.explicitImageDeletion === true)) {
         fullProduct.image_urls = updatedFields.images;
-        fullProduct.image = updatedFields.images[0] || '';
-        fullProduct.image_url = updatedFields.images[0] || '';
+        fullProduct.image = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image || ''));
+        fullProduct.image_url = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image_url || ''));
+        fullProduct.imageUrl = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.imageUrl || ''));
+        fullProduct.thumbnail = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.thumbnail || ''));
       }
 
       saveProductToSupabase(fullProduct);
@@ -1099,12 +1135,40 @@ export default function AdminDashboard({
     setIsAddProductOpen(true);
   };
 
+  // Helper to extract all existing valid images from a product
+  const getExistingProductImages = (p: any): string[] => {
+    if (!p) return [];
+    const list: string[] = [];
+    if (Array.isArray(p.images)) {
+      for (const img of p.images) {
+        if (img && typeof img === 'string' && img.trim() && !list.includes(img.trim())) {
+          list.push(img.trim());
+        }
+      }
+    }
+    if (Array.isArray(p.image_urls)) {
+      for (const img of p.image_urls) {
+        if (img && typeof img === 'string' && img.trim() && !list.includes(img.trim())) {
+          list.push(img.trim());
+        }
+      }
+    }
+    const primaryCandidates = [p.image, p.image_url, p.imageUrl, p.thumbnail];
+    for (const c of primaryCandidates) {
+      if (c && typeof c === 'string' && c.trim() && !list.includes(c.trim())) {
+        list.push(c.trim());
+      }
+    }
+    return list;
+  };
+
   // Start Edit Product
   const startEditProduct = (p: any) => {
     setPmsSubTab('catalog');
     setEditingProduct(p);
     setIsEditing(true);
     setActiveFormTab('general');
+    const hydratedImages = getExistingProductImages(p);
     setFormState({
       name: p.name || '',
       nameEn: p.nameEn || p.name || '',
@@ -1145,7 +1209,7 @@ export default function AdminDashboard({
       visibility: p.visibility || 'Public',
       seoMetaTitle: p.seoMetaTitle || '',
       seoMetaDesc: p.seoMetaDesc || '',
-      images: p.images || [],
+      images: hydratedImages,
       // Loaded upgrades
       productType: p.productType || (p.category === 'coffee' ? 'Coffee' : p.category === 'bakery' ? 'Bakery' : p.category === 'market' ? 'Grocery' : p.category === 'fashion' || p.category === 'thobes' ? 'Fashion' : 'Coffee'),
       deliveryType: p.deliveryType || 'LOCAL_ONLY',
@@ -1255,6 +1319,31 @@ export default function AdminDashboard({
       const computedProfitMargin = parsedPrice > 0 ? ((parsedPrice - parsedCostPrice) / parsedPrice) * 100 : 0;
       const computedDiscountPercent = parsedSalePrice ? Math.round((1 - (parsedSalePrice / parsedPrice)) * 100) : 0;
 
+      // Extract existing product images for strict preservation
+      const existingProductImgList = isEditing && editingProduct ? getExistingProductImages(editingProduct) : [];
+      const formImgList = Array.isArray(formState.images)
+        ? formState.images.filter((img: any) => img && typeof img === 'string' && img.trim())
+        : [];
+
+      // Determine if media section was active and administrator explicitly deleted all images
+      const isImagesTab = activeFormTab === 'images' || (activeFormTab as string) === 'media';
+      const isExplicitDeletion = isEditing && editingProduct && isImagesTab && formImgList.length === 0 && existingProductImgList.length > 0;
+
+      let finalImages: string[] = [];
+      if (isEditing && editingProduct) {
+        if (isExplicitDeletion) {
+          finalImages = [];
+        } else if (formImgList.length > 0) {
+          finalImages = formImgList;
+        } else {
+          finalImages = existingProductImgList;
+        }
+      } else {
+        finalImages = formImgList;
+      }
+
+      const primaryImage = finalImages[0] || (isEditing && editingProduct && !isExplicitDeletion ? (editingProduct.image || editingProduct.image_url || editingProduct.imageUrl || editingProduct.thumbnail || '') : '');
+
       const updatedFields: Record<string, any> = {
         name: formState.name,
         nameEn: formState.nameEn || formState.name,
@@ -1276,10 +1365,13 @@ export default function AdminDashboard({
         maxStock: parseInt(formState.maxStock) || 500,
         warehouseLocation: formState.warehouseLocation || 'Al Hofuf Central',
         lowStockThreshold: parseInt(formState.lowStockThreshold) || 5,
-        images: formState.images.length > 0 ? formState.images : [],
-        image_urls: formState.images.length > 0 ? formState.images : [],
-        image: formState.images[0] || '',
-        image_url: formState.images[0] || '',
+        images: finalImages,
+        image_urls: finalImages,
+        image: primaryImage,
+        image_url: primaryImage,
+        imageUrl: primaryImage,
+        thumbnail: primaryImage,
+        explicitImageDeletion: isExplicitDeletion,
         updatedAt: new Date().toISOString().slice(0, 10),
         // Upgraded Architecture Columns
         productType: formState.productType,
@@ -6510,12 +6602,14 @@ export default function AdminDashboard({
                           <span className="text-[8px] text-gold-pure uppercase font-semibold">CMS Override Enabled</span>
                         </label>
                         <div className="flex items-center space-x-2 rtl:space-x-reverse">
-                          <img 
-                            src={globalSettings.businessLogo || BRANDING.LOGO} 
-                            alt="ZOAL Logo" 
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).src = BRANDING.LOGO; }}
-                            className="w-7 h-7 object-contain rounded-full bg-black ring-1 ring-gold-pure/20 shrink-0" 
-                          />
+                          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-black ring-1 ring-gold-pure/20 shrink-0">
+                            <img 
+                              src={globalSettings.businessLogo || BRANDING.LOGO} 
+                              alt="ZOAL Logo" 
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).src = BRANDING.LOGO; }}
+                              className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none shrink-0" 
+                            />
+                          </div>
                           <input 
                             type="text" 
                             id="settings-biz-logo"

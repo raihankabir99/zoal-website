@@ -62,6 +62,13 @@ interface BrandingContextType {
   refreshBranding: () => Promise<void>;
 }
 
+const getValidLogo = (logoPath: any): string => {
+  if (typeof logoPath === 'string' && logoPath.trim() !== '' && !logoPath.includes('logo.svg') && !logoPath.includes('zoal-logo.jpg') && !logoPath.includes('zoal-logo-4.jpg')) {
+    return logoPath;
+  }
+  return BRANDING.LOGO;
+};
+
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
 export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -71,9 +78,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const parsed = JSON.parse(saved);
         // Hybrid architecture: Static default with valid CMS override support
-        const validLogo = typeof parsed.businessLogo === 'string' && parsed.businessLogo.trim() !== '' 
-          ? parsed.businessLogo 
-          : BRANDING.LOGO;
+        const validLogo = getValidLogo(parsed.businessLogo);
         return { 
           ...DEFAULT_SETTINGS, 
           ...parsed, 
@@ -99,9 +104,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       const data = await res.json();
       setSettings((prev) => {
-        const validLogo = typeof data.businessLogo === 'string' && data.businessLogo.trim() !== '' 
-          ? data.businessLogo 
-          : BRANDING.LOGO;
+        const validLogo = getValidLogo(data.businessLogo);
         const next = { 
           ...DEFAULT_SETTINGS, 
           ...data,
@@ -128,9 +131,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       nextSettings = newSettingsOrFn;
     }
 
-    const validLogo = typeof nextSettings.businessLogo === 'string' && nextSettings.businessLogo.trim() !== '' 
-      ? nextSettings.businessLogo 
-      : BRANDING.LOGO;
+    const validLogo = getValidLogo(nextSettings.businessLogo);
 
     nextSettings = {
       ...nextSettings,

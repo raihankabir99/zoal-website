@@ -18,6 +18,26 @@ export default defineConfig(({ mode }) => {
       },
       dedupe: ['react', 'react-dom'],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          chunkFileNames: (chunkInfo) => {
+            let name = chunkInfo.name || '';
+            if (name.includes('Error')) {
+              name = name.replace(/Error/g, 'Err');
+            }
+            return `assets/${name}-[hash].js`;
+          },
+          assetFileNames: (assetInfo) => {
+            let name = assetInfo.name || '';
+            if (name.includes('Error')) {
+              name = name.replace(/Error/g, 'Err');
+            }
+            return `assets/${name}-[hash].[ext]`;
+          }
+        }
+      }
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.

@@ -66,14 +66,27 @@ export const IMAGE_FALLBACKS: Record<string, string> = {
 
 export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q0QUYzNyIgbGV0dGVyLXNwYWNpbmc9IjIiPlpPQUwgQVJUSVNBTkFMPC90ZXh0Pjwvc3ZnPg==';
 
+export function cleanUrlString(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let cleaned = raw.trim();
+  if (cleaned.includes('&#x2F;') || cleaned.includes('&#x2f;')) {
+    cleaned = cleaned.replace(/&#x2F;/gi, '/');
+  }
+  if (cleaned.includes('&amp;')) {
+    cleaned = cleaned.replace(/&amp;/gi, '&');
+  }
+  return cleaned;
+}
+
 function isValidCustomUrl(url?: string): boolean {
   if (!url) return false;
-  return url.startsWith('http') || url.startsWith('/') || url.startsWith('data:') || url.startsWith('blob:');
+  const cleaned = cleanUrlString(url);
+  return cleaned.startsWith('http') || cleaned.startsWith('/') || cleaned.startsWith('data:') || cleaned.startsWith('blob:');
 }
 
 export function isValidUploadedImageUrl(url?: string): boolean {
   if (!url || typeof url !== 'string') return false;
-  const trimmed = url.trim();
+  const trimmed = cleanUrlString(url);
   if (trimmed === '') return false;
   
   // Exclude known hardcoded static fallbacks and placeholders
@@ -104,29 +117,30 @@ export function getLatestMarketUploadUrl(): string | null {
 }
 
 export function getFallbackImage(src?: string, category?: BusinessCategory): string {
-  if (isValidUploadedImageUrl(src)) {
-    return src!;
+  const cleanedSrc = cleanUrlString(src);
+  if (isValidUploadedImageUrl(cleanedSrc)) {
+    return cleanedSrc;
   }
 
   // If it's a valid custom URL (Supabase, Blob, Data, or remote HTTP that isn't a legacy local path),
   // we trust it and return it immediately to avoid keyword-based hijacking.
-  if (src && isValidCustomUrl(src)) {
-    return src;
+  if (cleanedSrc && isValidCustomUrl(cleanedSrc)) {
+    return cleanedSrc;
   }
 
   // If src is an official local collection asset, return it directly
-  if (src && src.startsWith('/images/collections/')) {
-    return src;
+  if (cleanedSrc && cleanedSrc.startsWith('/images/collections/')) {
+    return cleanedSrc;
   }
 
-  if (src && IMAGE_FALLBACKS[src]) {
-    return IMAGE_FALLBACKS[src];
+  if (cleanedSrc && IMAGE_FALLBACKS[cleanedSrc]) {
+    return IMAGE_FALLBACKS[cleanedSrc];
   }
 
-  const normalized = src ? src.replace(/^(\.\.\/)*src\/assets\/images\//, '/src/assets/images/').replace(/^(\.\.\/)*assets\/images\//, '/src/assets/images/') : '';
+  const normalized = cleanedSrc ? cleanedSrc.replace(/^(\.\.\/)*src\/assets\/images\//, '/src/assets/images/').replace(/^(\.\.\/)*assets\/images\//, '/src/assets/images/') : '';
   if (IMAGE_FALLBACKS[normalized]) return IMAGE_FALLBACKS[normalized];
 
-  const filename = src?.split('/').pop()?.toLowerCase();
+  const filename = cleanedSrc?.split('/').pop()?.toLowerCase();
   if (filename) {
     const foundKey = Object.keys(IMAGE_FALLBACKS).find(k => k.toLowerCase().endsWith(filename));
     if (foundKey) return IMAGE_FALLBACKS[foundKey];
@@ -151,29 +165,43 @@ export function normalizeCategory(category?: string | null): BusinessCategory {
 export function normalizeProductImages<T extends Partial<Product>>(product: T): T {
   if (!product) return product;
 
-  const images = Array.isArray(product.images) 
+  const rawImages = Array.isArray(product.images) 
     ? product.images.filter((img): img is string => typeof img === 'string' && img.trim() !== '') 
     : [];
-  const image_urls = Array.isArray(product.image_urls) 
+  const rawImageUrls = Array.isArray(product.image_urls) 
     ? product.image_urls.filter((url): url is string => typeof url === 'string' && url.trim() !== '') 
     : [];
-  const image = typeof product.image === 'string' ? product.image.trim() : '';
-  const image_url = typeof product.image_url === 'string' ? product.image_url.trim() : '';
+  const rawImage = typeof product.image === 'string' ? product.image.trim() : '';
+  const rawImageUrl = typeof product.image_url === 'string' ? product.image_url.trim() : '';
+
+  const images = rawImages.map(cleanUrlString).filter(Boolean);
+  const image_urls = rawImageUrls.map(cleanUrlString).filter(Boolean);
+  const image = cleanUrlString(rawImage);
+  const image_url = cleanUrlString(rawImageUrl);
 
   // Determine the single most authoritative image url for this product
   let authoritativeUrl = '';
-  if (images.length > 0) {
-    authoritativeUrl = images[0];
-  } else if (image_urls.length > 0) {
-    authoritativeUrl = image_urls[0];
-  } else if (image_url) {
-    authoritativeUrl = image_url;
-  } else if (image) {
+  const validImage0 = images.find(img => isValidUploadedImageUrl(img));
+  const validImageUrl0 = image_urls.find(url => isValidUploadedImageUrl(url));
+
+  if (validImage0) {
+    authoritativeUrl = validImage0;
+  } else if (validImageUrl0) {
+    authoritativeUrl = validImageUrl0;
+  } else if (image && isValidUploadedImageUrl(image)) {
     authoritativeUrl = image;
+  } else if (image_url && isValidUploadedImageUrl(image_url)) {
+    authoritativeUrl = image_url;
+  } else {
+    authoritativeUrl = images[0] || image_urls[0] || image || image_url || '';
   }
 
   if (authoritativeUrl) {
     const finalImages = images.length > 0 ? images : [authoritativeUrl];
+    if (!isValidUploadedImageUrl(finalImages[0]) && isValidUploadedImageUrl(authoritativeUrl)) {
+      finalImages[0] = authoritativeUrl;
+    }
+
     return {
       ...product,
       images: finalImages,
@@ -185,10 +213,10 @@ export function normalizeProductImages<T extends Partial<Product>>(product: T): 
 
   return {
     ...product,
-    images: product.images || [],
-    image_urls: product.image_urls || [],
-    image: product.image || '',
-    image_url: product.image_url || ''
+    images: images.length > 0 ? images : (product.images || []),
+    image_urls: image_urls.length > 0 ? image_urls : (product.image_urls || []),
+    image: image || product.image || '',
+    image_url: image_url || product.image_url || ''
   };
 }
 
@@ -205,40 +233,42 @@ export function resolveProductImage(
 
   // 1. product.images[0]
   if (Array.isArray(product.images) && product.images.length > 0) {
-    const img0 = product.images[0];
-    if (typeof img0 === 'string' && img0.trim() !== '' && isValidUploadedImageUrl(img0)) {
-      return img0.trim();
+    const img0 = cleanUrlString(product.images[0]);
+    if (img0 && isValidUploadedImageUrl(img0)) {
+      return img0;
     }
   }
 
   // 2. product.image_urls[0]
   if (Array.isArray(product.image_urls) && product.image_urls.length > 0) {
-    const url0 = product.image_urls[0];
-    if (typeof url0 === 'string' && url0.trim() !== '' && isValidUploadedImageUrl(url0)) {
-      return url0.trim();
+    const url0 = cleanUrlString(product.image_urls[0]);
+    if (url0 && isValidUploadedImageUrl(url0)) {
+      return url0;
     }
   }
 
   // 3. product.image
-  if (product.image && typeof product.image === 'string' && product.image.trim() !== '') {
-    if (isValidUploadedImageUrl(product.image)) {
-      return product.image.trim();
+  if (product.image && typeof product.image === 'string') {
+    const singleImg = cleanUrlString(product.image);
+    if (singleImg && isValidUploadedImageUrl(singleImg)) {
+      return singleImg;
     }
   }
 
   // 4. product.image_url
-  if (product.image_url && typeof product.image_url === 'string' && product.image_url.trim() !== '') {
-    if (isValidUploadedImageUrl(product.image_url)) {
-      return product.image_url.trim();
+  if (product.image_url && typeof product.image_url === 'string') {
+    const singleUrl = cleanUrlString(product.image_url);
+    if (singleUrl && isValidUploadedImageUrl(singleUrl)) {
+      return singleUrl;
     }
   }
 
   // If we have a non-empty string that isn't a valid uploaded image URL (e.g., local fallback or mapping)
   const candidateRaw =
-    (Array.isArray(product.images) && product.images[0]) ||
-    (Array.isArray(product.image_urls) && product.image_urls[0]) ||
-    product.image ||
-    product.image_url;
+    (Array.isArray(product.images) && cleanUrlString(product.images[0])) ||
+    (Array.isArray(product.image_urls) && cleanUrlString(product.image_urls[0])) ||
+    cleanUrlString(product.image) ||
+    cleanUrlString(product.image_url);
 
   if (candidateRaw && typeof candidateRaw === 'string') {
     const trimmed = candidateRaw.trim();
@@ -250,6 +280,7 @@ export function resolveProductImage(
       if (IMAGE_FALLBACKS[normalized]) {
         return IMAGE_FALLBACKS[normalized];
       }
+      return getFallbackImage(trimmed, category);
     }
   }
 

@@ -93,15 +93,15 @@ export default React.memo(function Navbar({
             className="flex items-center cursor-pointer group text-start"
             aria-label={t('nav.home_aria', { defaultValue: 'Return to Home' })}
           >
-            <div className="w-9 h-9 sm:w-16 sm:h-16 rounded-full overflow-hidden shrink-0 flex items-center justify-center">
-              <div className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105 flex items-center justify-center">
+            <div className="w-9 h-9 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 shrink-0 flex items-center justify-center">
+              <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-black transition-transform duration-500 ease-out group-hover:scale-105">
                 <img
                   src={settings.businessLogo || BRANDING.LOGO}
                   alt={settings.businessName}
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).src = BRANDING.LOGO;
                   }}
-                  className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none"
+                  className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none shrink-0"
                 />
               </div>
             </div>

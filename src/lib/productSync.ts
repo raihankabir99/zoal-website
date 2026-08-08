@@ -125,13 +125,52 @@ export function resolveProductConflict(local: Product, remote: Product): Product
   // Default to Last-Write-Wins for base attributes, but merge dynamic arrays
   const merged: Product = { ...remote, ...local };
 
-  // 1. IMAGE SYNC HARDENING: If local has images, ensure they are authoritative 
-  // and do not get combined with stale remote image_urls/image/image_url fields.
-  const localHasImages = Array.isArray(local.images) && local.images.length > 0;
-  if (localHasImages) {
-    merged.image_urls = local.images;
-    merged.image = local.images[0] || '';
-    merged.image_url = local.images[0] || '';
+  // 1. IMAGE SYNC HARDENING: Check if local or remote has valid image data
+  const localImages = local.images || [];
+  const localHasImages = Array.isArray(localImages) && localImages.length > 0 && localImages.some(img => img && typeof img === 'string' && img.trim());
+  const localHasPrimaryImage = !!(local.image || local.image_url || (local as any).imageUrl || (local as any).thumbnail);
+  const localHasValidImageData = localHasImages || localHasPrimaryImage;
+
+  const remoteImages = remote.images || [];
+  const remoteHasImages = Array.isArray(remoteImages) && remoteImages.length > 0 && remoteImages.some(img => img && typeof img === 'string' && img.trim());
+  const remoteHasPrimaryImage = !!(remote.image || remote.image_url || (remote as any).imageUrl || (remote as any).thumbnail);
+  const remoteHasValidImageData = remoteHasImages || remoteHasPrimaryImage;
+
+  const isExplicitDeletion = (local as any).explicitImageDeletion === true;
+
+  if (isExplicitDeletion) {
+    // Administrator explicitly deleted all images
+    merged.images = [];
+    merged.image_urls = [];
+    merged.image = '';
+    merged.image_url = '';
+    (merged as any).imageUrl = '';
+    (merged as any).thumbnail = '';
+  } else if (!localHasValidImageData && remoteHasValidImageData) {
+    // Preserve remote's valid image fields completely (no image change during edit)
+    merged.images = remote.images || [];
+    merged.image_urls = remote.image_urls || remote.images || [];
+    merged.image = remote.image || '';
+    merged.image_url = remote.image_url || '';
+    (merged as any).imageUrl = (remote as any).imageUrl || '';
+    (merged as any).thumbnail = (remote as any).thumbnail || '';
+  } else if (localHasImages) {
+    // Local has authoritative new images
+    merged.images = local.images;
+    merged.image_urls = local.image_urls || local.images;
+    merged.image = local.images[0] || local.image || '';
+    merged.image_url = local.images[0] || local.image_url || '';
+    (merged as any).imageUrl = local.images[0] || (local as any).imageUrl || '';
+    (merged as any).thumbnail = local.images[0] || (local as any).thumbnail || '';
+  } else if (localHasPrimaryImage) {
+    // Local has valid primary image string even if images array is empty
+    const primaryStr = local.image || local.image_url || (local as any).imageUrl || (local as any).thumbnail || '';
+    merged.images = (local.images && local.images.length > 0) ? local.images : (remote.images && remote.images.length > 0 ? remote.images : [primaryStr]);
+    merged.image_urls = (local.image_urls && local.image_urls.length > 0) ? local.image_urls : (remote.image_urls && remote.image_urls.length > 0 ? remote.image_urls : merged.images);
+    merged.image = primaryStr;
+    merged.image_url = primaryStr;
+    (merged as any).imageUrl = primaryStr;
+    (merged as any).thumbnail = primaryStr;
   }
 
   // 2. Merge Reviews list to avoid losing community feedback submitted concurrently

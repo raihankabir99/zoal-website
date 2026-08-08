@@ -20,6 +20,7 @@ export interface Category {
   shortDescription?: string;
   featuredImage?: string;       // Card background or thumbnail
   bannerImage?: string;         // Banner image for category page
+  image?: string;               // Direct image field
   categoryIcon?: string;         // Lucide icon name
   parent: string | null;        // ID of parent category (null if root)
   sortOrder: number;            // Display priority index
@@ -45,6 +46,14 @@ export interface Category {
   imageUrl?: string;
   isFeatured?: boolean;
 }
+
+const isImgValid = (val: any): boolean => {
+  if (!val || typeof val !== 'string') return false;
+  const t = val.trim();
+  if (!t || t === 'null' || t === 'undefined' || t === 'none' || t === '[object Object]') return false;
+  if (t.startsWith('/images/collections/') || t.startsWith('/images/about/')) return false;
+  return true;
+};
 
 interface CategoryManagementProps {
   categories: any[];
@@ -1329,8 +1338,14 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       setFormParent(cat.parent || '');
       setFormSortOrder(cat.sortOrder || 1);
       setFormIcon(cat.categoryIcon || 'FolderTree');
-      setFormFeaturedImage(cat.featuredImage || '');
-      setFormBannerImage(cat.bannerImage || '');
+      
+      const existingThumbnail = isImgValid(cat.featuredImage) ? cat.featuredImage! : '';
+      const existingBanner = isImgValid(cat.bannerImage) ? cat.bannerImage! : '';
+      const existingImage = isImgValid(cat.image) ? cat.image! : '';
+      const existingImageUrl = isImgValid(cat.imageUrl) ? cat.imageUrl! : '';
+
+      setFormFeaturedImage(existingThumbnail || existingImage || existingImageUrl || '');
+      setFormBannerImage(existingBanner || '');
       setFormVisibility(cat.visibility || 'Visible');
       setFormStatus(cat.status || 'Published');
       setFormFeatured(cat.featuredToggle || false);
@@ -1443,6 +1458,39 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       const oldMobileBanner = editingCategory.mobileBannerImage || '';
       const oldHomepage = editingCategory.homepageImage || '';
 
+      const existingThumbnail = isImgValid(editingCategory.featuredImage) ? editingCategory.featuredImage! : '';
+      const existingBanner = isImgValid(editingCategory.bannerImage) ? editingCategory.bannerImage! : '';
+      const existingImage = isImgValid(editingCategory.image) ? editingCategory.image! : '';
+      const existingImageUrl = isImgValid(editingCategory.imageUrl) ? editingCategory.imageUrl! : '';
+      const initialThumbnailCombined = existingThumbnail || existingImage || existingImageUrl || '';
+
+      let finalFeaturedImage: string | undefined = editingCategory.featuredImage || undefined;
+      let finalImage: string | undefined = editingCategory.image || undefined;
+      let finalImageUrl: string | undefined = editingCategory.imageUrl || undefined;
+      let finalBannerImage: string | undefined = editingCategory.bannerImage || undefined;
+
+      // Handle featuredImage / thumbnail
+      if (formFeaturedImage.trim() !== initialThumbnailCombined) {
+        if (formFeaturedImage.trim() === '') {
+          finalFeaturedImage = undefined;
+          finalImage = undefined;
+          finalImageUrl = undefined;
+        } else if (isImgValid(formFeaturedImage)) {
+          finalFeaturedImage = formFeaturedImage.trim();
+          finalImage = formFeaturedImage.trim();
+          finalImageUrl = formFeaturedImage.trim();
+        }
+      }
+
+      // Handle bannerImage
+      if (formBannerImage.trim() !== existingBanner) {
+        if (formBannerImage.trim() === '') {
+          finalBannerImage = undefined;
+        } else if (isImgValid(formBannerImage)) {
+          finalBannerImage = formBannerImage.trim();
+        }
+      }
+
       // Edit mode save
       setCategories(prev => {
         const updated = prev.map(c => c.id === editingCategory.id ? {
@@ -1455,9 +1503,10 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
           parent: formParent === '' ? null : formParent,
           sortOrder: Number(formSortOrder),
           categoryIcon: formIcon,
-          featuredImage: formFeaturedImage || undefined,
-          imageUrl: formFeaturedImage || undefined, // fallback sync
-          bannerImage: formBannerImage || undefined,
+          featuredImage: finalFeaturedImage,
+          bannerImage: finalBannerImage,
+          image: finalImage,
+          imageUrl: finalImageUrl,
           visibility: formVisibility,
           status: formStatus,
           featuredToggle: formFeatured,
@@ -1548,6 +1597,9 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       }
     } else {
       // Create mode save
+      const finalFeaturedImage = isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined;
+      const finalBannerImage = isImgValid(formBannerImage) ? formBannerImage.trim() : undefined;
+
       const newCat: Category = {
         id: `cat-${Date.now()}`,
         name: formName,
@@ -1558,8 +1610,10 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         parent: formParent === '' ? null : formParent,
         sortOrder: Number(formSortOrder),
         categoryIcon: formIcon,
-        featuredImage: formFeaturedImage || undefined,
-        bannerImage: formBannerImage || undefined,
+        featuredImage: finalFeaturedImage,
+        bannerImage: finalBannerImage,
+        image: finalFeaturedImage,
+        imageUrl: finalFeaturedImage,
         visibility: formVisibility,
         status: formStatus,
         featuredToggle: formFeatured,

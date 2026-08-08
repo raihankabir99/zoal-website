@@ -158,7 +158,7 @@ export default function About() {
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).src = BRANDING.LOGO;
               }}
-              className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none"
+              className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none shrink-0"
             />
           </div>
           

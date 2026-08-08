@@ -59,15 +59,15 @@ export default function Footer({ setCurrentPage, setSelectedCategoryFilter }: Fo
               aria-label={t('nav.home', { defaultValue: 'Home' })}
               className="flex items-center cursor-pointer text-left group"
             >
-              <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 flex items-center justify-center">
-                <div className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105 flex items-center justify-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center">
+                <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-black transition-transform duration-500 ease-out group-hover:scale-105">
                   <img
                     src={settings.businessLogo || BRANDING.LOGO}
                     alt={settings.businessName}
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).src = BRANDING.LOGO;
                     }}
-                    className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none"
+                    className="w-[145%] h-[145%] max-w-[145%] object-cover select-none pointer-events-none shrink-0"
                   />
                 </div>
               </div>

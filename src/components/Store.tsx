@@ -17,6 +17,14 @@ interface StoreProps {
   initialCategoryFilter?: string;
 }
 
+const isImgValid = (val: any): boolean => {
+  if (!val || typeof val !== 'string') return false;
+  const t = val.trim();
+  if (!t || t === 'null' || t === 'undefined' || t === 'none' || t === '[object Object]') return false;
+  if (t.startsWith('/images/collections/') || t.startsWith('/images/about/')) return false;
+  return true;
+};
+
 export default React.memo(function Store({
   onProductSelect,
   onAddToCart,
@@ -57,24 +65,6 @@ export default React.memo(function Store({
       thobes: '/assets/categories/thobes.webp'
     };
 
-    const isImgValid = (val: any): boolean => {
-      if (!val || typeof val !== 'string') return false;
-      const t = val.trim();
-      if (!t || t === 'null' || t === 'undefined' || t === 'none' || t === '[object Object]') return false;
-      if (t.startsWith('/images/collections/') || t.startsWith('/images/about/')) return false;
-      return true;
-    };
-
-    const getResolvedImage = (c: any, catId: string): string => {
-      const candidates = [c.featuredImage, c.bannerImage, c.image, c.imageUrl];
-      for (const val of candidates) {
-        if (isImgValid(val)) {
-          return val.trim();
-        }
-      }
-      return imgMap[catId] || imgMap.all;
-    };
-
     try {
       const raw = localStorage.getItem('zoal_admin_categories');
       if (raw) {
@@ -95,7 +85,10 @@ export default React.memo(function Store({
                 id: catId, 
                 slug: c.slug,
                 name: localizedName,
-                featuredImage: getResolvedImage(c, catId)
+                featuredImage: c.featuredImage || '',
+                bannerImage: c.bannerImage || '',
+                image: c.image || '',
+                imageUrl: c.imageUrl || ''
               };
             })
           ];
@@ -247,42 +240,45 @@ export default React.memo(function Store({
   const categoryHeaderDetails = useMemo(() => {
     if (activeCategory === 'all') return null;
 
-    // Get live image for category, prioritizing custom uploader
-    const catImages = globalImages.filter((img) => img.category === activeCategory);
-    const customUpload = catImages.find((img) => img.source === 'store upload');
-    let imgUrl = customUpload ? customUpload.url : '';
+    const imgMap: Record<string, string> = {
+      all: '/assets/categories/all.webp',
+      coffee: '/assets/categories/coffee.webp',
+      bakery: '/assets/categories/bakery.webp',
+      market: '/assets/categories/market.webp',
+      fashion: '/assets/categories/fashion.webp',
+      thobes: '/assets/categories/thobes.webp'
+    };
 
-    if (!imgUrl) {
-      try {
-        const raw = localStorage.getItem('zoal_admin_categories');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const matched = parsed.find((c: any) => (c.slug || c.id) === activeCategory);
-          if (matched && (matched.bannerImage || matched.featuredImage || matched.image)) {
-            imgUrl = matched.bannerImage || matched.featuredImage || matched.image;
+    let imgUrl = '';
+
+    try {
+      const raw = localStorage.getItem('zoal_admin_categories');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const matched = parsed.find((c: any) => (c.slug || c.id) === activeCategory);
+        if (matched) {
+          const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
+          for (const val of candidates) {
+            if (isImgValid(val)) {
+              imgUrl = val.trim();
+              break;
+            }
           }
         }
-      } catch (e) {}
+      }
+    } catch (e) {}
+
+    // Fallback to customUpload from global images if still empty
+    if (!imgUrl) {
+      const catImages = globalImages.filter((img) => img.category === activeCategory);
+      const customUpload = catImages.find((img) => img.source === 'store upload');
+      if (customUpload && isImgValid(customUpload.url)) {
+        imgUrl = customUpload.url.trim();
+      }
     }
 
     if (!imgUrl) {
-      switch (activeCategory) {
-        case 'coffee':
-          imgUrl = '/assets/categories/coffee.webp';
-          break;
-        case 'bakery':
-          imgUrl = '/assets/categories/bakery.webp';
-          break;
-        case 'market':
-          imgUrl = '/assets/categories/market.webp';
-          break;
-        case 'fashion':
-          imgUrl = '/assets/categories/fashion.webp';
-          break;
-        case 'thobes':
-          imgUrl = '/assets/categories/thobes.webp';
-          break;
-      }
+      imgUrl = imgMap[activeCategory] || imgMap.all;
     }
 
     const detailsMap: Record<string, { title: string; subtitle: string; desc: string }> = {
@@ -423,7 +419,30 @@ export default React.memo(function Store({
                   }
                 } catch (e) {}
               }
-              const imgSrc = allCollectionsImg || (cat as any).featuredImage || imgMap[(cat as any).slug || cat.id] || imgMap.all;
+              let imgSrc = '';
+              if (cat.id === 'all') {
+                if (allCollectionsImg && isImgValid(allCollectionsImg)) {
+                  imgSrc = allCollectionsImg.trim();
+                } else {
+                  imgSrc = '/assets/categories/all.webp';
+                }
+              } else {
+                const candidates = [
+                  (cat as any).featuredImage,
+                  (cat as any).bannerImage,
+                  (cat as any).image,
+                  (cat as any).imageUrl
+                ];
+                for (const val of candidates) {
+                  if (isImgValid(val)) {
+                    imgSrc = val.trim();
+                    break;
+                  }
+                }
+                if (!imgSrc) {
+                  imgSrc = imgMap[(cat as any).slug || cat.id] || imgMap.all;
+                }
+              }
               const isActive = activeCategory === cat.id;
 
               return (
