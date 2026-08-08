@@ -11,6 +11,9 @@ function seedInitialNotifications(currentUser: any): EnterpriseNotification[] {
   const now = Date.now();
 
   if (role === 'customer') {
+    if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
+      return [];
+    }
     return [
       {
         id: `notif-cust-1-${userId}`,

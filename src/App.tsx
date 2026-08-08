@@ -202,7 +202,7 @@ function AppContent() {
         console.error('Failed to restore orders list:', e);
       }
     }
-    return SEED_MOCK_ORDERS;
+    return (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) ? [] : SEED_MOCK_ORDERS;
   });
 
   useEffect(() => {
@@ -536,6 +536,10 @@ function AppContent() {
     });
 
     function checkDevConfig() {
+      if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
+        proceedWithStandardNoSession();
+        return;
+      }
       fetch('/api/auth/dev-config')
         .then(res => {
           if (!res.ok) throw new Error('Not dev mode');
@@ -650,9 +654,19 @@ function AppContent() {
       console.error('Error signing out from Supabase:', err);
     }
     
-    // Clear client side session state
+    // Clear client side session state and user-specific persisted storage keys
     localStorage.removeItem('zoal_auth_token');
     sessionStorage.removeItem('zoal_auth_token');
+    localStorage.removeItem('zoal_cart');
+    localStorage.removeItem('zoal_wishlist');
+    localStorage.removeItem('zoal_orders');
+    localStorage.removeItem('zoal_notifications');
+    localStorage.removeItem('zoal_recent_orders');
+    localStorage.removeItem('zoal_addresses');
+
+    setCart([]);
+    setWishlist([]);
+    setOrders((process.env.NODE_ENV === 'production' || import.meta.env?.PROD) ? [] : SEED_MOCK_ORDERS);
     setCurrentUser(null);
 
     // Keep the luxury timing for the loader

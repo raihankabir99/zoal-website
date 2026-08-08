@@ -57,12 +57,12 @@ export default React.memo(function Store({
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const categories = useMemo(() => {
     const imgMap: Record<string, string> = {
-      all: '/assets/categories/all.webp',
-      coffee: '/assets/categories/coffee.webp',
-      bakery: '/assets/categories/bakery.webp',
-      market: '/assets/categories/market.webp',
-      fashion: '/assets/categories/fashion.webp',
-      thobes: '/assets/categories/thobes.webp'
+      all: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png',
+      coffee: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png',
+      bakery: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png',
+      market: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg',
+      fashion: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png',
+      thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png'
     };
 
     try {
@@ -81,11 +81,16 @@ export default React.memo(function Store({
               if (!localizedName) {
                 localizedName = isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name);
               }
+              const defaultImg = imgMap[catId] || imgMap.all;
+              const hasValidFeatured = c.featuredImage && isImgValid(c.featuredImage) && !c.featuredImage.includes('/assets/categories/');
+              const hasValidImage = c.image && isImgValid(c.image) && !c.image.includes('/assets/categories/');
+              const hasValidImageUrl = c.imageUrl && isImgValid(c.imageUrl) && !c.imageUrl.includes('/assets/categories/');
+
               return { 
                 id: catId, 
                 slug: c.slug,
                 name: localizedName,
-                featuredImage: c.featuredImage || '',
+                featuredImage: hasValidFeatured ? c.featuredImage : (hasValidImage ? c.image : (hasValidImageUrl ? c.imageUrl : defaultImg)),
                 bannerImage: c.bannerImage || '',
                 image: c.image || '',
                 imageUrl: c.imageUrl || ''
@@ -241,12 +246,12 @@ export default React.memo(function Store({
     if (activeCategory === 'all') return null;
 
     const imgMap: Record<string, string> = {
-      all: '/assets/categories/all.webp',
-      coffee: '/assets/categories/coffee.webp',
-      bakery: '/assets/categories/bakery.webp',
-      market: '/assets/categories/market.webp',
-      fashion: '/assets/categories/fashion.webp',
-      thobes: '/assets/categories/thobes.webp'
+      all: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png',
+      coffee: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png',
+      bakery: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067395955_backery_snackes.jpeg',
+      market: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg',
+      fashion: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png',
+      thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067315275_thoves.1.jpeg'
     };
 
     let imgUrl = '';
@@ -259,7 +264,7 @@ export default React.memo(function Store({
         if (matched) {
           const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
           for (const val of candidates) {
-            if (isImgValid(val)) {
+            if (isImgValid(val) && !val.includes('/assets/categories/')) {
               imgUrl = val.trim();
               break;
             }
@@ -272,7 +277,7 @@ export default React.memo(function Store({
     if (!imgUrl) {
       const catImages = globalImages.filter((img) => img.category === activeCategory);
       const customUpload = catImages.find((img) => img.source === 'store upload');
-      if (customUpload && isImgValid(customUpload.url)) {
+      if (customUpload && isImgValid(customUpload.url) && !customUpload.url.includes('/assets/categories/')) {
         imgUrl = customUpload.url.trim();
       }
     }
@@ -394,25 +399,25 @@ export default React.memo(function Store({
           <div className="flex flex-nowrap md:grid md:grid-cols-6 gap-1.5 md:gap-2.5 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 category-scroll-indicator snap-x snap-mandatory touch-pan-x pt-0 md:pt-1">
             {categories.map((cat, index) => {
               const imgMap: Record<string, string> = {
-                all: '/assets/categories/all.webp',
-                coffee: '/assets/categories/coffee.webp',
-                bakery: '/assets/categories/bakery.webp',
-                market: '/assets/categories/market.webp',
-                fashion: '/assets/categories/fashion.webp',
-                thobes: '/assets/categories/thobes.webp'
+                all: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png',
+                coffee: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png',
+                bakery: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png',
+                market: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg',
+                fashion: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png',
+                thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png'
               };
               
               let allCollectionsImg = '';
               if (cat.id === 'all') {
                 try {
                   const savedKey = localStorage.getItem('zoal_all_collections_image');
-                  if (savedKey) {
+                  if (savedKey && isImgValid(savedKey) && !savedKey.includes('/assets/categories/')) {
                     allCollectionsImg = savedKey;
                   } else {
                     const gs = localStorage.getItem('zoal_admin_global_settings');
                     if (gs) {
                       const parsed = JSON.parse(gs);
-                      if (parsed && parsed.allCollectionsImage) {
+                      if (parsed && parsed.allCollectionsImage && isImgValid(parsed.allCollectionsImage) && !parsed.allCollectionsImage.includes('/assets/categories/')) {
                         allCollectionsImg = parsed.allCollectionsImage;
                       }
                     }
@@ -421,10 +426,10 @@ export default React.memo(function Store({
               }
               let imgSrc = '';
               if (cat.id === 'all') {
-                if (allCollectionsImg && isImgValid(allCollectionsImg)) {
+                if (allCollectionsImg) {
                   imgSrc = allCollectionsImg.trim();
                 } else {
-                  imgSrc = '/assets/categories/all.webp';
+                  imgSrc = imgMap.all;
                 }
               } else {
                 const candidates = [
@@ -434,7 +439,7 @@ export default React.memo(function Store({
                   (cat as any).imageUrl
                 ];
                 for (const val of candidates) {
-                  if (isImgValid(val)) {
+                  if (isImgValid(val) && !val.includes('/assets/categories/')) {
                     imgSrc = val.trim();
                     break;
                   }

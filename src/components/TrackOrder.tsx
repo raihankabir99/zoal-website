@@ -134,7 +134,7 @@ export default function TrackOrder({ orders, setCurrentPage, isEmbedded = false 
   };
 
   // List of initial orders for quick demonstration
-  const demoOrders = [
+  const demoOrders = (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) ? [] : [
     { id: 'ZL-9871', email: 'alzoal3003@gmail.com' },
     { id: 'ZL-9543', email: 'alzoal3003@gmail.com' }
   ];

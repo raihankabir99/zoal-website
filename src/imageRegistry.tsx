@@ -658,15 +658,15 @@ function isCachedInstantly(url: string): boolean {
 export function getCategoryFallback(category?: BusinessCategory): string {
   switch (category) {
     case 'coffee':
-      return '/assets/categories/coffee.webp';
+      return 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png';
     case 'bakery':
-      return '/assets/categories/bakery.webp';
+      return 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png';
     case 'market':
-      return '/assets/categories/market.webp';
+      return 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg';
     case 'fashion':
-      return '/assets/categories/fashion.webp';
+      return 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png';
     case 'thobes':
-      return '/assets/categories/thobes.webp';
+      return 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png';
     default:
       return ABSOLUTE_PLACEHOLDER;
   }

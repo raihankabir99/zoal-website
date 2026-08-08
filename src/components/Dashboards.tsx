@@ -1651,31 +1651,8 @@ export default function Dashboards({
                           {isAr ? 'المنتجات المؤهلة للتقييم' : 'Eligible Products'}
                         </h4>
                         {customerOrders.length === 0 ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {[
-                              { id: 'p1', name: isAr ? 'ثوب البشت الملكي الفاخر' : 'Royal Bisht Thobe', image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=200&auto=format&fit=crop&q=80', date: '2026-06-15' },
-                              { id: 'p2', name: isAr ? 'شماغ العلا كشمير صوف ممتاز' : 'Premium Cashmere Al-Ula Ghutra', image: 'https://images.unsplash.com/photo-1608256246200-53e635b5b65f?w=200&auto=format&fit=crop&q=80', date: '2026-07-01' }
-                            ].map((prod) => (
-                              <div key={prod.id} className="bg-black border border-white/5 p-3 rounded-xs flex items-center gap-3">
-                                <img src={prod.image} alt={prod.name} className="w-12 h-12 object-cover rounded-xs border border-white/10" />
-                                <div className="flex-1 min-w-0">
-                                  <h5 className="text-white font-semibold text-[11px] truncate">{prod.name}</h5>
-                                  <span className="text-[9px] text-zinc-500 font-mono block">
-                                    {isAr ? 'تاريخ الشراء:' : 'Purchased:'} {prod.date}
-                                  </span>
-                                  <button
-                                    onClick={() => {
-                                      const selProdEl = document.getElementById('reviewProductSelect') as HTMLSelectElement;
-                                      if (selProdEl) selProdEl.value = prod.name;
-                                      window.scrollTo({ top: 300, behavior: 'smooth' });
-                                    }}
-                                    className="mt-1 text-[9px] text-[#D4AF37] hover:underline font-mono uppercase font-semibold cursor-pointer"
-                                  >
-                                    {isAr ? 'تقييم' : 'Review'}
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                          <div className="text-center py-6 text-zinc-500 text-xs font-mono">
+                            {isAr ? 'لا توجد منتجات مؤهلة للتقييم. أكمل طلبًا لشراء منتجات لتقييمها.' : 'No eligible products for review. Complete an order to review purchased items.'}
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
