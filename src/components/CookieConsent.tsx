@@ -172,13 +172,20 @@ export default function CookieConsent() {
                 {isAr ? 'إعدادات الكوكيز' : 'Cookie Settings'}
               </button>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   type="button"
                   onClick={handleEssentialOnly}
-                  className="px-3.5 py-2 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white bg-zinc-900 border border-white/10 hover:border-white/20 rounded-md transition-all cursor-pointer whitespace-nowrap"
+                  className="px-3 py-2 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white bg-zinc-900 border border-white/10 hover:border-white/20 rounded-md transition-all cursor-pointer whitespace-nowrap"
                 >
                   {isAr ? 'الأساسية فقط' : 'Essential Only'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEssentialOnly}
+                  className="px-3 py-2 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white bg-zinc-900 border border-white/10 hover:border-white/20 rounded-md transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {isAr ? 'رفض الكل' : 'Reject All'}
                 </button>
                 <button
                   type="button"
