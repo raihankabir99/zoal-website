@@ -1,0 +1,6 @@
+-- 036_normalize_blog_categories.sql
+ALTER TABLE zoal_blog_categories 
+ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS icon TEXT,
+ADD COLUMN IF NOT EXISTS name_ar TEXT;

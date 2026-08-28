@@ -1,0 +1,6 @@
+{
+  "name": "ZOAL Group",
+  "description": "Ultra luxury multi-business platform combining Premium Coffee, Cakes, Viennoiserie, Couture Fashion, and Sandstone Home Decor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

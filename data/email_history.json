@@ -1,0 +1,111 @@
+[
+  {
+    "id": "email-3awcadqht",
+    "orderId": "ZL-403417",
+    "customerName": "Paid Tester",
+    "customerEmail": "",
+    "orderDate": "2026-08-22",
+    "totalAmount": 265,
+    "deliveryStatus": "retrying",
+    "attemptsCount": 0,
+    "sentAt": null,
+    "lastAttemptAt": "2026-08-22T14:17:37.426+00:00",
+    "logs": [
+      "[2026-08-22T14:17:37.426Z] Initiated via payment confirmation flow."
+    ],
+    "orderData": {
+      "id": "ZL-403417",
+      "tax": 30,
+      "email": "",
+      "items": [
+        {
+          "name": "Premium Item Selection",
+          "price": 100,
+          "quantity": 2
+        }
+      ],
+      "phone": "",
+      "total": 265,
+      "address": "",
+      "shipping": 35,
+      "subtotal": 200,
+      "customerName": "Paid Tester",
+      "paymentMethod": "credit_card"
+    }
+  },
+  {
+    "id": "email-8224c0a9d",
+    "orderId": "ZL-403417",
+    "customerName": "Paid Tester",
+    "customerEmail": "",
+    "orderDate": "2026-08-22",
+    "totalAmount": 265,
+    "deliveryStatus": "retrying",
+    "attemptsCount": 0,
+    "sentAt": null,
+    "lastAttemptAt": "2026-08-22T14:17:37.876+00:00",
+    "logs": [
+      "[2026-08-22T14:17:37.876Z] Initiated via payment success event."
+    ],
+    "orderData": {
+      "id": "ZL-403417",
+      "tax": 30,
+      "email": "",
+      "items": [
+        {
+          "name": "Premium Item Selection",
+          "price": 100,
+          "quantity": 2
+        }
+      ],
+      "phone": "",
+      "total": 265,
+      "address": "",
+      "shipping": 35,
+      "subtotal": 200,
+      "customerName": "Paid Tester",
+      "paymentMethod": "credit_card"
+    }
+  },
+  {
+    "id": "email-dg9d646fi",
+    "orderId": "ZL-403417",
+    "customerName": "Paid Tester",
+    "customerEmail": "",
+    "orderDate": "2026-08-22",
+    "totalAmount": 265,
+    "deliveryStatus": "failed",
+    "attemptsCount": 3,
+    "sentAt": null,
+    "lastAttemptAt": "2026-08-22T14:17:46.423Z",
+    "logs": [
+      "[2026-08-22T14:17:38.945Z] Initiated via tax invoice generation event.",
+      "[2026-08-22T14:17:39.516Z] Attempt 1 of 3 started.",
+      "[2026-08-22T14:17:39.786Z] Attempt 1 failed with error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5b1f17b1804b1-499bfe9a167sm22026715e9.1 - gsmtp",
+      "[2026-08-22T14:17:41.978Z] Attempt 2 of 3 started.",
+      "[2026-08-22T14:17:42.229Z] Attempt 2 failed with error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5b1f17b1804b1-499bea71eb4sm41723305e9.2 - gsmtp",
+      "[2026-08-22T14:17:46.423Z] Attempt 3 of 3 started.",
+      "[2026-08-22T14:17:46.706Z] Attempt 3 failed with error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5b1f17b1804b1-499c35535fcsm23136075e9.3 - gsmtp",
+      "[2026-08-22T14:17:46.706Z] All 3 attempts failed. Delivery aborted."
+    ],
+    "orderData": {
+      "id": "ZL-403417",
+      "tax": 30,
+      "email": "",
+      "items": [
+        {
+          "name": "Premium Item Selection",
+          "price": 100,
+          "quantity": 2
+        }
+      ],
+      "phone": "",
+      "total": 265,
+      "address": "",
+      "shipping": 35,
+      "subtotal": 200,
+      "customerName": "Paid Tester",
+      "paymentMethod": "credit_card"
+    }
+  }
+]

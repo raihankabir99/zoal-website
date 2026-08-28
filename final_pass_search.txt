@@ -1,0 +1,186 @@
+src/app/api/payments/route.ts:36:    // Process mock gateway payment validation
+src/app/api/payments/route.ts:46:      return apiError('Payment transaction was declined by bank gateway', 402);
+src/components/Scrolltelling.tsx:4:import { SafeImage, useGlobalImages } from '../imageRegistry';
+src/components/Store.tsx:9:import { SafeImage, useGlobalProducts, useGlobalImages } from '../imageRegistry';
+src/components/NotFound.tsx:17:import { SafeImage, useGlobalProducts } from '../imageRegistry';
+src/components/Cart.tsx:5:import { SafeImage } from '../imageRegistry';
+src/components/About.tsx:312:                  PROMISE & PROTOCOLS
+src/components/About.tsx:487:        {/* SECTION 9: Branch Location & Interactive Protocol */}
+src/components/WishlistPage.tsx:3:import { useGlobalProducts } from '../imageRegistry';
+src/components/WishlistPage.tsx:6:import { SafeImage } from '../imageRegistry';
+src/components/ScrollZoomImage.tsx:3:import { getFallbackImage, ABSOLUTE_PLACEHOLDER } from '../imageRegistry';
+src/components/Hero.tsx:5:import { SafeImage, useGlobalImages } from '../imageRegistry';
+src/components/Blog.tsx:7:import { SafeImage } from '../imageRegistry';
+src/components/ProductDetail.tsx:6:import { SafeImage, getFallbackImage, useGlobalProducts } from '../imageRegistry';
+src/components/ProductDetail.tsx:453:            {/* Feed ledger */}
+src/components/AdminDashboard.tsx:14:import { useGlobalProducts, updateProductInventory } from '../imageRegistry';
+src/components/AdminDashboard.tsx:22:import EnterpriseOrderManagement from './EnterpriseOrderManagement';
+src/components/AdminDashboard.tsx:23:import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
+src/components/AdminDashboard.tsx:24:import EnterpriseCrm from './EnterpriseCrm';
+src/components/AdminDashboard.tsx:25:import EnterpriseCmsManager from './EnterpriseCmsManager';
+src/components/AdminDashboard.tsx:27:import { ProductWorkspaceForm } from './ProductWorkspaceForm';
+src/components/AdminDashboard.tsx:127:  // ENTERPRISE STATES & OVERRIDES
+src/components/AdminDashboard.tsx:314:      { email: 'patron1@saudiheritage.com', date: '2026-07-12', status: 'subscribed' }
+src/components/AdminDashboard.tsx:345:  // Enterprise Product States
+src/components/AdminDashboard.tsx:468:  // --- PMS Enterprise States ---
+src/components/AdminDashboard.tsx:1800:    <div className="bg-black text-white min-h-screen flex" id="enterprise-admin-panel">
+src/components/AdminDashboard.tsx:2121:                {/* Chart 1: Revenue & Order yield area (columns 1 to 8) */}
+src/components/AdminDashboard.tsx:2747:              {/* Enterprise Catalog Form Panel */}
+src/components/AdminDashboard.tsx:2764:                    <ProductWorkspaceForm
+src/components/AdminDashboard.tsx:3305:              {/* Enterprise List Pagination and Summary Footer */}
+src/components/AdminDashboard.tsx:3389:            <EnterpriseOrderManagement
+src/components/AdminDashboard.tsx:3954:            <EnterpriseInventoryManagement
+src/components/AdminDashboard.tsx:3964:            <EnterpriseCrm
+src/components/AdminDashboard.tsx:4361:            <EnterpriseCmsManager
+src/components/AdminDashboard.tsx:4559:                          summaryText = `Granular overview of product yield metrics sorted by performance.`;
+src/components/AdminDashboard.tsx:4719:                                      <th>Yield Amount</th>
+src/components/AdminDashboard.tsx:4873:                    <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Revenue Trends (Monthly Yield)</h3>
+src/components/AdminDashboard.tsx:5006:                        { name: 'Jan', totalPatrons: 450 },
+src/components/AdminDashboard.tsx:5007:                        { name: 'Feb', totalPatrons: 580 },
+src/components/AdminDashboard.tsx:5008:                        { name: 'Mar', totalPatrons: 720 },
+src/components/AdminDashboard.tsx:5009:                        { name: 'Apr', totalPatrons: 900 },
+src/components/AdminDashboard.tsx:5010:                        { name: 'May', totalPatrons: 1150 },
+src/components/AdminDashboard.tsx:5011:                        { name: 'Jun', totalPatrons: 1480 },
+src/components/AdminDashboard.tsx:5012:                        { name: 'Jul', totalPatrons: 1920 }
+src/components/AdminDashboard.tsx:5017:                        <Line type="monotone" dataKey="totalPatrons" stroke="#D4AF37" strokeWidth={2} dot={{ r: 3, fill: '#D4AF37', strokeWidth: 1 }} />
+src/components/AdminDashboard.tsx:5034:                        <circle cx="72" cy="72" r="50" stroke="#D4AF37" strokeWidth="8" fill="transparent" strokeDasharray="314.16" strokeDashoffset="213.63" /> {/* New Patrons 68% */}
+src/components/AdminDashboard.tsx:5960:          {/* XVIII. TAB: SUPABASE ENTERPRISE STORAGE */}
+src/components/AiAutomationCenter.tsx:51:    { id: 'h-2', tool: 'seo_ai', target: 'Bespoke Sudanese Royal Cotton Toob (Silk Embroidered)', prompt: 'Generate high-CTR meta details for wedding collection', date: '2026-07-15 09:20 AM', status: 'Success', tokensUsed: 980, model: 'gemini-3.5-flash', type: 'generation' },
+src/components/AiAutomationCenter.tsx:53:    { id: 'h-4', tool: 'content_ai', target: 'WhatsApp Copywriter - Eid Campaign', prompt: 'Bespoke VIP greetings for Eid and new thobes availability', date: '2026-07-13 02:10 PM', status: 'Success', tokensUsed: 1450, model: 'gemini-3.5-flash', type: 'generation' },
+src/components/AiAutomationCenter.tsx:1225:        longDescription: `Indulge your senses in the majestic presence of ${name}. Crafted exclusively in ultra-limited micro-batches, this sovereign selection honors centuries-old botanical recipes, fine weaving patterns, and authentic culinary crafts.\n\nEvery element of this product has been curated to cater to the elite patrons of Riyadh, Al Khobar, and Al Hofuf. Sourced through direct-trade relationships and hand-inspected under high-fidelity standards, it brings an irreplaceable luxury experience to your executive gatherings.`,
+src/components/AiAutomationCenter.tsx:1228:          'Presented in a bespoke luxury glass containment lined with gold dust.',
+src/components/AiAutomationCenter.tsx:1270:        metaDescription: `Discover the exquisite ${name} from ${brand}. Limited micro-batch release for elite Saudi Arabian and Gulf GCC patrons. Fast courier delivery with cold-chain tracking.`,
+src/components/AiAutomationCenter.tsx:1271:        keywords: [name, brand, 'Luxury Sudanese Heritage', 'Bespoke Arabian Gowns', 'Artisanal Saffron Coffee'],
+src/components/AiAutomationCenter.tsx:1311:      imagePrompt: `A ultra-luxurious, cinematic, shallow depth of field, high-contrast studio photograph of ${topic || 'artisanal Sudanese coffee and bespoke saffron pastries'} placed on a polished black marble slab. Soft ambient warm lighting highlighting subtle 24k gold flakes scattered nearby. Volumetric steam rising in spirals. Behind it, a rich dark silk drapery of geometric Sudanese border patterns. Captured on Hasselblad 100MP, award-winning composition, 8k resolution, photorealistic masterclass.`,
+src/components/AiAutomationCenter.tsx:1313:      contentBody: `Dearest Customer,\n\nWe are deeply honored to welcome you to the private inner sanctum of AL ZOAL, where legacy meets the pristine demands of the modern world. In this private release of ${topic || 'our heritage collections'}, we have blended high-altitude organic Sudanese harvests and hand-spun couture embroidery to design an irreplaceable centerpiece for your upcoming gatherings.\n\nEvery item tells a story of perseverance, masterfully shaped in our local Hofuf ovens and Riyadh ateliers. We invite you to discover these custom pieces now with priority overnight delivery.\n\nWarmest regards,\nAL ZOAL Executive Council`
+src/components/BrandManagement.tsx:806:            <p className="text-[11px] text-zinc-500">No registered brands match active filters in the sovereign register.</p>
+src/components/BrandManagement.tsx:1142:                        placeholder="concierge@brand.com"
+src/components/BrandingContext.tsx:30:  businessName: 'AL ZOAL Enterprise',
+src/components/BusinessAutomationCenter.tsx:54:    reportRecipients: 'executive-team@alzoal.com',
+src/components/BusinessAutomationCenter.tsx:72:    { id: 'ex-102', action: 'Direct Mail Confirmation Sent', target: 'patron-vip@saudi.com', channel: 'SMTP Relay', status: 'Success', details: 'Dispatched elegant confirmation HTML template with secure SSL via smtp.zoal.com.', time: '2026-07-16 11:45' },
+src/components/BusinessAutomationCenter.tsx:75:    { id: 'ex-105', action: 'Daily Executive Digest PDF', target: 'executive-team@alzoal.com', channel: 'Auto Report', status: 'Success', details: 'Generated revenue trends, branch performance, and master inventory audits.', time: '2026-07-16 08:00' },
+src/components/BusinessAutomationCenter.tsx:78:    { id: 'ex-108', action: 'Automatic Shipping Label Generated', target: 'Order #ZL-9382', channel: 'Courier Label API', status: 'Pending', details: 'Awaiting shipping zone validation from Moyasar checkout gateway.', time: '2026-07-15 16:15' }
+src/components/BusinessAutomationCenter.tsx:218:                  { key: 'autoInvoice', title: 'Automatic Invoice Generation', subtitle: 'Immediately generate a verified invoice upon patron checkout checkout.' },
+src/components/BusinessAutomationCenter.tsx:219:                  { key: 'autoPdf', title: 'Automatic PDF Invoice Creation', subtitle: 'Convert core ledger invoices to high-fidelity printing formats.' },
+src/components/BusinessAutomationCenter.tsx:223:                  { key: 'autoRefundNotif', title: 'Automatic Refund & Cancellation logs', subtitle: 'Verify, sync logs, and trigger bank relay gateways upon returns.' }
+src/components/BusinessAutomationCenter.tsx:250:                    { key: 'lowStockAlerts', title: 'Automatic Low Stock Alerts', subtitle: 'Notify admin and concierge staff when a product inventory drops below limits.' },
+src/components/BusinessAutomationCenter.tsx:355:                    { key: 'waCustomerFollowup', title: 'Post-Purchase Feedback Followup', sub: 'Bespoke follow-up sent 3 days post-delivery.' }
+src/components/BusinessAutomationCenter.tsx:407:                  { key: 'reportMonthly', title: 'Monthly Executive Audits', sub: 'Generate VAT totals, COGS summaries, and ledger files.' },
+src/components/CampaignsMarketingPanel.tsx:12:  { id: 'fashion', name: 'AL ZOAL Bespoke Fashion & Toobs' },
+src/components/CampaignsMarketingPanel.tsx:450:                addLog(`Dispatched email newsletter: "${subject}" to ${subscribers.length} VIP patrons`, "Campaign Center");
+src/components/CampaignsMarketingPanel.tsx:456:                  <input type="text" name="newsletter_subject" required placeholder="Introducing our Autumn Bespoke Sudanese Gowns Premiere..." className="bg-black w-full border border-white/10 text-white p-2 text-[10px] rounded-xs outline-none focus:border-gold-pure font-mono" />
+src/components/CategoryManagement.tsx:12:// Category interface representing enterprise taxonomy
+src/components/Checkout.tsx:13:import { SafeImage } from '../imageRegistry';
+src/components/Checkout.tsx:701:          throw new Error('No redirect URL returned by gateway');
+src/components/Contact.tsx:138:                  Your coordinates have been registered successfully in our sovereign database. A senior boutique representative will contact you shortly.
+src/components/CookiePolicy.tsx:683:                              : 'Exercise sovereignty over your digital imprint. Configure and lock down your preferred cookie permission parameters.'
+src/components/CookiePolicy.tsx:949:                                v1.0 (Enterprise)
+src/components/CookiePolicy.tsx:1019:                              <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest block">{isAr ? 'البريد الإلكتروني المعتمد' : 'Bespoke Customer Email'}</span>
+src/components/Dashboards.tsx:16:import { useGlobalProducts, updateProductInventory } from '../imageRegistry';
+src/components/Dashboards.tsx:28:import EnterpriseOrderManagement from './EnterpriseOrderManagement';
+src/components/Dashboards.tsx:269:          email: `${o.customerName.toLowerCase().replace(/\s+/g, '')}@zoal-patron.sa`,
+src/components/Dashboards.tsx:992:                    <EnterpriseOrderManagement
+src/components/Dashboards.tsx:1976:                            { id: 'dl-3', title: 'Saudi Coffee Protocol & Hosting Etiquette', size: '1.2 MB', type: 'PDF Booklet', desc: 'Deep dive into Eastern Province cardamom spice ratios and traditional hosting rituals.' },
+src/components/Dashboards.tsx:2023:                  {/* TAB 12: SUPPORT TICKETS CONCIERGE */}
+src/components/Dashboards.tsx:2130:                          {/* Tickets Ledger List */}
+src/components/Dashboards.tsx:2239:                                      messages: [...updated.messages, { sender: 'concierge', text: reply, time: butlerMsgTime }]
+src/components/Dashboards.tsx:2252:                                  placeholder="Type secure response to concierge tailors..."
+src/components/Dashboards.tsx:2297:                                <span className="text-[8px] font-mono text-zinc-500 tracking-[0.4em] uppercase block">Bespoke House of Excellence</span>
+src/components/Dashboards.tsx:2310:                              <span className="text-[8.5px] uppercase font-mono tracking-widest text-zinc-500 block">From: Bespoke House</span>
+src/components/Dashboards.tsx:2543:        {/* III. EXECUTIVE OWNER DASHBOARD */}
+src/components/Dashboards.tsx:2571:                <span className="text-[10px] tracking-widest text-zinc-500 uppercase block mb-1">Average Check Yield</span>
+src/components/Dashboards.tsx:2604:                      <Area type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" name="Gross Yield (SAR)" />
+src/components/Dashboards.tsx:2612:                <h3 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-3">Pillar Allocation Yield</h3>
+src/components/DataDeletion.tsx:749:                          : 'For any questions or clarification regarding your data sovereignty rights or this document.'
+src/components/EnterpriseCmsManager.tsx:114:interface EnterpriseCmsManagerProps {
+src/components/EnterpriseCmsManager.tsx:120:export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: EnterpriseCmsManagerProps) {
+src/components/EnterpriseCmsManager.tsx:2380:                      <span className="text-[7.5px] tracking-[0.3em] text-gold-pure uppercase font-mono">SOVEREIGN LAUNCH CIRCLE</span>
+src/components/EnterpriseCrm.tsx:105:  // Enterprise Extended Loyalty Profile Attributes
+src/components/EnterpriseCrm.tsx:123:  // Enterprise Tagging and Archiving status
+src/components/EnterpriseCrm.tsx:129:interface EnterpriseCrmProps {
+src/components/EnterpriseCrm.tsx:513:export default function EnterpriseCrm({ currentUser, orders, addLog }: EnterpriseCrmProps) {
+src/components/EnterpriseCrm.tsx:1069:  // --- NEW ENTERPRISE CRM INTERACTIVE ACTIONS ---
+src/components/EnterpriseCrm.tsx:1528:    <div className="space-y-6 text-left animate-fade-in font-sans relative z-10" id="enterprise-crm-management">
+src/components/EnterpriseInventoryManagement.tsx:16:import { updateProductInventory, updateProductFields } from '../imageRegistry';
+src/components/EnterpriseInventoryManagement.tsx:88:interface EnterpriseInventoryManagementProps {
+src/components/EnterpriseInventoryManagement.tsx:101:export default function EnterpriseInventoryManagement({
+src/components/EnterpriseInventoryManagement.tsx:106:}: EnterpriseInventoryManagementProps) {
+src/components/EnterpriseInventoryManagement.tsx:1561:          {/* ======================= TAB II: STOCK LEDGER MATRIX ======================= */}
+src/components/EnterpriseInventoryManagement.tsx:1569:              {/* LEDGER FILTERS */}
+src/components/EnterpriseInventoryManagement.tsx:1701:              {/* Bulk import workspace */}
+src/components/EnterpriseInventoryManagement.tsx:1824:              {/* MATRIX TABLE LEDGER */}
+src/components/EnterpriseInventoryManagement.tsx:2452:                    <p>• <strong className="text-zinc-300">EAN-13 Barcode:</strong> Prefix <code className="text-gold-pure font-mono">628</code> denotes Kingdom of Saudi Arabia national registry allocation.</p>
+src/components/EnterpriseInventoryManagement.tsx:2903:  // Handle mock corporate download
+src/components/EnterpriseOrderManagement.tsx:72:              Panel: ${inv.gateway}<br>
+src/components/EnterpriseOrderManagement.tsx:223:interface EnterpriseOrderManagementProps {
+src/components/EnterpriseOrderManagement.tsx:235:export default function EnterpriseOrderManagement({
+src/components/EnterpriseOrderManagement.tsx:239:}: EnterpriseOrderManagementProps) {
+src/components/EnterpriseOrderManagement.tsx:245:  const [activeTab, setActiveTab] = useState<'overview' | 'ledger' | 'my-tasks' | 'reports'>(() => {
+src/components/EnterpriseOrderManagement.tsx:246:    if (userRole === 'customer') return 'ledger';
+src/components/EnterpriseOrderManagement.tsx:841:            onClick={() => setActiveTab('ledger')}
+src/components/EnterpriseOrderManagement.tsx:843:              activeTab === 'ledger' ? 'bg-gold-pure text-black' : 'text-zinc-400 hover:text-white'
+src/components/EnterpriseOrderManagement.tsx:1041:          {(activeTab === 'ledger' || (activeTab === 'my-tasks' && userRole === 'staff')) && (
+src/components/EnterpriseOrderManagement.tsx:1445:          {/* EXECUTIVE REPORTS GENERATOR TAB */}
+src/components/EnterpriseOrderManagement.tsx:1653:                          <p className="text-zinc-500 uppercase text-[8px] tracking-wider">Panel Protocol</p>
+src/components/EnterpriseOrderManagement.tsx:1654:                          <p className="text-zinc-300 text-[9px] mt-0.5">{selectedOrder.gateway || 'Moyasar (Saudi Arabia)'}</p>
+src/components/EnterpriseOrderManagement.tsx:2036:                                alert("Redirecting to secured simulated gateway portal...");
+src/components/EnterpriseOrderManagement.tsx:2073:                                  gateway: 'Moyasar (Saudi Arabia)',
+src/components/MerchantAssetsStudio.tsx:7:import { useGlobalImages, uploadImageToStore, deleteImageFromStore } from '../imageRegistry';
+src/components/Navbar.tsx:181:            {/* Customer Workspace Profile */}
+src/components/OwnerExecutiveDashboard.tsx:16:interface OwnerExecutiveDashboardProps {
+src/components/OwnerExecutiveDashboard.tsx:22:export default function OwnerExecutiveDashboard({
+src/components/OwnerExecutiveDashboard.tsx:26:}: OwnerExecutiveDashboardProps) {
+src/components/OwnerExecutiveDashboard.tsx:51:  const netYield = totalProfit - operatingExpenses;
+src/components/OwnerExecutiveDashboard.tsx:81:  // 3. Category Yield Analysis
+src/components/OwnerExecutiveDashboard.tsx:105:      const response = await fetch('/api/executive/insights', {
+src/components/OwnerExecutiveDashboard.tsx:217:      "Recalculating exact gross margin yields vs operational overhead (12% amortized)...",
+src/components/OwnerExecutiveDashboard.tsx:232:    <div className="space-y-6 text-left animate-fade-in font-sans pb-12" id="owner-executive-board">
+src/components/OwnerExecutiveDashboard.tsx:297:              {profitMargin.toFixed(1)}% Yield
+src/components/OwnerExecutiveDashboard.tsx:329:            <span>Net Yield</span>
+src/components/OwnerExecutiveDashboard.tsx:334:              {(netYield * (selectedBranch === 'all' ? 1 : 0.25)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+src/components/OwnerExecutiveDashboard.tsx:477:              <p className="text-[9px] text-zinc-500 font-sans leading-relaxed mt-1">Generated dynamically based on standard GAGR index models paired with current profit yields.</p>
+src/components/OwnerExecutiveDashboard.tsx:552:                  { name: "Kordofan Organic Hibiscus Crystals", revenue: "9,250 SAR", margin: "71% Margin", status: "Stable Yield" }
+src/components/OwnerExecutiveDashboard.tsx:614:                <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Service Protocol</span>
+src/components/PaymentSimulation.tsx:178:            {isAr ? 'بوابة الدفع الآمنة' : 'Secure Payment Gateway'}
+src/components/Portfolio.tsx:6:import { SafeImage, useGlobalImages } from '../imageRegistry';
+src/components/ProductWorkspaceForm.tsx:9:interface ProductWorkspaceFormProps {
+src/components/ProductWorkspaceForm.tsx:20:export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
+src/components/ReturnRefundPolicy.tsx:162:          'Supported secure gateways: Mada, Visa, Mastercard, Apple Pay, and STC Pay.',
+src/components/ReturnRefundPolicy.tsx:231:          `Bank/Financial Gateway credit release: ${returnsConfig.refundProcessingDaysEn} (the actual time depends strictly on your bank policy).`,
+src/components/SEO.tsx:56:          description = `Read stories on saudi coffee protocols, the artistry of German gold wire zari sewing, Al-Ahsa architectural details, and seasonal designer launches.`;
+src/components/SecuritySettingsCenter.tsx:34:    { id: 'adm-3', name: 'Fatma Al-Mansoori', email: 'fatma@alzoal.com', role: 'Enterprise Manager', status: 'Suspended', sessions: 0, tfa: false, lastLogin: '3 days ago' },
+src/components/SecuritySettingsCenter.tsx:39:  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Enterprise Manager' });
+src/components/SecuritySettingsCenter.tsx:139:    setInviteForm({ name: '', email: '', role: 'Enterprise Manager' });
+src/components/SecuritySettingsCenter.tsx:228:          <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">SECURITY & SETTINGS GATEWAY</h2>
+src/components/SecuritySettingsCenter.tsx:333:                        <option value="Enterprise Manager">Store Manager</option>
+src/components/SecuritySettingsCenter.tsx:504:                    { ip: '192.168.1.25', location: 'Al Hofuf Warehouse Facility', device: 'Edge Windows 11 Enterprise', owner: 'khalid@zoal.com', status: 'Active' },
+src/components/ShippingPolicy.tsx:740:                      {isAr ? '5. وقت تسليم الشحنات للمندوب' : '5. Dispatch Protocol'}
+src/components/StaffDashboard.tsx:12:import { useGlobalProducts, updateProductInventory } from '../imageRegistry';
+src/components/StaffDashboard.tsx:14:import EnterpriseOrderManagement from './EnterpriseOrderManagement';
+src/components/StaffDashboard.tsx:15:import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
+src/components/StaffDashboard.tsx:173:               staffSubTab === 'bespoke' ? 'Premium Catalog' :
+src/components/StaffDashboard.tsx:295:              onClick={() => { setStaffSubTab('bespoke'); setSelectedStaffOrder(null); }}
+src/components/StaffDashboard.tsx:297:                staffSubTab === 'bespoke' ? 'bg-[#D4AF37] text-black font-semibold shadow-md' : 'text-zinc-400 hover:text-white hover:bg-white/[0.02]'
+src/components/StaffDashboard.tsx:417:                    onClick={() => { setStaffSubTab('bespoke'); setStaffSidebarOpen(false); setSelectedStaffOrder(null); }}
+src/components/StaffDashboard.tsx:419:                      staffSubTab === 'bespoke' ? 'bg-[#D4AF37] text-black font-bold' : 'text-zinc-400 hover:bg-white/[0.02]'
+src/components/StaffDashboard.tsx:631:          {/* MODULE 2: ORDERS LEDGER */}
+src/components/StaffDashboard.tsx:633:            <EnterpriseOrderManagement
+src/components/StaffDashboard.tsx:918:            <EnterpriseInventoryManagement
+src/components/StaffDashboard.tsx:927:          {staffSubTab === 'bespoke' && (
+src/components/StaffDashboard.tsx:2004:              {/* IX. Supabase Enterprise Storage Manager */}
+src/components/SupportCenterDashboard.tsx:137:    content: 'Our single-origin coffee gathers are roasted in micro-batches (under 5kg) to maintain optimal essential oil preservation. The Saffron Specialty Blend incorporates certified Grade-1 Sargol saffron threads. For peak heritage flavor, keep coffee inside our custom thermal ceramic seal jars away from direct sunlight. Do not freeze beans as this damages high-elevation moisture metrics.',
+src/data/privacyData.ts:123:      en: 'ZOAL is committed to ensuring absolute security during checkout. We do NOT store your complete credit card or debit card credentials on our servers. All financial transactions are safely managed through our payment gateways, which are strictly certified with Level 1 PCI-DSS compliance. All transmissions are encrypted using SSL technology. We accept Mada, Visa, Mastercard, Apple Pay, and STC Pay.',
+src/data/privacyData.ts:164:        'Secure payment processing gateways and bank networks',
+src/data/privacyData.ts:185:      en: 'We deploy multi-layered, high-grade safety protocols to protect your personal information. These robust defenses include complete Secure Sockets Layer (SSL) encryption for all web traffic, secure hashed password parameters, localized encrypted databases, strict internal operational access control, and constant proactive monitoring of network behaviors.',
+src/data/termsData.ts:211:      en: 'To the maximum extent permitted by Saudi Arabia commerce regulations, ZOAL is not liable for indirect, incidental, or consequential losses, including lost profits, internet connectivity delays, third-party payment gateway outages, or delivery disruptions caused by forces beyond our control, unless such liability cannot be legally excluded under Saudi law.',
+src/lib/productSync.ts:2:import { notifyPoolListeners } from '../imageRegistry';
+src/lib/productSync.ts:5:const CACHE_VERSION = 'v1_enterprise_zoal';
+src/locales/ar.json:200:    "patron_name": "اسم العميل:",
+src/locales/ar.json:266:    "patron_area": "منطقة العميل",
+src/locales/en.json:159:    "patron_name": "Customer Name:",
+src/data.ts:82:    subDescription: 'Crafted fresh daily on our wood-burning stone deck hearths.',
+src/App.tsx:16:import { SafeImage, useGlobalProducts } from './imageRegistry';
+src/App.tsx:929:          {/* SECURED MOYASAR GATEWAY PAYMENT SIMULATION VIEW */}
+src/App.tsx:970:          {/* ALL WORKSPACE DASHBOARDS (Customer, Admin, Executive Owner) */}
+src/imageRegistry.tsx:5:// Centralised registry mapping all local asset paths to their high-quality default fallbacks
+src/types.ts:224:  gateway?: string;

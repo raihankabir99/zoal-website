@@ -1,0 +1,83 @@
+[
+  {
+    "id": "USR-ADMIN-1",
+    "firstName": "Abdullah",
+    "lastName": "Al-Saudi",
+    "email": "alzoal3003@gmail.com",
+    "phone": "+966 56 769 9315",
+    "passwordHash": "dbdf8aafdc77d0de6205dfeac4a03b72:90f5c9cc150ebc4c516cfea5cb10afdeb8eaaba66cc12206434baa3ba6d81c59a490dfe8e127f4335aacd46149d2809a260d3b0d6d48b94fc5268c44c54224c7",
+    "role": "admin",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-07-13T19:57:56.932Z",
+    "addresses": [
+      "Al Shati District, Dammam, KSA",
+      "Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361"
+    ]
+  },
+  {
+    "id": "USR-STAFF-1",
+    "firstName": "Raed",
+    "lastName": "Al-Fahad",
+    "email": "staff@alzoal.com",
+    "phone": "+966 50 123 4567",
+    "passwordHash": "8496bf9a5a03b1a237c9c78d5fe39fb4:6074ced1c0d4cf1684da07a882814cafe8b39f318268d0b2ea4df38b822d05b1b4c111c26927cd9e68cefbc1e83c1b24a227c8766f20f9e602e0d4aab878c113",
+    "role": "staff",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-07-13T19:57:56.939Z",
+    "addresses": [
+      "Al Hofuf boutique, KSA"
+    ]
+  },
+  {
+    "id": "USR-CUSTOMER-1",
+    "firstName": "Sultan",
+    "lastName": "Al-Ghamdi",
+    "email": "customer@alzoal.com",
+    "phone": "+966 55 987 6543",
+    "passwordHash": "fafa31fdd13a664a3db25238fd017c67:fb0351a79373822532ee94f83cf345e7baa3e531b77c670c636b6d3d618d1abc1fa8a98753d964d2d098f5b49c10c16308b9263a2827da85e1070f9e19730743",
+    "role": "customer",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-07-13T19:57:56.946Z",
+    "addresses": [
+      "Al Hamra District, Riyadh, KSA"
+    ]
+  },
+  {
+    "id": "USR-OWNER-1",
+    "firstName": "Faisal",
+    "lastName": "Al-Zoal",
+    "email": "owner@alzoal.com",
+    "phone": "+966 56 000 0001",
+    "passwordHash": "bcefce4279e50ee4090deb01751faf8e:3edb6b78222c0674ca6b1991fc1ef8018fadf08412ddc27cae2c1978e1f2f1a1c3b8960a6ad2e149ae0ce1af463e90f416733584cef84b43e44db2b269be6c93",
+    "role": "owner",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-08-26T14:40:31.528Z",
+    "addresses": [
+      "HQ Executive Suite, Al Hofuf, KSA"
+    ]
+  },
+  {
+    "id": "USR-MANAGER-1",
+    "firstName": "Khaled",
+    "lastName": "Al-Mansour",
+    "email": "manager@alzoal.com",
+    "phone": "+966 56 000 0002",
+    "passwordHash": "77e5dff10aa5c7daf75067a50df9c01f:4c21b7f25a9baa0c17be47f263a32090c9a25b81de747118f5ebbbe63fc73c2890921379f133b770b185908a6d6fa579c4ff3f35dd502e58414ea4621a0b2412",
+    "role": "manager",
+    "isVerified": true,
+    "verificationCode": "VERIFIED",
+    "resetCode": "",
+    "createdAt": "2026-08-26T14:40:31.535Z",
+    "addresses": [
+      "Riyadh Branch, KSA"
+    ]
+  }
+]
