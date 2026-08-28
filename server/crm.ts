@@ -61,7 +61,7 @@ export function sanitizeAndMapCustomerProfile(user: any, crm: any, orders: any[]
 
   return {
     id: user.id,
-    name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Customer',
+    name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || null,
     firstName: user.first_name || null,
     lastName: user.last_name || null,
     email: user.email,
@@ -70,13 +70,13 @@ export function sanitizeAndMapCustomerProfile(user: any, crm: any, orders: any[]
     country: crmData.country || null,
     city: crmData.city || null,
     registrationDate: user.created_at ? user.created_at.substring(0, 10) : null,
-    status: crmData.status || 'Active',
+    status: crmData.status || null,
     segment: calculatedSegment,
     manualSegment: crmData.manual_segment || false,
     gender: crmData.gender || null,
     birthday: crmData.birthday || null,
     preferredLanguage: crmData.preferred_language || null,
-    lastLogin: crmData.last_login || user.created_at || null,
+    lastLogin: crmData.last_login || null,
     lastPurchase: lastPurchaseDate,
     
     // Aggregated order statistics
@@ -345,15 +345,20 @@ export async function createCustomer(req: Request, res: Response) {
       return res.status(409).json({ error: 'DUPLICATE_EMAIL', message: 'A customer profile with this email address already exists.' });
     }
 
-    // Split name into first and last name
-    const nameParts = (name || '').trim().split(' ');
-    const firstName = nameParts[0] || 'Customer';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    // Split name into first and last name (or null if missing)
+    const nameParts = (name || '').trim().split(' ').filter(Boolean);
+    const firstName = nameParts[0] || null;
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
 
     // Generate real canonical UUID matching zoal_users.id schema
     const newUserId = crypto.randomUUID();
 
-    // Insert into zoal_users
+    // Option A: Invite / Password Setup Flow
+    // Create setup code/token for account activation / password setup
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const resetCode = `INVITE-${inviteToken}`;
+
+    // Insert into zoal_users without placeholder password hash
     const { data: newUser, error: createErr } = await supabase
       .from('zoal_users')
       .insert({
@@ -361,10 +366,11 @@ export async function createCustomer(req: Request, res: Response) {
         first_name: firstName,
         last_name: lastName,
         email: cleanEmail,
-        phone: phone || '',
-        password_hash: 'PROTECTED_CRM_ACCOUNT',
-        role: 'customer',
-        is_verified: true,
+        phone: phone ? phone.trim() : null,
+        password_hash: null, // No fake password hash, requiring invite/setup flow
+        role: 'customer', // Strictly customer role, no role escalation
+        is_verified: false, // Requires activation/setup
+        reset_code: resetCode,
         created_at: new Date().toISOString()
       })
       .select()
@@ -378,7 +384,7 @@ export async function createCustomer(req: Request, res: Response) {
     // Insert CRM metadata into zoal_customer_crm
     const crmMeta = {
       user_id: newUserId,
-      status: status || 'Active',
+      status: status || null,
       segment: segment || null,
       gender: gender || null,
       birthday: birthday || null,
@@ -386,17 +392,23 @@ export async function createCustomer(req: Request, res: Response) {
       country: country || null,
       city: city || null,
       photo_url: photoUrl || null,
-      loyalty_points: 0,
+      loyalty_points: null,
       membership_level: null,
       tags: tags || [],
       created_at: new Date().toISOString()
     };
 
-    const { data: newCrm } = await supabase
+    const { data: newCrm, error: crmErr } = await supabase
       .from('zoal_customer_crm')
       .insert(crmMeta)
       .select()
-      .single();
+      .maybeSingle();
+
+    if (crmErr) {
+      console.error('Error creating customer CRM metadata, rolling back user creation:', crmErr);
+      await supabase.from('zoal_users').delete().eq('id', newUserId);
+      return res.status(500).json({ error: 'CREATE_FAILED', message: 'Failed to create customer CRM metadata record.' });
+    }
 
     // Log activity
     await logCrmActivity((req as any).user, `customer.created: ${cleanEmail} (ID: ${newUserId})`);
@@ -405,7 +417,7 @@ export async function createCustomer(req: Request, res: Response) {
 
     return res.status(201).json({
       success: true,
-      message: 'Customer successfully created.',
+      message: 'Customer successfully created with pending password setup.',
       customer: createdProfile
     });
   } catch (error: any) {
@@ -446,9 +458,9 @@ export async function updateCustomer(req: Request, res: Response) {
     // 2. Prepare user updates
     const userUpdates: any = {};
     if (name !== undefined) {
-      const nameParts = name.trim().split(' ');
-      userUpdates.first_name = nameParts[0] || 'Customer';
-      userUpdates.last_name = nameParts.slice(1).join(' ') || '';
+      const nameParts = (name || '').trim().split(' ').filter(Boolean);
+      userUpdates.first_name = nameParts[0] || null;
+      userUpdates.last_name = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
     }
     if (email !== undefined && email.includes('@')) {
       userUpdates.email = email.trim().toLowerCase();
