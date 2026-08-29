@@ -67,16 +67,7 @@ export default function BusinessAutomationCenter({ orders, addLog, currentUser }
   });
 
   // Local execution logs state
-  const [executionLogs, setExecutionLogs] = useState<any[]>([
-    { id: 'ex-101', action: 'VAT PDF Invoice Generated', target: 'Order #ZL-9431', channel: 'PDF Engine', status: 'Success', details: 'Generated VAT invoice for 1,250.00 SAR with 15% VAT (187.50 SAR). Saved in private secure storage bucket.', time: '2026-07-16 11:45' },
-    { id: 'ex-102', action: 'Direct Mail Confirmation Sent', target: 'patron-vip@saudi.com', channel: 'SMTP Relay', status: 'Success', details: 'Dispatched elegant confirmation HTML template with secure SSL via smtp.zoal.com.', time: '2026-07-16 11:45' },
-    { id: 'ex-103', action: 'WhatsApp Tracking Dispatch', target: '+966 56 769 9315', channel: 'WhatsApp API', status: 'Success', details: 'Dispatched shipping tracking link for Courier overnight transport.', time: '2026-07-16 10:20' },
-    { id: 'ex-104', action: 'Low Stock Supplier Alert', target: 'Kordofan Premium Co-Op', channel: 'SMS & Email', status: 'Success', details: 'Auto low stock alert triggered: Traditional Karkadeh dropped to 4 bags. Suggested PO: 50kg.', time: '2026-07-16 08:02' },
-    { id: 'ex-105', action: 'Daily Executive Digest PDF', target: 'executive-team@alzoal.com', channel: 'Auto Report', status: 'Success', details: 'Generated revenue trends, branch performance, and master inventory audits.', time: '2026-07-16 08:00' },
-    { id: 'ex-106', action: 'Database Backup', target: 'Supabase Replication Node', channel: 'Cloud DB', status: 'Success', details: 'Automated 12:00 AM backup point verified successfully. MD5 Hash verified. Compression: 92%.', time: '2026-07-16 00:00' },
-    { id: 'ex-107', action: 'Abandoned Cart Rescue', target: 'client-guest@khobar.sa', channel: 'SMTP Relay', status: 'Failed', details: 'Customer unsubscribed from marketing emails. Bypassed delivery rule.', time: '2026-07-15 18:30' },
-    { id: 'ex-108', action: 'Automatic Shipping Label Generated', target: 'Order #ZL-9382', channel: 'Courier Label API', status: 'Pending', details: 'Awaiting shipping zone validation from Moyasar checkout gateway.', time: '2026-07-15 16:15' }
-  ]);
+  const [executionLogs, setExecutionLogs] = useState<any[]>([]);
 
   const toggleSetting = (key: keyof typeof settings) => {
     setSettings(prev => ({

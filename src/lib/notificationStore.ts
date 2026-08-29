@@ -3,190 +3,6 @@ import { EnterpriseNotification, NotificationAuditReport } from '../types/notifi
 import { filterNotificationsByRole } from '../rbac/notificationRbac';
 import { supabaseClient } from './supabaseClient';
 
-function seedInitialNotifications(currentUser: any): EnterpriseNotification[] {
-  if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
-    return [];
-  }
-  if (!currentUser) return [];
-  const role = (currentUser.role || 'customer').toLowerCase();
-  const userId = currentUser.id || currentUser.email || 'usr-1';
-  const email = currentUser.email || 'patron@alzoal.com';
-  const now = Date.now();
-
-  if (role === 'customer') {
-    return [
-      {
-        id: `notif-cust-1-${userId}`,
-        user_id: userId,
-        user_email: email,
-        title: 'Order Confirmed & In Preparation',
-        message: 'Your order #AZ-4820 for AL ZOAL Specialty Karkadeh & Oud blend has been confirmed.',
-        category: 'New Order',
-        priority: 'high',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 15).toISOString(),
-        target_role: 'customer',
-        metadata: { orderId: 'AZ-4820', status: 'Processing' }
-      },
-      {
-        id: `notif-cust-2-${userId}`,
-        user_id: userId,
-        user_email: email,
-        title: 'Shipment Tracking Code Assigned',
-        message: 'Courier tracking link ZLT-TRK-849201 generated for rapid dispatch.',
-        category: 'Order Status',
-        priority: 'medium',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 120).toISOString(),
-        target_role: 'customer',
-        metadata: { trackingNumber: 'ZLT-TRK-849201' }
-      },
-      {
-        id: `notif-cust-3-${userId}`,
-        user_id: userId,
-        user_email: email,
-        title: 'VIP Portfolio Privilege Activated',
-        message: 'Welcome to AL ZOAL Sovereign Circle. Exclusive reserve harvests unlocked.',
-        category: 'Promotional',
-        priority: 'low',
-        read: true,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 1440).toISOString(),
-        target_role: 'customer'
-      }
-    ];
-  }
-
-  if (role === 'staff') {
-    return [
-      {
-        id: `notif-staff-1-${userId}`,
-        assigned_staff_id: userId,
-        title: 'New Dispatch Order Pending',
-        message: 'Order #AZ-9431 requires immediate artisan roasting and quality inspection.',
-        category: 'New Order',
-        priority: 'high',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 10).toISOString(),
-        target_role: 'staff',
-        metadata: { orderId: 'AZ-9431', tab: 'orders' }
-      },
-      {
-        id: `notif-staff-2-${userId}`,
-        assigned_staff_id: userId,
-        title: 'Low Stock Level: Karkadeh Reserve',
-        message: 'Traditional Karkadeh inventory dropped below 15 units threshold.',
-        category: 'Inventory Alert',
-        priority: 'high',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 45).toISOString(),
-        target_role: 'staff',
-        metadata: { sku: 'KARK-01', tab: 'stock' }
-      },
-      {
-        id: `notif-staff-3-${userId}`,
-        assigned_staff_id: userId,
-        title: 'Customer Measure Request',
-        message: 'Patron Raihan requested custom collar adjustments on order #AZ-8812.',
-        category: 'Customer Message',
-        priority: 'medium',
-        read: true,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 300).toISOString(),
-        target_role: 'staff',
-        metadata: { customerName: 'Raihan Kabir', tab: 'messages' }
-      }
-    ];
-  }
-
-  if (role === 'admin') {
-    return [
-      {
-        id: 'notif-admin-1',
-        title: 'Enterprise VAT Invoice Dispatched',
-        message: 'Auto-generated VAT invoice #INV-9431 (1,250.00 SAR) dispatched to buyer.',
-        category: 'Payments',
-        priority: 'high',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 12).toISOString(),
-        target_role: 'admin',
-        metadata: { tab: 'financials' }
-      },
-      {
-        id: 'notif-admin-2',
-        title: 'New VIP Registration Approved',
-        message: 'Client patron-vip@saudi.com verified and provisioned sovereign clearance.',
-        category: 'Customers',
-        priority: 'medium',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 60).toISOString(),
-        target_role: 'admin',
-        metadata: { tab: 'crm' }
-      },
-      {
-        id: 'notif-admin-3',
-        title: 'Inventory Threshold Restock Required',
-        message: 'Sufi Coffee Blend stock level trigger activated for Al Khobar warehouse.',
-        category: 'Inventory Alert',
-        priority: 'high',
-        read: true,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 240).toISOString(),
-        target_role: 'admin',
-        metadata: { tab: 'inventory' }
-      }
-    ];
-  }
-
-  if (role === 'owner') {
-    return [
-      {
-        id: 'notif-owner-1',
-        title: 'Quarterly Revenue Milestone Exceeded',
-        message: 'Consolidated KSA retail branches reached +18.4% YoY net profit margin.',
-        category: 'Revenue Alert',
-        priority: 'critical',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 5).toISOString(),
-        target_role: 'owner',
-        metadata: { tab: 'analytics' }
-      },
-      {
-        id: 'notif-owner-2',
-        title: 'Security Audit Clearance Verified',
-        message: 'Zero unauthorized RBAC escalations detected in current 24h cycle.',
-        category: 'Security Alert',
-        priority: 'medium',
-        read: false,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 90).toISOString(),
-        target_role: 'owner',
-        metadata: { tab: 'security' }
-      },
-      {
-        id: 'notif-owner-3',
-        title: 'High-Value Order Placed',
-        message: 'Order #AZ-9900 (24,500 SAR) placed by Sovereign VIP Member.',
-        category: 'High Value Order',
-        priority: 'high',
-        read: true,
-        archived: false,
-        timestamp: new Date(now - 1000 * 60 * 360).toISOString(),
-        target_role: 'owner',
-        metadata: { tab: 'orders' }
-      }
-    ];
-  }
-
-  return [];
-}
 
 export function useNotificationEngine(currentUser: any) {
   const [notifications, setNotifications] = useState<EnterpriseNotification[]>([]);
@@ -232,14 +48,13 @@ export function useNotificationEngine(currentUser: any) {
           if (data && data.length > 0) {
             setNotifications(data as EnterpriseNotification[]);
           } else {
-            // Seed initial notifications tailored specifically to this user identity & role
-            const seeded = seedInitialNotifications(currentUser);
-            setNotifications(seeded);
+            setNotifications([]);
           }
         }
       } catch (err: any) {
         if (isMounted) {
-          setNotifications(seedInitialNotifications(currentUser));
+          console.error('Failed to fetch notifications:', err.message);
+          setNotifications([]);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -485,11 +300,11 @@ export function useNotificationEngine(currentUser: any) {
       readCount,
       unreadCount: unread,
       archivedCount,
-      averageLatencyMs: 12,
-      alertsProcessed: totalCount + 5,
-      realtimeScore: 99,
-      coveragePercentage: 100,
-      totalEventsProcessed: 18940
+      averageLatencyMs: null,
+      alertsProcessed: null,
+      realtimeScore: null,
+      coveragePercentage: null,
+      totalEventsProcessed: null
     };
   }, [userNotifications]);
 

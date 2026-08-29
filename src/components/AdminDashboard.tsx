@@ -6715,51 +6715,6 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-                  {/* Test alert generator widget */}
-                  <div className="bg-zinc-950 border border-white/5 p-4 rounded-xs space-y-3">
-                    <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold block">Developer Test Injector</span>
-                    <p className="text-[9px] text-zinc-400 font-sans leading-relaxed">Quickly fire high-care mock alerts into the admin dashboard to audit alerts response.</p>
-                    <button
-                      onClick={() => {
-                        const types = ['New Order', 'Inventory Alert', 'Security Alert', 'Revenue Alert', 'Customer Message'];
-                        const picked = types[Math.floor(Math.random() * types.length)];
-                        
-                        let title = "Custom System Warning";
-                        let message = "An unclassified telemetry alert was recorded.";
-                        let priority: 'low' | 'medium' | 'high' | 'critical' = "medium";
-
-                        if (picked === 'New Order') {
-                          title = "New Order Placed";
-                          message = `VIP Order #AZ-${Math.floor(1000 + Math.random() * 9000)} created for ${Math.floor(200 + Math.random() * 1000)} SAR.`;
-                          priority = "high";
-                        } else if (picked === 'Inventory Alert') {
-                          title = "Low Stock Level: Karkadeh Reserve";
-                          message = "Artisanal Cardamom Cookies are below threshold. Remaining: 4 boxes.";
-                          priority = "high";
-                        } else if (picked === 'Security Alert') {
-                          title = "Security Audit Clearance";
-                          message = "Zero unauthorized RBAC escalations detected in current 24h cycle.";
-                          priority = "medium";
-                        } else if (picked === 'Revenue Alert') {
-                          title = "Quarterly Revenue Milestone Exceeded";
-                          message = "Consolidated KSA retail branches reached +18.4% YoY net profit margin.";
-                          priority = "critical";
-                        }
-
-                        activeNotificationEngine.addNotification({
-                          title,
-                          message,
-                          category: picked,
-                          priority,
-                          target_role: 'admin'
-                        });
-                        addLog(`Injected Test Alert: ${title}`, "Notifications Center");
-                      }}
-                      className="w-full py-1.5 bg-white text-black hover:bg-gold-pure font-bold uppercase text-[9px] rounded-xs cursor-pointer"
-                    >
-                      Fire Real-time Notification
-                    </button>
-                  </div>
                 </div>
 
                 {/* Right Main Notifications Display Pane */}

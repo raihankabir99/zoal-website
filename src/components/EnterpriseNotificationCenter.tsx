@@ -372,13 +372,13 @@ export default function EnterpriseNotificationCenter({
           ) : (
             /* Activity Log Tab */
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="p-5 bg-zinc-900/80 border border-[#D4AF37]/30 rounded-xl space-y-3 shadow-lg">
+               <div className="p-5 bg-zinc-900/80 border border-[#D4AF37]/30 rounded-xl space-y-3 shadow-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-[#D4AF37]">Activity Log Health</span>
-                  <span className="text-lg font-mono font-bold text-emerald-400">{auditReport.realtimeScore}%</span>
+                  <span className="text-lg font-mono font-bold text-emerald-400">{auditReport.realtimeScore !== null ? `${auditReport.realtimeScore}%` : 'N/A'}</span>
                 </div>
                 <div className="w-full bg-zinc-950 h-2 rounded-full overflow-hidden border border-white/10">
-                  <div className="bg-[#D4AF37] h-full rounded-full" style={{ width: `${auditReport.realtimeScore}%` }} />
+                  <div className="bg-[#D4AF37] h-full rounded-full" style={{ width: `${auditReport.realtimeScore ?? 0}%` }} />
                 </div>
                 <p className="text-xs text-zinc-400 font-sans leading-relaxed">
                   System activities and enterprise event notifications are fully operational and synchronized.
@@ -388,19 +388,21 @@ export default function EnterpriseNotificationCenter({
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-zinc-950 border border-white/10 rounded-xl space-y-1">
                   <span className="text-xs text-zinc-500">Coverage</span>
-                  <p className="text-lg font-bold text-white">{auditReport.coveragePercentage}%</p>
+                  <p className="text-lg font-bold text-white">{auditReport.coveragePercentage !== null ? `${auditReport.coveragePercentage}%` : 'N/A'}</p>
                   <span className="text-[11px] text-emerald-400">19 Channels Active</span>
                 </div>
 
                 <div className="p-4 bg-zinc-950 border border-white/10 rounded-xl space-y-1">
                   <span className="text-xs text-zinc-500">Response Speed</span>
-                  <p className="text-lg font-bold text-white">{auditReport.averageLatencyMs} ms</p>
+                  <p className="text-lg font-bold text-white">{auditReport.averageLatencyMs !== null ? `${auditReport.averageLatencyMs} ms` : 'N/A'}</p>
                   <span className="text-[11px] text-emerald-400">Optimal</span>
                 </div>
 
                 <div className="p-4 bg-zinc-950 border border-white/10 rounded-xl space-y-1">
                   <span className="text-xs text-zinc-500">Total Activities</span>
-                  <p className="text-lg font-bold text-white">{auditReport.totalEventsProcessed.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-white">
+                    {auditReport.totalEventsProcessed !== null ? auditReport.totalEventsProcessed.toLocaleString() : 'N/A'}
+                  </p>
                   <span className="text-[11px] text-zinc-400">Logged</span>
                 </div>
 
