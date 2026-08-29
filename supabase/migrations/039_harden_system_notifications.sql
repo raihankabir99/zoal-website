@@ -4,8 +4,9 @@
 
 BEGIN;
 
--- Reconcile the minimal live table with the enterprise notification contract.
+-- Reconcile the live table with the enterprise notification contract.
 ALTER TABLE public.zoal_notifications
+  ADD COLUMN IF NOT EXISTS user_email text,
   ADD COLUMN IF NOT EXISTS assigned_staff_id text,
   ADD COLUMN IF NOT EXISTS category text,
   ADD COLUMN IF NOT EXISTS priority text DEFAULT 'medium',
