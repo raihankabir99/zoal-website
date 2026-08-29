@@ -4,6 +4,9 @@ import { filterNotificationsByRole } from '../rbac/notificationRbac';
 import { supabaseClient } from './supabaseClient';
 
 function seedInitialNotifications(currentUser: any): EnterpriseNotification[] {
+  if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
+    return [];
+  }
   if (!currentUser) return [];
   const role = (currentUser.role || 'customer').toLowerCase();
   const userId = currentUser.id || currentUser.email || 'usr-1';
@@ -11,9 +14,6 @@ function seedInitialNotifications(currentUser: any): EnterpriseNotification[] {
   const now = Date.now();
 
   if (role === 'customer') {
-    if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
-      return [];
-    }
     return [
       {
         id: `notif-cust-1-${userId}`,
@@ -330,57 +330,108 @@ export function useNotificationEngine(currentUser: any) {
   }, [userNotifications]);
 
   const markAsRead = useCallback(async (id: string) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
+    let previousState: EnterpriseNotification[] = [];
+    setNotifications(prev => {
+      previousState = prev;
+      return prev.map(n => (n.id === id ? { ...n, read: true } : n));
+    });
     try {
-      await supabaseClient.from('zoal_notifications').update({ read: true }).eq('id', id);
-    } catch (e) {
-      // ignore
+      const { error } = await supabaseClient.from('zoal_notifications').update({ read: true }).eq('id', id);
+      if (error) {
+        setNotifications(previousState);
+        console.error('Failed to mark notification as read in DB:', error.message);
+        throw error;
+      }
+    } catch (e: any) {
+      setNotifications(previousState);
+      console.error('Error in markAsRead:', e);
+      throw e;
     }
   }, []);
 
   const markAllAsRead = useCallback(async () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    let previousState: EnterpriseNotification[] = [];
+    setNotifications(prev => {
+      previousState = prev;
+      return prev.map(n => ({ ...n, read: true }));
+    });
     try {
       const ids = userNotifications.map(n => n.id);
       if (ids.length > 0) {
-        await supabaseClient.from('zoal_notifications').update({ read: true }).in('id', ids);
+        const { error } = await supabaseClient.from('zoal_notifications').update({ read: true }).in('id', ids);
+        if (error) {
+          setNotifications(previousState);
+          console.error('Failed to mark all notifications as read in DB:', error.message);
+          throw error;
+        }
       }
-    } catch (e) {
-      // ignore
+    } catch (e: any) {
+      setNotifications(previousState);
+      console.error('Error in markAllAsRead:', e);
+      throw e;
     }
   }, [userNotifications]);
 
   const archiveNotification = useCallback(async (id: string) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, archived: true } : n))
-    );
+    let previousState: EnterpriseNotification[] = [];
+    setNotifications(prev => {
+      previousState = prev;
+      return prev.map(n => (n.id === id ? { ...n, archived: true } : n));
+    });
     try {
-      await supabaseClient.from('zoal_notifications').update({ archived: true }).eq('id', id);
-    } catch (e) {
-      // ignore
+      const { error } = await supabaseClient.from('zoal_notifications').update({ archived: true }).eq('id', id);
+      if (error) {
+        setNotifications(previousState);
+        console.error('Failed to archive notification in DB:', error.message);
+        throw error;
+      }
+    } catch (e: any) {
+      setNotifications(previousState);
+      console.error('Error in archiveNotification:', e);
+      throw e;
     }
   }, []);
 
   const deleteNotification = useCallback(async (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    let previousState: EnterpriseNotification[] = [];
+    setNotifications(prev => {
+      previousState = prev;
+      return prev.filter(n => n.id !== id);
+    });
     try {
-      await supabaseClient.from('zoal_notifications').delete().eq('id', id);
-    } catch (e) {
-      // ignore
+      const { error } = await supabaseClient.from('zoal_notifications').delete().eq('id', id);
+      if (error) {
+        setNotifications(previousState);
+        console.error('Failed to delete notification from DB:', error.message);
+        throw error;
+      }
+    } catch (e: any) {
+      setNotifications(previousState);
+      console.error('Error in deleteNotification:', e);
+      throw e;
     }
   }, []);
 
   const clearAll = useCallback(async () => {
+    let previousState: EnterpriseNotification[] = [];
     const idsToClear = userNotifications.map(n => n.id);
-    setNotifications(prev => prev.filter(n => !idsToClear.includes(n.id)));
+    setNotifications(prev => {
+      previousState = prev;
+      return prev.filter(n => !idsToClear.includes(n.id));
+    });
     try {
       if (idsToClear.length > 0) {
-        await supabaseClient.from('zoal_notifications').delete().in('id', idsToClear);
+        const { error } = await supabaseClient.from('zoal_notifications').delete().in('id', idsToClear);
+        if (error) {
+          setNotifications(previousState);
+          console.error('Failed to clear notifications from DB:', error.message);
+          throw error;
+        }
       }
-    } catch (e) {
-      // ignore
+    } catch (e: any) {
+      setNotifications(previousState);
+      console.error('Error in clearAll:', e);
+      throw e;
     }
   }, [userNotifications]);
 
@@ -403,12 +454,23 @@ export function useNotificationEngine(currentUser: any) {
       metadata: newNotif.metadata
     };
 
-    setNotifications(prev => [notifObj, ...prev]);
+    let previousState: EnterpriseNotification[] = [];
+    setNotifications(prev => {
+      previousState = prev;
+      return [notifObj, ...prev];
+    });
 
     try {
-      await supabaseClient.from('zoal_notifications').insert([notifObj]);
-    } catch (e) {
-      // ignore
+      const { error } = await supabaseClient.from('zoal_notifications').insert([notifObj]);
+      if (error) {
+        setNotifications(previousState);
+        console.error('Failed to insert notification into DB:', error.message);
+        throw error;
+      }
+    } catch (e: any) {
+      setNotifications(previousState);
+      console.error('Error in addNotification:', e);
+      throw e;
     }
   }, [currentUser]);
 
