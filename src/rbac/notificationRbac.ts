@@ -1,58 +1,49 @@
 import { EnterpriseNotification } from '../types/notification';
 
+type NotificationUser = { id?: string; email?: string; role?: string } | null;
+
 export function filterNotificationsByRole(
   notifications: EnterpriseNotification[],
-  currentUser: { id?: string; email?: string; role?: string } | null
+  currentUser: NotificationUser
 ): EnterpriseNotification[] {
   if (!currentUser) return [];
+
   const userRole = (currentUser.role || 'customer').toLowerCase();
   const userId = currentUser.id || currentUser.email;
   const userEmail = currentUser.email?.toLowerCase();
 
-  return notifications.filter(n => {
-    // 1. Strict explicit ownership: if notification belongs to a specific user_id or user_email
-    if (n.user_id && n.user_id === userId) return true;
-    if (n.user_email && userEmail && n.user_email.toLowerCase() === userEmail) return true;
+  return notifications.filter((n) => {
+    // Explicit user ownership always wins, but a notification explicitly
+    // addressed to another user must never leak through role visibility.
+    if (n.user_id) return n.user_id === userId;
+    if (n.user_email) return !!userEmail && n.user_email.toLowerCase() === userEmail;
 
-    // Reject if it is explicitly addressed to a different user_id or user_email
-    if (n.user_id && n.user_id !== userId) return false;
-    if (n.user_email && userEmail && n.user_email.toLowerCase() !== userEmail) return false;
+    const targetRole = (n.target_role || '').toLowerCase();
+    const assignedStaffId = n.assigned_staff_id;
 
-    // 2. Customer Isolation:
     if (userRole === 'customer') {
-      // Must NOT see any internal operational alerts
+      if (targetRole && targetRole !== 'customer' && targetRole !== 'all') return false;
       if (['Inventory Alert', 'Security Alert', 'Revenue Alert', 'System Alert', 'Staff Task', 'Internal Audit'].includes(n.category)) {
         return false;
       }
-      if (n.target_role && n.target_role !== 'customer' && n.target_role !== 'all') {
-        return false;
-      }
       return true;
     }
 
-    // 3. Staff Isolation:
     if (userRole === 'staff') {
-      // Must NOT see another staff member's private notifications
-      if (n.assigned_staff_id && n.assigned_staff_id !== userId) {
-        return false;
-      }
-      if (n.target_role === 'owner') return false;
-      if (n.target_role === 'staff' || n.target_role === 'all') return true;
-      return true;
+      if (assignedStaffId && assignedStaffId !== userId) return false;
+      if (targetRole === 'owner' || targetRole === 'admin') return false;
+      return !targetRole || targetRole === 'staff' || targetRole === 'all';
     }
 
-    // 4. Admin Isolation:
-    if (userRole === 'admin') {
-      // Must NOT see Owner private executive revenue alerts
-      if (n.target_role === 'owner') return false;
-      return true;
+    if (userRole === 'admin' || userRole === 'manager') {
+      if (assignedStaffId && assignedStaffId !== userId) return false;
+      if (targetRole === 'owner') return false;
+      if (targetRole === 'staff' && userRole === 'admin') return false;
+      return !targetRole || targetRole === 'admin' || targetRole === 'all';
     }
 
-    // 5. Owner Visibility:
-    if (userRole === 'owner') {
-      return true;
-    }
+    if (userRole === 'owner') return true;
 
-    return true;
+    return false;
   });
 }
