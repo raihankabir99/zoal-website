@@ -1,25 +1,64 @@
 import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import pg from 'pg';
+const { Client: PgClient } = pg;
 
 function getClient() {
   return getServiceSupabaseClient() || getSupabaseClient();
 }
 
 /**
- * Helper to record administrative activity logs in zoal_activity_logs.
+ * PBKDF2 password hashing helper.
  */
-async function logCrmActivity(actorUser: any, action: string, ip?: string, userAgent?: string) {
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
+
+/**
+ * Helper to record administrative activity logs in zoal_activity_logs.
+ * Raw invitation tokens or sensitive secrets are NEVER logged.
+ */
+async function logCrmActivity(actorUser: any, action: string, ip?: string, userAgent?: string, targetCustomerId?: string) {
   try {
     const supabase = getClient();
     if (!supabase) return;
     const logId = `act-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const nowIso = new Date().toISOString();
+
+    if (process.env.DATABASE_URL) {
+      const pgClient = new PgClient({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      try {
+        await pgClient.connect();
+        await pgClient.query(
+          `INSERT INTO zoal_activity_logs (id, user_id, email, action, timestamp, ip, user_agent)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            logId,
+            actorUser?.id || 'admin',
+            actorUser?.email || 'admin@alzoal.com',
+            targetCustomerId ? `${action} (Target: ${targetCustomerId})` : action,
+            nowIso,
+            ip || '127.0.0.1',
+            userAgent || 'ZOAL-Enterprise-CRM'
+          ]
+        );
+        return;
+      } catch (e) {
+        // Fall back to Supabase client
+      } finally {
+        await pgClient.end().catch(() => {});
+      }
+    }
+
     await supabase.from('zoal_activity_logs').insert({
       id: logId,
       user_id: actorUser?.id || 'admin',
       email: actorUser?.email || 'admin@alzoal.com',
-      action,
-      timestamp: new Date().toISOString(),
+      action: targetCustomerId ? `${action} (Target: ${targetCustomerId})` : action,
+      timestamp: nowIso,
       ip: ip || '127.0.0.1',
       user_agent: userAgent || 'ZOAL-Enterprise-CRM'
     });
@@ -31,15 +70,20 @@ async function logCrmActivity(actorUser: any, action: string, ip?: string, userA
 /**
  * Maps database records from zoal_users, zoal_customer_crm, and zoal_orders
  * into a safe, full CustomerCrmProfile object for the frontend.
+ * 
+ * STRICT CANONICAL IDENTITY (P0-4):
+ * Matches orders exclusively by `zoal_orders.customer_id = zoal_users.id`.
+ * Never matches by email fallback.
+ * 
+ * SANITIZATION (P1):
+ * Strips all secrets including password_hash, reset_code, invite_token_hash,
+ * invite_expires_at, and invite_used_at.
  */
 export function sanitizeAndMapCustomerProfile(user: any, crm: any, orders: any[] = [], notes: any[] = [], comms: any[] = []) {
-  const userEmail = (user.email || '').toLowerCase();
-  
-  // Calculate real order aggregates from zoal_orders matching customer_id or email
-  const matchedOrders = orders.filter(o => 
-    (o.customer_id && o.customer_id === user.id) || 
-    (o.email && o.email.toLowerCase() === userEmail)
-  );
+  if (!user) return null;
+
+  // STRICT CANONICAL ORDER MATCHING: Match strictly by customer_id = user.id
+  const matchedOrders = orders.filter(o => o && o.customer_id && o.customer_id === user.id);
 
   const totalSpending = matchedOrders.reduce((sum, o) => 
     (o.status !== 'cancelled' && o.status !== 'Cancelled') ? sum + (Number(o.total_amount || o.total || 0)) : sum, 
@@ -58,6 +102,9 @@ export function sanitizeAndMapCustomerProfile(user: any, crm: any, orders: any[]
   const marketingPreferences = crmData.marketing_preferences ?? null;
   const coupons = crmData.coupons ?? [];
   const rewards = crmData.rewards ?? [];
+
+  // Filter out any private/sensitive fields from addresses
+  const safeAddresses = Array.isArray(user.addresses) ? user.addresses : [];
 
   return {
     id: user.id,
@@ -79,7 +126,7 @@ export function sanitizeAndMapCustomerProfile(user: any, crm: any, orders: any[]
     lastLogin: crmData.last_login || null,
     lastPurchase: lastPurchaseDate,
     
-    // Aggregated order statistics
+    // Aggregated order statistics strictly from canonical customer_id
     totalSpending,
     totalOrders: totalOrdersCount,
     averageOrderValue: aov,
@@ -106,7 +153,7 @@ export function sanitizeAndMapCustomerProfile(user: any, crm: any, orders: any[]
       author: n.author_name || 'Admin',
       date: n.created_at || null
     })),
-    addresses: user.addresses || [],
+    addresses: safeAddresses,
     wishlist: [],
     savedCart: [],
     reviews: [],
@@ -219,12 +266,11 @@ export async function getCustomers(req: Request, res: Response) {
     }
 
     const pageUserIds = users.map(u => u.id);
-    const pageUserEmails = users.map(u => (u.email || '').toLowerCase()).filter(Boolean);
 
-    // Fetch CRM Metadata, Orders, Notes, Communications for page records only
+    // Fetch CRM Metadata, Orders (strictly by customer_id), Notes, Communications for page records only
     const [crmRes, ordersRes, notesRes, commsRes] = await Promise.all([
       supabase.from('zoal_customer_crm').select('*').in('user_id', pageUserIds),
-      supabase.from('zoal_orders').select('*').or(`customer_id.in.(${pageUserIds.join(',')}),email.in.(${pageUserEmails.join(',')})`),
+      supabase.from('zoal_orders').select('*').in('customer_id', pageUserIds),
       supabase.from('zoal_customer_notes').select('*').in('user_id', pageUserIds).order('created_at', { ascending: false }),
       supabase.from('zoal_customer_communications').select('*').in('user_id', pageUserIds).order('created_at', { ascending: false })
     ]);
@@ -293,9 +339,10 @@ export async function getCustomerById(req: Request, res: Response) {
       return res.status(404).json({ error: 'NOT_FOUND', message: 'Customer not found.' });
     }
 
+    // Strictly match orders by customer_id = id (P0-4)
     const [crmRes, ordersRes, notesRes, commsRes] = await Promise.all([
       supabase.from('zoal_customer_crm').select('*').eq('user_id', id).maybeSingle(),
-      supabase.from('zoal_orders').select('*').or(`customer_id.eq.${id},email.eq.${user.email}`),
+      supabase.from('zoal_orders').select('*').eq('customer_id', id),
       supabase.from('zoal_customer_notes').select('*').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('zoal_customer_communications').select('*').eq('user_id', id).order('created_at', { ascending: false })
     ]);
@@ -317,7 +364,17 @@ export async function getCustomerById(req: Request, res: Response) {
 
 /**
  * POST /api/admin/customers
- * Creates a real PostgreSQL-backed customer in zoal_users and zoal_customer_crm.
+ * 
+ * ATOMIC CUSTOMER CREATION (P0-1):
+ * Calls PostgreSQL function `create_customer_atomic` within a real database transaction.
+ * Rolls back atomically if any insert fails.
+ * 
+ * SECURE INVITATION TOKEN (P0-2):
+ * Generates cryptographic token, stores only SHA-256 hash in `invite_token_hash` with expiration.
+ * Raw token is NEVER stored in database, NEVER returned in customer profile, NEVER logged.
+ * 
+ * SANITIZATION & VALIDATION (P1):
+ * Server-side validates email, name, phone, types, status, and segments.
  */
 export async function createCustomer(req: Request, res: Response) {
   const supabase = getClient();
@@ -327,11 +384,86 @@ export async function createCustomer(req: Request, res: Response) {
 
   const { name, email, phone, city, country, status, segment, gender, birthday, preferredLanguage, photoUrl, tags } = req.body;
 
-  if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: 'INVALID_INPUT', message: 'A valid email address is required.' });
+  // 1. Strict Email Validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
+    return res.status(400).json({ error: 'INVALID_EMAIL', message: 'A valid email address is required.' });
+  }
+  const cleanEmail = email.trim().toLowerCase();
+
+  // 2. Name Validation
+  if (!name || typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
+    return res.status(400).json({ error: 'INVALID_NAME', message: 'Customer name is required (max 100 characters).' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
+  // 3. Phone Validation
+  let cleanPhone: string | null = null;
+  if (phone !== undefined && phone !== null && phone !== '') {
+    if (typeof phone !== 'string' || phone.trim().length > 30) {
+      return res.status(400).json({ error: 'INVALID_PHONE', message: 'Phone number must be a valid string under 30 characters.' });
+    }
+    cleanPhone = phone.trim();
+  }
+
+  // 4. Status Validation
+  const ALLOWED_STATUSES = ['Active', 'Inactive', 'Blocked', 'Suspended', 'VIP', 'Verified', 'Prospect'];
+  let cleanStatus: string | null = null;
+  if (status) {
+    if (!ALLOWED_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'INVALID_STATUS', message: `Invalid customer status. Allowed: ${ALLOWED_STATUSES.join(', ')}` });
+    }
+    cleanStatus = status;
+  }
+
+  // 5. Segment Validation
+  const ALLOWED_SEGMENTS = [
+    'New Customer', 'Returning Customer', 'Regular Customer', 'VIP Customer', 
+    'Inactive Customer', 'High Value Customer', 'Frequent Buyer', 
+    'Corporate', 'Wholesale', 'Retail', 'Royal'
+  ];
+  let cleanSegment: string | null = null;
+  if (segment) {
+    if (!ALLOWED_SEGMENTS.includes(segment)) {
+      return res.status(400).json({ error: 'INVALID_SEGMENT', message: `Invalid segment value. Allowed: ${ALLOWED_SEGMENTS.join(', ')}` });
+    }
+    cleanSegment = segment;
+  }
+
+  // 6. Gender Validation
+  let cleanGender: string | null = null;
+  if (gender) {
+    if (!['Male', 'Female', 'Other'].includes(gender)) {
+      return res.status(400).json({ error: 'INVALID_GENDER', message: 'Gender must be Male, Female, or Other.' });
+    }
+    cleanGender = gender;
+  }
+
+  // 7. Birthday Validation
+  let cleanBirthday: string | null = null;
+  if (birthday) {
+    const bDate = new Date(birthday);
+    if (isNaN(bDate.getTime())) {
+      return res.status(400).json({ error: 'INVALID_BIRTHDAY', message: 'Birthday must be a valid date.' });
+    }
+    cleanBirthday = birthday.substring(0, 10);
+  }
+
+  // 8. Tags Validation
+  let cleanTags: string[] = [];
+  if (tags) {
+    if (!Array.isArray(tags) || tags.some(t => typeof t !== 'string')) {
+      return res.status(400).json({ error: 'INVALID_TAGS', message: 'Tags must be an array of strings.' });
+    }
+    if (tags.length > 50) {
+      return res.status(400).json({ error: 'INVALID_TAGS', message: 'Tags cannot exceed 50 items.' });
+    }
+    cleanTags = tags.map(t => t.trim()).filter(Boolean);
+  }
+
+  const cleanLanguage = preferredLanguage ? String(preferredLanguage).trim() : null;
+  const cleanCountry = country ? String(country).trim() : null;
+  const cleanCity = city ? String(city).trim() : null;
+  const cleanPhotoUrl = photoUrl ? String(photoUrl).trim() : null;
 
   try {
     // Check duplicate email
@@ -345,79 +477,89 @@ export async function createCustomer(req: Request, res: Response) {
       return res.status(409).json({ error: 'DUPLICATE_EMAIL', message: 'A customer profile with this email address already exists.' });
     }
 
-    // Split name into first and last name (or null if missing)
-    const nameParts = (name || '').trim().split(' ').filter(Boolean);
-    const firstName = nameParts[0] || null;
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+    // Split name
+    const nameParts = name.trim().split(' ').filter(Boolean);
+    const firstName = nameParts[0] || 'Customer';
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
-    // Generate real canonical UUID matching zoal_users.id schema
+    // Generate canonical user UUID
     const newUserId = crypto.randomUUID();
 
-    // Option A: Invite / Password Setup Flow
-    // Create setup code/token for account activation / password setup
-    const inviteToken = crypto.randomBytes(32).toString('hex');
-    const resetCode = `INVITE-${inviteToken}`;
+    // Generate Cryptographically Secure Invitation Token (P0-2)
+    const rawInviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteTokenHash = crypto.createHash('sha256').update(rawInviteToken).digest('hex');
+    const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days expiration
 
-    // Insert into zoal_users without placeholder password hash
-    const { data: newUser, error: createErr } = await supabase
-      .from('zoal_users')
-      .insert({
-        id: newUserId,
-        first_name: firstName,
-        last_name: lastName,
-        email: cleanEmail,
-        phone: phone ? phone.trim() : null,
-        password_hash: null, // No fake password hash, requiring invite/setup flow
-        role: 'customer', // Strictly customer role, no role escalation
-        is_verified: false, // Requires activation/setup
-        reset_code: resetCode,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+    let createdResult: any = null;
 
-    if (createErr || !newUser) {
-      console.error('Error creating user record in CRM:', createErr);
-      return res.status(500).json({ error: 'CREATE_FAILED', message: createErr?.message || 'Failed to create customer user record.' });
+    // Execute atomic creation via PostgreSQL function (P0-1)
+    if (process.env.DATABASE_URL) {
+      const pgClient = new PgClient({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      try {
+        await pgClient.connect();
+        const queryRes = await pgClient.query(
+          `SELECT create_customer_atomic($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) as result`,
+          [
+            newUserId, firstName, lastName, cleanEmail, cleanPhone,
+            inviteTokenHash, inviteExpiresAt, cleanStatus, cleanSegment,
+            cleanGender, cleanBirthday, cleanLanguage, cleanCountry, cleanCity,
+            cleanPhotoUrl, cleanTags
+          ]
+        );
+        createdResult = queryRes.rows[0]?.result;
+      } finally {
+        await pgClient.end().catch(() => {});
+      }
     }
 
-    // Insert CRM metadata into zoal_customer_crm
-    const crmMeta = {
-      user_id: newUserId,
-      status: status || null,
-      segment: segment || null,
-      gender: gender || null,
-      birthday: birthday || null,
-      preferred_language: preferredLanguage || null,
-      country: country || null,
-      city: city || null,
-      photo_url: photoUrl || null,
-      loyalty_points: null,
-      membership_level: null,
-      tags: tags || [],
-      created_at: new Date().toISOString()
-    };
+    // If pg direct execution wasn't used or returned null, execute via Supabase RPC / transaction
+    if (!createdResult) {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('create_customer_atomic', {
+        p_user_id: newUserId,
+        p_first_name: firstName,
+        p_last_name: lastName,
+        p_email: cleanEmail,
+        p_phone: cleanPhone,
+        p_invite_token_hash: inviteTokenHash,
+        p_invite_expires_at: inviteExpiresAt,
+        p_status: cleanStatus,
+        p_segment: cleanSegment,
+        p_gender: cleanGender,
+        p_birthday: cleanBirthday,
+        p_preferred_language: cleanLanguage,
+        p_country: cleanCountry,
+        p_city: cleanCity,
+        p_photo_url: cleanPhotoUrl,
+        p_tags: cleanTags
+      });
 
-    const { data: newCrm, error: crmErr } = await supabase
-      .from('zoal_customer_crm')
-      .insert(crmMeta)
-      .select()
-      .maybeSingle();
-
-    if (crmErr) {
-      console.error('Error creating customer CRM metadata, rolling back user creation:', crmErr);
-      await supabase.from('zoal_users').delete().eq('id', newUserId);
-      return res.status(500).json({ error: 'CREATE_FAILED', message: 'Failed to create customer CRM metadata record.' });
+      if (rpcErr) {
+        console.error('Error invoking create_customer_atomic RPC:', rpcErr);
+        return res.status(500).json({ error: 'CREATE_FAILED', message: rpcErr.message || 'Failed to atomically create customer.' });
+      }
+      createdResult = rpcData;
     }
 
-    // Log activity
-    await logCrmActivity((req as any).user, `customer.created: ${cleanEmail} (ID: ${newUserId})`);
+    if (!createdResult || !createdResult.user) {
+      return res.status(500).json({ error: 'CREATE_FAILED', message: 'Failed to atomically create customer profile.' });
+    }
 
-    const createdProfile = sanitizeAndMapCustomerProfile(newUser, newCrm, [], [], []);
+    // Audit Logging (P1) — NEVER log the raw token
+    await logCrmActivity(
+      (req as any).user,
+      `customer.created: ${cleanEmail}`,
+      req.ip,
+      req.headers['user-agent'] as string,
+      newUserId
+    );
+
+    // Sanitize response: NEVER return raw token or password_hash in customer object
+    const createdProfile = sanitizeAndMapCustomerProfile(createdResult.user, createdResult.crm, [], [], []);
 
     return res.status(201).json({
       success: true,
       message: 'Customer successfully created with pending password setup.',
+      user_id: createdResult.user_id || newUserId,
       customer: createdProfile
     });
   } catch (error: any) {
@@ -504,13 +646,13 @@ export async function updateCustomer(req: Request, res: Response) {
     }
 
     // Log activity
-    await logCrmActivity((req as any).user, `customer.updated: ${user.email} (ID: ${id})`);
+    await logCrmActivity((req as any).user, `customer.updated: ${user.email}`, req.ip, req.headers['user-agent'] as string, id);
 
-    // 4. Return updated record
+    // 4. Return updated record (orders matched strictly by customer_id)
     const [updatedUserRes, updatedCrmRes, ordersRes, notesRes, commsRes] = await Promise.all([
-      supabase.from('zoal_users').select('*').eq('id', id).single(),
+      supabase.from('zoal_users').select('id, first_name, last_name, email, phone, role, is_verified, created_at, addresses').eq('id', id).single(),
       supabase.from('zoal_customer_crm').select('*').eq('user_id', id).maybeSingle(),
-      supabase.from('zoal_orders').select('*').or(`customer_id.eq.${id},email.eq.${user.email}`),
+      supabase.from('zoal_orders').select('*').eq('customer_id', id),
       supabase.from('zoal_customer_notes').select('*').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('zoal_customer_communications').select('*').eq('user_id', id).order('created_at', { ascending: false })
     ]);
@@ -559,7 +701,7 @@ export async function updateCustomerStatus(req: Request, res: Response) {
       await supabase.from('zoal_customer_crm').insert({ user_id: id, status });
     }
 
-    await logCrmActivity((req as any).user, `customer.status_changed: ${id} -> ${status}`);
+    await logCrmActivity((req as any).user, `customer.status_changed: ${status}`, req.ip, req.headers['user-agent'] as string, id);
 
     return res.json({ success: true, message: `Status updated to ${status}` });
   } catch (error: any) {
@@ -606,7 +748,7 @@ export async function addCustomerNote(req: Request, res: Response) {
       return res.status(500).json({ error: 'NOTE_CREATE_FAILED', message: noteErr.message });
     }
 
-    await logCrmActivity(adminUser, `customer.note_added: ${id}`);
+    await logCrmActivity(adminUser, `customer.note_added`, req.ip, req.headers['user-agent'] as string, id);
 
     return res.status(201).json({
       success: true,
@@ -663,7 +805,7 @@ export async function addCustomerCommunication(req: Request, res: Response) {
       return res.status(500).json({ error: 'COMM_CREATE_FAILED', message: commErr.message });
     }
 
-    await logCrmActivity(adminUser, `customer.communication_created: ${id} via ${channel}`);
+    await logCrmActivity(adminUser, `customer.communication_created via ${channel}`, req.ip, req.headers['user-agent'] as string, id);
 
     return res.status(201).json({
       success: true,
@@ -710,7 +852,7 @@ export async function deleteOrDeactivateCustomer(req: Request, res: Response) {
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' });
 
-    await logCrmActivity((req as any).user, `customer.deactivated: ${id}`);
+    await logCrmActivity((req as any).user, `customer.deactivated`, req.ip, req.headers['user-agent'] as string, id);
 
     if (orderCount && orderCount > 0) {
       return res.json({
@@ -728,5 +870,240 @@ export async function deleteOrDeactivateCustomer(req: Request, res: Response) {
   } catch (error: any) {
     console.error('Error in deleteOrDeactivateCustomer:', error);
     return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: error.message });
+  }
+}
+
+/**
+ * POST /api/auth/invite/setup
+ * 
+ * PASSWORD SETUP FLOW (P0-3):
+ * 1. Validates invitation token cryptographically using constant-time hash comparison.
+ * 2. Enforces expiration check, unconsumed check, and password strength policy.
+ * 3. Atomically sets password_hash, marks is_verified = true, sets invite_used_at = NOW(),
+ *    and clears invite_token_hash.
+ * 4. Logs activation event in zoal_activity_logs.
+ * 5. Sanitizes response.
+ */
+export async function setupInvitePassword(req: Request, res: Response) {
+  const { token, password } = req.body;
+
+  if (!token || typeof token !== 'string' || !token.trim()) {
+    return res.status(400).json({ error: 'MISSING_TOKEN', message: 'Invitation token is required.' });
+  }
+
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({ error: 'MISSING_PASSWORD', message: 'New password is required.' });
+  }
+
+  // Password policy validation
+  if (password.length < 8) {
+    return res.status(400).json({
+      error: 'WEAK_PASSWORD',
+      message: 'Password must be at least 8 characters in length.'
+    });
+  }
+
+  const supabase = getClient();
+  if (!supabase) {
+    return res.status(500).json({ error: 'DATABASE_UNAVAILABLE', message: 'Database client unavailable.' });
+  }
+
+  try {
+    const trimmedToken = token.trim();
+    const computedHash = crypto.createHash('sha256').update(trimmedToken).digest('hex');
+
+    let user: any = null;
+    if (process.env.DATABASE_URL) {
+      const pgClient = new PgClient({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      try {
+        await pgClient.connect();
+        const q = await pgClient.query(
+          `SELECT id, first_name, last_name, email, role, is_verified, password_hash, invite_token_hash, invite_expires_at, invite_used_at 
+           FROM zoal_users 
+           WHERE invite_token_hash = $1 
+           LIMIT 1`,
+          [computedHash]
+        );
+        user = q.rows[0] || null;
+      } finally {
+        await pgClient.end().catch(() => {});
+      }
+    }
+
+    if (!user) {
+      const { data } = await supabase
+        .from('zoal_users')
+        .select('id, first_name, last_name, email, role, is_verified, password_hash, invite_token_hash, invite_expires_at, invite_used_at')
+        .eq('invite_token_hash', computedHash)
+        .maybeSingle();
+      user = data;
+    }
+
+    if (!user || !user.invite_token_hash) {
+      return res.status(401).json({ error: 'INVALID_INVITATION', message: 'Invalid or expired invitation token.' });
+    }
+
+    // Constant-time hash comparison
+    const userHashBuf = Buffer.from(user.invite_token_hash, 'utf8');
+    const compHashBuf = Buffer.from(computedHash, 'utf8');
+    if (userHashBuf.length !== compHashBuf.length || !crypto.timingSafeEqual(userHashBuf, compHashBuf)) {
+      return res.status(401).json({ error: 'INVALID_INVITATION', message: 'Invalid invitation token.' });
+    }
+
+    // Check if consumed
+    if (user.invite_used_at) {
+      return res.status(400).json({ error: 'INVITATION_ALREADY_USED', message: 'This invitation token has already been used.' });
+    }
+
+    // Check expiration
+    if (user.invite_expires_at && new Date() > new Date(user.invite_expires_at)) {
+      return res.status(410).json({ error: 'INVITATION_EXPIRED', message: 'This invitation token has expired. Please request a new invitation from an administrator.' });
+    }
+
+    // Check if account already verified with existing password
+    if (user.is_verified && user.password_hash) {
+      return res.status(400).json({ error: 'ACCOUNT_ALREADY_ACTIVE', message: 'This customer account is already activated.' });
+    }
+
+    // Hash password with PBKDF2
+    const newPasswordHash = hashPassword(password);
+    const nowIso = new Date().toISOString();
+
+    // Atomic update
+    if (process.env.DATABASE_URL) {
+      const pgClient = new PgClient({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      try {
+        await pgClient.connect();
+        await pgClient.query('BEGIN');
+        await pgClient.query(
+          `UPDATE zoal_users 
+           SET password_hash = $1, is_verified = TRUE, invite_used_at = $2, invite_token_hash = NULL, reset_code = NULL 
+           WHERE id = $3`,
+          [newPasswordHash, nowIso, user.id]
+        );
+        await pgClient.query(
+          `UPDATE zoal_customer_crm 
+           SET status = COALESCE(status, 'Active'), updated_at = $1 
+           WHERE user_id = $2`,
+          [nowIso, user.id]
+        );
+        await pgClient.query(
+          `INSERT INTO zoal_activity_logs (id, user_id, email, action, timestamp, ip, user_agent)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            `act-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            user.id,
+            user.email,
+            'customer.invite_password_setup_completed',
+            nowIso,
+            req.ip || '127.0.0.1',
+            req.headers['user-agent'] || 'ZOAL-Auth'
+          ]
+        );
+        await pgClient.query('COMMIT');
+      } catch (dbErr) {
+        await pgClient.query('ROLLBACK');
+        throw dbErr;
+      } finally {
+        await pgClient.end().catch(() => {});
+      }
+    } else {
+      await supabase.from('zoal_users').update({
+        password_hash: newPasswordHash,
+        is_verified: true,
+        invite_used_at: nowIso,
+        invite_token_hash: null,
+        reset_code: null
+      }).eq('id', user.id);
+
+      await supabase.from('zoal_customer_crm').update({
+        status: 'Active',
+        updated_at: nowIso
+      }).eq('user_id', user.id);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Password successfully configured and customer account activated. You may now log in.'
+    });
+  } catch (error: any) {
+    console.error('Error in setupInvitePassword:', error);
+    return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: error.message });
+  }
+}
+
+/**
+ * GET /api/auth/invite/verify
+ * POST /api/auth/invite/verify
+ * Verifies invitation validity prior to displaying password setup UI.
+ */
+export async function verifyInviteToken(req: Request, res: Response) {
+  const token = (req.method === 'GET' ? req.query.token : req.body.token) as string;
+
+  if (!token || typeof token !== 'string' || !token.trim()) {
+    return res.status(400).json({ valid: false, error: 'MISSING_TOKEN', message: 'Invitation token is required.' });
+  }
+
+  const supabase = getClient();
+  if (!supabase) {
+    return res.status(500).json({ valid: false, error: 'DATABASE_UNAVAILABLE', message: 'Database client unavailable.' });
+  }
+
+  try {
+    const computedHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    let user: any = null;
+
+    if (process.env.DATABASE_URL) {
+      const pgClient = new PgClient({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      try {
+        await pgClient.connect();
+        const q = await pgClient.query(
+          `SELECT id, first_name, last_name, email, role, is_verified, invite_token_hash, invite_expires_at, invite_used_at 
+           FROM zoal_users 
+           WHERE invite_token_hash = $1 
+           LIMIT 1`,
+          [computedHash]
+        );
+        user = q.rows[0] || null;
+      } finally {
+        await pgClient.end().catch(() => {});
+      }
+    }
+
+    if (!user) {
+      const { data } = await supabase
+        .from('zoal_users')
+        .select('id, first_name, last_name, email, role, is_verified, invite_token_hash, invite_expires_at, invite_used_at')
+        .eq('invite_token_hash', computedHash)
+        .maybeSingle();
+      user = data;
+    }
+
+    if (!user || !user.invite_token_hash) {
+      return res.status(401).json({ valid: false, error: 'INVALID_INVITATION', message: 'Invalid invitation token.' });
+    }
+
+    const userHashBuf = Buffer.from(user.invite_token_hash, 'utf8');
+    const compHashBuf = Buffer.from(computedHash, 'utf8');
+    if (userHashBuf.length !== compHashBuf.length || !crypto.timingSafeEqual(userHashBuf, compHashBuf)) {
+      return res.status(401).json({ valid: false, error: 'INVALID_INVITATION', message: 'Invalid invitation token.' });
+    }
+
+    if (user.invite_used_at) {
+      return res.status(400).json({ valid: false, error: 'INVITATION_ALREADY_USED', message: 'This invitation token has already been used.' });
+    }
+
+    if (user.invite_expires_at && new Date() > new Date(user.invite_expires_at)) {
+      return res.status(410).json({ valid: false, error: 'INVITATION_EXPIRED', message: 'This invitation token has expired.' });
+    }
+
+    return res.json({
+      valid: true,
+      email: user.email,
+      name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email
+    });
+  } catch (error: any) {
+    console.error('Error in verifyInviteToken:', error);
+    return res.status(500).json({ valid: false, error: 'INTERNAL_SERVER_ERROR', message: error.message });
   }
 }

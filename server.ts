@@ -27,6 +27,7 @@ import * as operationsModule from './server/operations';
 import * as productImportModule from './server/product_import';
 import * as productsCrudModule from './server/products_crud';
 import * as warehousesModule from './server/warehouses';
+import * as crmModule from './server/crm';
 import pg from 'pg';
 import { resolveShippingOptions, calculateAuthoritativeShippingFee, getProvider, isMockShippingEnabled } from './server/shipping';
 const { Client } = pg;
@@ -2744,6 +2745,22 @@ app.get('/api/warehouses/:id', warehousesModule.getWarehouseById);
 app.post('/api/warehouses', warehousesModule.createWarehouse);
 app.put('/api/warehouses/:id', warehousesModule.updateWarehouse);
 app.delete('/api/warehouses/:id', warehousesModule.deleteWarehouse);
+
+// -------------------------------------------------------------
+// ENTERPRISE CUSTOMER CRM & INVITATION AUTHENTICATION API ROUTES
+// -------------------------------------------------------------
+app.post('/api/auth/invite/setup', crmModule.setupInvitePassword);
+app.post('/api/auth/invite/verify', crmModule.verifyInviteToken);
+app.get('/api/auth/invite/verify', crmModule.verifyInviteToken);
+
+app.get('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomers);
+app.get('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomerById);
+app.post('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.createCustomer);
+app.patch('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.updateCustomer);
+app.post('/api/admin/customers/:id/status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.updateCustomerStatus);
+app.post('/api/admin/customers/:id/notes', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.addCustomerNote);
+app.post('/api/admin/customers/:id/communications', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.addCustomerCommunication);
+app.delete('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.deleteOrDeactivateCustomer);
 
 // -------------------------------------------------------------
 // SUPPORT CENTER API ROUTES

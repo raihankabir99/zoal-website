@@ -4729,8 +4729,12 @@ app.get('/api/admin/products/import/logs', authenticateRequest, requireRole(['ad
 app.post('/api/admin/products/sync-verify', authenticateRequest, requireRole(['admin', 'staff']), productImportModule.syncAndVerifyProducts);
 
 // -------------------------------------------------------------
-// ENTERPRISE CUSTOMER CRM API ROUTES
+// ENTERPRISE CUSTOMER CRM & INVITATION AUTHENTICATION API ROUTES
 // -------------------------------------------------------------
+app.post('/api/auth/invite/setup', crmModule.setupInvitePassword);
+app.post('/api/auth/invite/verify', crmModule.verifyInviteToken);
+app.get('/api/auth/invite/verify', crmModule.verifyInviteToken);
+
 app.get('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomers);
 app.get('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomerById);
 app.post('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.createCustomer);
