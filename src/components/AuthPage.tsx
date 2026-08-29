@@ -447,6 +447,20 @@ export default function AuthPage({
       setSuccessMsg('Account registered successfully! Please confirm your email via the link sent to your inbox.');
       setTargetEmail(email);
       
+      // Notify Admin about new registration
+      try {
+        await supabaseClient.from('zoal_notifications').insert([{
+          title: 'New Customer Registered',
+          message: `${firstName.trim()} ${lastName.trim()} (${email.trim()}) has joined the platform.`,
+          category: 'Customer',
+          priority: 'medium',
+          target_role: 'admin',
+          timestamp: new Date().toISOString()
+        }]);
+      } catch (notifErr) {
+        console.warn('Silent failure on admin registration notification:', notifErr);
+      }
+      
       setTimeout(() => {
         clearMessages();
         setEmailOrPhone(email);

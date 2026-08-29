@@ -674,6 +674,9 @@ function AppContent() {
     localStorage.removeItem('zoal_wishlist');
     localStorage.removeItem('zoal_orders');
     localStorage.removeItem('zoal_notifications');
+    localStorage.removeItem('zoal_admin_notifications');
+    localStorage.removeItem('zoal_staff_notifications');
+    localStorage.removeItem('zoal_admin_notifications_v2');
     localStorage.removeItem('zoal_recent_orders');
     localStorage.removeItem('zoal_addresses');
 
@@ -948,6 +951,21 @@ function AppContent() {
     setOrders((prevOrders) =>
       prevOrders.map((o) => (o.id === orderId ? { ...o, status } : o))
     );
+
+    // Notify Customer about status change
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      notificationEngine.addNotification({
+        title: `Order Status Updated: ${status}`,
+        message: `Your order #${orderId} is now ${status}.`,
+        category: 'Order',
+        priority: 'medium',
+        target_role: 'customer',
+        user_id: (order as any).userId || (order as any).user_id || order.email,
+        user_email: order.email,
+        metadata: { orderId, status }
+      });
+    }
   };
 
   // Handle successful payments confirmation
@@ -962,6 +980,29 @@ function AppContent() {
     setCheckoutSuccessModalOpen(true);
     setCurrentPage('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Trigger System Notifications
+    // 1. Customer Notification
+    notificationEngine.addNotification({
+      title: 'Order Confirmed',
+      message: `Your order #${newOrder.id} has been placed successfully.`,
+      category: 'Order',
+      priority: 'high',
+      target_role: 'customer',
+      user_id: (currentUser as any)?.id || currentUser?.email,
+      user_email: currentUser?.email,
+      metadata: { orderId: newOrder.id }
+    });
+
+    // 2. Admin/Staff Notification
+    notificationEngine.addNotification({
+      title: 'New Enterprise Order',
+      message: `A new order #${newOrder.id} (${newOrder.total} SAR) has been received.`,
+      category: 'Order',
+      priority: 'high',
+      target_role: 'admin',
+      metadata: { orderId: newOrder.id }
+    });
 
     // Persist order to Supabase via backend proxy
     fetch('/api/orders/create', {
@@ -1495,6 +1536,7 @@ function AppContent() {
           {currentPage === 'payment-simulate' && (
             <div className="overflow-x-hidden max-w-full min-w-0">
               <PaymentSimulation
+                notificationEngine={notificationEngine}
                 onSuccess={(orderData) => {
                   // Clear the search query parameters so reloading doesn't trap the user
                   window.history.replaceState(null, document.title, window.location.pathname);

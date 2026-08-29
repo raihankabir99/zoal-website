@@ -16,6 +16,7 @@ import { Order } from '../types';
 import { formatCurrency } from '../utils';
 import { useBranding } from './BrandingContext';
 import { supabaseClient } from '../lib/supabaseClient';
+import { useNotificationEngine } from '../lib/notificationStore';
 
 // --- TS Interfaces ---
 export interface CustomerCrmProfile {
@@ -146,6 +147,8 @@ const SEED_CRM_CUSTOMERS: CustomerCrmProfile[] = [];
 
 export default function EnterpriseCrm({ currentUser, orders, addLog }: EnterpriseCrmProps) {
   const { settings } = useBranding();
+  const notificationEngine = useNotificationEngine(currentUser);
+
   // Localized RBAC Override Simulator for Preview/Reviewers
   const [activeRole, setActiveRole] = useState<string>(() => {
     return currentUser?.role || 'admin';
@@ -157,20 +160,13 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
   // Helper to trigger system alerts for the main Admin Dashboard
   const addAdminNotification = async (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info', category: string) => {
     try {
-      const newNotif = {
-        id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      await notificationEngine.addNotification({
         title,
         message,
-        timestamp: new Date().toISOString(),
         category,
         priority: type === 'error' ? 'high' : type === 'warning' ? 'medium' : 'low',
-        read: false,
-        archived: false,
-        target_role: 'admin',
-        user_id: currentUser?.id,
-        user_email: currentUser?.email
-      };
-      await supabaseClient.from('zoal_notifications').insert([newNotif]);
+        target_role: 'admin'
+      });
     } catch (e) {
       console.error('Failed to add admin notification:', e);
     }
