@@ -273,8 +273,6 @@ export default function Dashboards({
     });
   };
 
-  const [staffNotifications, setStaffNotifications] = useState<any[]>([]);
-
   const [customerReviews, setCustomerReviews] = useState<any[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);

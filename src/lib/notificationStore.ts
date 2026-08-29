@@ -437,7 +437,7 @@ export function useNotificationEngine(currentUser: any) {
 
   const addNotification = useCallback(async (newNotif: Partial<EnterpriseNotification>) => {
     const notifObj: EnterpriseNotification = {
-      id: newNotif.id || `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: newNotif.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString(16).padStart(12, '0')}`),
       user_id: newNotif.user_id || currentUser?.id,
       user_email: newNotif.user_email || currentUser?.email,
       assigned_staff_id: newNotif.assigned_staff_id,

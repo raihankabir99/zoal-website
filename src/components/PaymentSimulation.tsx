@@ -6,9 +6,10 @@ import { formatCurrency } from '../utils';
 interface PaymentSimulationProps {
   onSuccess: (orderData: any) => void;
   onCancel: () => void;
+  notificationEngine?: any;
 }
 
-export default function PaymentSimulation({ onSuccess, onCancel }: PaymentSimulationProps) {
+export default function PaymentSimulation({ onSuccess, onCancel, notificationEngine }: PaymentSimulationProps) {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
 
@@ -156,7 +157,18 @@ export default function PaymentSimulation({ onSuccess, onCancel }: PaymentSimula
           status: 'Processing'
         });
       } else {
-        setFormError(isAr ? 'فشلت عملية الدفع. يرجى التحقق من تفاصيل البطاقة والمحاولة مرة أخرى أو اختيار طريقة دفع بديلة.' : 'Payment failed. Please verify your card details and try again, or use another payment method.');
+        const errorMsg = isAr ? 'فشلت عملية الدفع. يرجى التحقق من تفاصيل البطاقة والمحاولة مرة أخرى أو اختيار طريقة دفع بديلة.' : 'Payment failed. Please verify your card details and try again, or use another payment method.';
+        setFormError(errorMsg);
+        
+        if (notificationEngine) {
+          notificationEngine.addNotification({
+            title: isAr ? 'فشل الدفع' : 'Payment Failed',
+            message: errorMsg,
+            category: 'Payment',
+            priority: 'high',
+            target_role: 'customer'
+          });
+        }
       }
     } catch (err) {
       console.error('Payment verification error:', err);

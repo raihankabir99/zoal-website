@@ -16,6 +16,7 @@ import { Order, Product } from '../types';
 import { updateProductInventory, updateProductFields, SafeImage, normalizeCategory } from '../imageRegistry';
 import { formatCurrency } from '../utils';
 import { supabaseClient } from '../lib/supabaseClient';
+import { useNotificationEngine } from '../lib/notificationStore';
 
 // Movement / Transaction Type Definitions
 export interface InventoryTransaction {
@@ -243,36 +244,19 @@ export default function EnterpriseInventoryManagement({
     localStorage.setItem('zoal_purchase_orders', JSON.stringify(purchaseOrders));
   }, [purchaseOrders]);
 
-  // Systemic notifications state
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  // Systemic notifications engine
+  const notificationEngine = useNotificationEngine(currentUser);
+  const notifications = notificationEngine.notifications;
 
   // Helper to add system alerts
-  const addNotification = async (type: NotificationItem['type'], title: string, message: string, severity: NotificationItem['severity'] = 'low') => {
-    const newNotif: NotificationItem = {
-      id: `NOT-${Date.now().toString().slice(-4)}`,
-      type,
+  const addNotification = async (type: string, title: string, message: string, severity: 'low' | 'medium' | 'high' | 'critical' = 'low') => {
+    await notificationEngine.addNotification({
       title,
       message,
-      timestamp: new Date().toISOString(),
-      read: false,
-      severity
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-    try {
-      await supabaseClient.from('zoal_notifications').insert([{
-        id: newNotif.id,
-        title: newNotif.title,
-        message: newNotif.message,
-        category: type,
-        priority: severity === 'high' ? 'high' : severity === 'medium' ? 'medium' : 'low',
-        read: false,
-        archived: false,
-        timestamp: newNotif.timestamp,
-        target_role: 'staff'
-      }]);
-    } catch (e) {
-      console.error('Failed to insert notification into DB:', e);
-    }
+      category: type,
+      priority: severity,
+      target_role: 'staff'
+    });
   };
 
   // Form fields for raising new entities
@@ -843,6 +827,16 @@ export default function EnterpriseInventoryManagement({
     // Apply change in database/localStorage overrides
     updateProductInventory(prod.id, newInv);
 
+    // Trigger notification if stock is low
+    if (newInv <= (prod.minStock || 15)) {
+      addNotification(
+        newInv === 0 ? 'out_of_stock' : 'low_stock',
+        newInv === 0 ? 'Out of Stock Alert' : 'Low Stock Alert',
+        `${prod.name} (SKU: ${prod.sku}) is now at ${newInv} units. Immediate restock recommended.`,
+        newInv === 0 ? 'critical' : 'high'
+      );
+    }
+
     // Save customized field updates
     const fieldUpdates: any = {};
     if (adjustWarehouse) {
@@ -871,7 +865,7 @@ export default function EnterpriseInventoryManagement({
 
     setTransactions((prev) => [newTx, ...prev]);
 
-    alert(`Successfully registered inventory transaction ${newTx.id}. ${prod.name} available stock updated from ${currentInv} to ${newInv} units.`);
+    addNotification('adjustment', 'Stock Adjustment Recorded', `${prod.name} available stock updated from ${currentInv} to ${newInv} units.`, 'low');
     
     // Clear form inputs
     setAdjustQty(0);
@@ -1449,7 +1443,7 @@ export default function EnterpriseInventoryManagement({
                     </h3>
                     <button 
                       onClick={() => {
-                        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+                        notificationEngine.markAllAsRead();
                         addNotification('general', 'Notifications Cleared', 'All active system alerts marked as read.', 'low');
                       }}
                       className="text-[9px] font-mono hover:text-white text-zinc-500 transition-colors cursor-pointer"
@@ -1461,8 +1455,8 @@ export default function EnterpriseInventoryManagement({
                     {notifications.length === 0 ? (
                       <p className="text-[10px] text-zinc-500 text-center font-mono py-8">No notifications active.</p>
                     ) : (
-                      notifications.map((n) => {
-                        const sevColors = {
+                      notifications.map((n: any) => {
+                        const sevColors: Record<string, string> = {
                           low: 'border-zinc-500/20 text-zinc-400',
                           medium: 'border-amber-500/20 text-amber-300',
                           high: 'border-red-500/20 text-rose-300',
@@ -1483,7 +1477,7 @@ export default function EnterpriseInventoryManagement({
                             {!n.read && (
                               <button 
                                 onClick={() => {
-                                  setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                                  notificationEngine.markAsRead(n.id);
                                 }}
                                 className="mt-1.5 text-[8px] font-mono text-gold-pure hover:underline cursor-pointer block"
                               >
