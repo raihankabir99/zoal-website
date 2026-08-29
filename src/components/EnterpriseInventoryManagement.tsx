@@ -15,6 +15,7 @@ import {
 import { Order, Product } from '../types';
 import { updateProductInventory, updateProductFields, SafeImage, normalizeCategory } from '../imageRegistry';
 import { formatCurrency } from '../utils';
+import { supabaseClient } from '../lib/supabaseClient';
 
 // Movement / Transaction Type Definitions
 export interface InventoryTransaction {
@@ -243,58 +244,35 @@ export default function EnterpriseInventoryManagement({
   }, [purchaseOrders]);
 
   // Systemic notifications state
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const saved = localStorage.getItem('zoal_notifications');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      {
-        id: 'NOT-01',
-        type: 'low_stock',
-        title: 'Low Stock Safety Alert',
-        message: 'Imperial Dark Roast (SKU: ALZ-COF-001) has dropped below safety threshold of 15 units.',
-        timestamp: new Date(Date.now() - 600000).toLocaleString(),
-        read: false,
-        severity: 'high'
-      },
-      {
-        id: 'NOT-02',
-        type: 'expiring',
-        title: 'Product Batch Expiring Soon',
-        message: 'Artisanal Brioche batch BAT-SFF-449X expires in less than 3 days.',
-        timestamp: new Date(Date.now() - 7200000).toLocaleString(),
-        read: false,
-        severity: 'medium'
-      },
-      {
-        id: 'NOT-03',
-        type: 'transfer',
-        title: 'Warehouse Transfer Scheduled',
-        message: 'Logistics scheduled 50 units transfer from Branch B Hub to Branch A Royal Outlet.',
-        timestamp: new Date(Date.now() - 3600000 * 20).toLocaleString(),
-        read: true,
-        severity: 'low'
-      }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_notifications', JSON.stringify(notifications));
-  }, [notifications]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Helper to add system alerts
-  const addNotification = (type: NotificationItem['type'], title: string, message: string, severity: NotificationItem['severity'] = 'low') => {
+  const addNotification = async (type: NotificationItem['type'], title: string, message: string, severity: NotificationItem['severity'] = 'low') => {
     const newNotif: NotificationItem = {
       id: `NOT-${Date.now().toString().slice(-4)}`,
       type,
       title,
       message,
-      timestamp: new Date().toLocaleString(),
+      timestamp: new Date().toISOString(),
       read: false,
       severity
     };
     setNotifications(prev => [newNotif, ...prev]);
+    try {
+      await supabaseClient.from('zoal_notifications').insert([{
+        id: newNotif.id,
+        title: newNotif.title,
+        message: newNotif.message,
+        category: type,
+        priority: severity === 'high' ? 'high' : severity === 'medium' ? 'medium' : 'low',
+        read: false,
+        archived: false,
+        timestamp: newNotif.timestamp,
+        target_role: 'staff'
+      }]);
+    } catch (e) {
+      console.error('Failed to insert notification into DB:', e);
+    }
   };
 
   // Form fields for raising new entities

@@ -273,19 +273,7 @@ export default function Dashboards({
     });
   };
 
-  const [staffNotifications, setStaffNotifications] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_staff_notifications');
-      return raw ? JSON.parse(raw) : [
-        { id: 'sn-1', type: 'order', title: 'New Luxury Order Placed', message: 'Order #ORD-7491 contains 2x Premium Thobes and requires immediate master artisan assignment.', date: '10 mins ago', read: false },
-        { id: 'sn-2', type: 'stock', title: 'Critical Stock Level Alert', message: 'Imperial Dark Roast Coffee beans inventory has dropped below 15 bags.', date: '1 hour ago', read: false },
-        { id: 'sn-3', type: 'packing', title: 'Packing Dispatch Request', message: 'Order #ORD-6382 has been marked ready-to-pack for Al Hofuf branch.', date: '3 hours ago', read: true },
-        { id: 'sn-4', type: 'message', title: 'Customer Tailoring Message', message: 'Distinguished Customer Raihan Kabir submitted a specific collar custom measure request.', date: '5 hours ago', read: false }
-      ];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [staffNotifications, setStaffNotifications] = useState<any[]>([]);
 
   const [customerReviews, setCustomerReviews] = useState<any[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);

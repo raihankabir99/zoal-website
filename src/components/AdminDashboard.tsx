@@ -1101,10 +1101,6 @@ export default function AdminDashboard({
   }, [brands]);
 
   useEffect(() => {
-    localStorage.setItem('zoal_admin_notifications', JSON.stringify(notifications));
-  }, [notifications]);
-
-  useEffect(() => {
     localStorage.setItem('zoal_admin_logs', JSON.stringify(systemLogs));
   }, [systemLogs]);
 
