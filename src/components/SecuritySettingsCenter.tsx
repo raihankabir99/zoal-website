@@ -403,9 +403,9 @@ export default function SecuritySettingsCenter({
                         onChange={(e) => setInviteForm(prev => ({ ...prev, role: e.target.value }))}
                         className="bg-black border border-white/10 text-white p-1.5 text-[10px] w-full rounded-xs outline-none focus:border-gold-pure"
                       >
-                        <option value="System Administrator">System Administrator</option>
-                        <option value="Enterprise Manager">Store Manager</option>
-                        <option value="Support Staff">Support Staff</option>
+                        <option value="admin">System Administrator</option>
+                        <option value="manager">Enterprise Manager</option>
+                        <option value="staff">Support Staff</option>
                       </select>
                     </div>
                     <div className="flex gap-2">

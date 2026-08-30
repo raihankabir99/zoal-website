@@ -302,13 +302,11 @@ export async function revokeSession(req: Request, res: Response) {
  * Invites a new administrator.
  */
 export async function inviteAdmin(req: Request, res: Response) {
+  const actor = requireSecurityAdmin(req, res);
+  if (!actor) return;
+
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
-
-  const actor = (req as any).user;
-  if (!actor) {
-    return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
-  }
 
   const { name, email, role } = req.body;
 
