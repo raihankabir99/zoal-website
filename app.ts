@@ -4601,6 +4601,7 @@ app.get('/api/admin/audit-logs', authenticateRequest, requireRole(['admin', 'own
 app.get('/api/admin/active-sessions', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getActiveSessions);
 app.get('/api/admin/rbac-matrix', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getRbacMatrix);
 app.delete('/api/admin/sessions/:token', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeSession);
+app.post('/api/admin/invite', authenticateRequest, requireRole(['admin', 'owner']), adminModule.inviteAdmin);
 
 // Homepage Heroes routes
 app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);

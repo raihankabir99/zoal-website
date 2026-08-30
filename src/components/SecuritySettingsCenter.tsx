@@ -146,9 +146,9 @@ export default function SecuritySettingsCenter({
   // 6. PAYMENT & SHIPPING SETTINGS
   const [payForm, setPayForm] = useState({
     moyasarSandboxKey: 'pk_sandbox_zoal_59a8c7b8d14',
-    moyasarProdKey: 'pk_live_zoal_83f2a1b9c7d',
+    moyasarProdKey: '•••••••••••••••• (Configured via Server Environment)',
     stripeSandboxKey: 'pk_test_51Mz...zoal',
-    stripeProdKey: 'pk_live_51Mz...zoal',
+    stripeProdKey: '•••••••••••••••• (Configured via Server Environment)',
     paypalClientId: 'Aa_zoal_sandbox_95x82b',
     activeMode: 'sandbox', // sandbox, production
     moyasarEnabled: true,
@@ -168,7 +168,7 @@ export default function SecuritySettingsCenter({
     smtpHost: globalSettings.smtpHost || 'smtp.zoal.com',
     smtpPort: globalSettings.smtpPort || '587',
     smtpUser: globalSettings.smtpUser || 'relay@zoal.com',
-    smtpPass: globalSettings.smtpPass || '••••••••••••••••',
+    smtpPass: '•••••••••••••••• (Configured via Server Environment)',
     ipWhitelist: globalSettings.ipWhitelist || '192.168.1.*, 127.0.0.1',
     sessionExpirationMinutes: String(globalSettings.sessionExpirationMinutes || 60),
     fileUploadLimitMb: '10 MB',
@@ -188,14 +188,13 @@ export default function SecuritySettingsCenter({
     if (!inviteForm.name || !inviteForm.email) return;
     
     try {
-      const res = await fetch('/api/admin/customers', { // Using same endpoint for now but with admin role
+      const res = await fetch('/api/admin/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           name: inviteForm.name, 
           email: inviteForm.email, 
-          role: inviteForm.role,
-          status: 'Active'
+          role: inviteForm.role
         })
       });
 
@@ -467,7 +466,11 @@ export default function SecuritySettingsCenter({
                         </span>
                       </td>
                       <td className="p-3 text-white">Managed</td>
-                      <td className="p-3 text-zinc-400">Verified</td>
+                      <td className="p-3 text-zinc-400">
+                        <span className="text-[8px] px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 font-mono text-zinc-400 font-bold uppercase">
+                          Managed via Supabase
+                        </span>
+                      </td>
                       <td className="p-3 text-zinc-500">{new Date(admin.joinedAt).toLocaleDateString()}</td>
                       <td className="p-3 text-right space-x-2">
                         {admin.role !== 'owner' && (
@@ -852,19 +855,11 @@ export default function SecuritySettingsCenter({
                           <span className="text-[7.5px] uppercase font-mono text-zinc-500">Production Secret Key</span>
                           <div className="relative">
                             <input 
-                              type={showProdKeys[gate.prodKey] ? 'text' : 'password'} 
-                              value={(payForm as any)[gate.prodKey]}
-                              onChange={(e) => setPayForm(prev => ({ ...prev, [gate.prodKey]: e.target.value }))}
-                              className="bg-zinc-950 border border-white/10 text-white p-1.5 pr-8 text-[9.5px] font-mono w-full rounded-xs outline-none focus:border-gold-pure"
+                              type="text" 
+                              value="•••••••••••••••• (Configured via Server Environment)"
+                              disabled
+                              className="bg-zinc-950 border border-white/10 text-zinc-500 p-1.5 text-[9.5px] font-mono w-full rounded-xs outline-none opacity-80 cursor-not-allowed"
                             />
-                            <button
-                              type="button"
-                              onClick={() => setShowProdKeys(prev => ({ ...prev, [gate.prodKey]: !prev[gate.prodKey] }))}
-                              className="absolute right-0 top-0 h-full w-8 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
-                              aria-label={showProdKeys[gate.prodKey] ? 'Hide secret key' : 'Show secret key'}
-                            >
-                              {showProdKeys[gate.prodKey] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -990,23 +985,15 @@ export default function SecuritySettingsCenter({
                     className="bg-black border border-white/10 text-white p-2 text-[10px] w-full rounded-xs outline-none focus:border-gold-pure font-mono"
                   />
                 </div>
-                <div className="space-y-1">
+                 <div className="space-y-1">
                   <span className="text-[7.5px] uppercase font-mono text-zinc-500">Relay Password</span>
                   <div className="relative">
                     <input 
-                      type={showSmtpPass ? 'text' : 'password'} 
-                      value={sysForm.smtpPass}
-                      onChange={(e) => setSysForm(prev => ({ ...prev, smtpPass: e.target.value }))}
-                      className="bg-black border border-white/10 text-white p-2 pr-9 text-[10px] w-full rounded-xs outline-none focus:border-gold-pure font-mono"
+                      type="text" 
+                      value="•••••••••••••••• (Configured via Server Environment)"
+                      disabled
+                      className="bg-black border border-white/10 text-zinc-500 p-2 text-[10px] w-full rounded-xs outline-none opacity-80 cursor-not-allowed font-mono"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowSmtpPass(!showSmtpPass)}
-                      className="absolute right-0 top-0 h-full w-9 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
-                      aria-label={showSmtpPass ? 'Hide relay password' : 'Show relay password'}
-                    >
-                      {showSmtpPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
                   </div>
                 </div>
               </div>
