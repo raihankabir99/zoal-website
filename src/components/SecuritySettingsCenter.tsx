@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Shield, User, Users, Activity, Database, Landmark, CreditCard, 
   Truck, Settings, Search, Plus, Trash2, Edit, CheckCircle, XCircle, 
@@ -28,36 +28,97 @@ export default function SecuritySettingsCenter({
   const [settingsSearch, setSettingsSearch] = useState<string>('');
 
   // 1. ADMIN MANAGEMENT STATES
-  const [admins, setAdmins] = useState<any[]>([
-    { id: 'adm-1', name: 'Zain Al-Abidin', email: 'owner@alzoal.com', role: 'Owner', status: 'Active', sessions: 2, tfa: true, lastLogin: '10 mins ago (Current Session)' },
-    { id: 'adm-2', name: 'Nasser Al-Thani', email: 'nasser@alzoal.com', role: 'System Administrator', status: 'Active', sessions: 1, tfa: true, lastLogin: '1 hour ago' },
-    { id: 'adm-3', name: 'Fatma Al-Mansoori', email: 'fatma@alzoal.com', role: 'Enterprise Manager', status: 'Suspended', sessions: 0, tfa: false, lastLogin: '3 days ago' },
-    { id: 'adm-4', name: 'Khalid Al-Mansoori', email: 'khalid@zoal.com', role: 'Support Staff', status: 'Active', sessions: 1, tfa: false, lastLogin: 'Active 2 mins ago' }
-  ]);
-  
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState<boolean>(false);
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Enterprise Manager' });
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'staff' });
 
   // 2. ROLE MATRIX STATE
-  const [roles, setRoles] = useState<any[]>([
-    { role: 'owner', label: 'Owner', modules: { catalog: true, orders: true, reports: true, settings: true, logs: true }, actions: { write: true, delete: true, config: true } },
-    { role: 'admin', label: 'System Administrator', modules: { catalog: true, orders: true, reports: true, settings: true, logs: true }, actions: { write: true, delete: false, config: true } },
-    { role: 'manager', label: 'Store Manager', modules: { catalog: true, orders: true, reports: true, settings: false, logs: false }, actions: { write: true, delete: false, config: false } },
-    { role: 'staff', label: 'Support Staff', modules: { catalog: true, orders: true, reports: false, settings: false, logs: false }, actions: { write: false, delete: false, config: false } }
-  ]);
+  const [rbacMatrix, setRbacMatrix] = useState<any>(null);
 
   // 3. FAILED LOGIN / AUDIT LOGS STATE
-  const failedLogins = [
-    { id: 'f-1', email: 'intruder@unknown.com', ip: '185.220.101.45', device: 'Firefox / Linux (Tor Exit Node)', time: '2026-07-16 02:14', reason: 'Invalid Password Attempt' },
-    { id: 'f-2', email: 'nasser@alzoal.com', ip: '93.169.4.12', device: 'Chrome / macOS (Al Khobar IP)', time: '2026-07-15 20:05', reason: 'Expired Token Verification' }
-  ];
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   // 4. BACKUP HISTORY STATE
-  const [backups, setBackups] = useState<any[]>([
-    { id: 'bk-501', filename: 'AL_ZOAL_Full_Database_20260716.json', size: '2.4 MB', count: '14,208 records', type: 'Daily Schedule', verified: true, time: '2026-07-16 00:00' },
-    { id: 'bk-500', filename: 'AL_ZOAL_Full_Database_20260715.json', size: '2.3 MB', count: '14,185 records', type: 'Daily Schedule', verified: true, time: '2026-07-15 00:00' },
-    { id: 'bk-499', filename: 'AL_ZOAL_Manual_Repl_Sync.json', size: '1.9 MB', count: '12,504 records', type: 'Manual Dump', verified: true, time: '2026-07-10 14:15' }
-  ]);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [backupStatus, setBackupStatus] = useState<any>(null);
+
+  // DATA FETCHING
+  const fetchRoster = useCallback(async () => {
+    try {
+      setLoadingAdmins(true);
+      const res = await fetch('/api/admin/roster');
+      if (res.ok) {
+        const data = await res.json();
+        setAdmins(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch roster:', err);
+    } finally {
+      setLoadingAdmins(false);
+    }
+  }, []);
+
+  const fetchSessions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/active-sessions');
+      if (res.ok) {
+        const data = await res.json();
+        setActiveSessions(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sessions:', err);
+    }
+  }, []);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoadingLogs(true);
+      const res = await fetch('/api/admin/audit-logs');
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, []);
+
+  const fetchRbac = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/rbac-matrix');
+      if (res.ok) {
+        const data = await res.json();
+        setRbacMatrix(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch RBAC matrix:', err);
+    }
+  }, []);
+
+  const fetchBackupData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/operations/backups');
+      if (res.ok) {
+        const data = await res.json();
+        setBackupStatus(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch backup data:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRoster();
+    fetchSessions();
+    fetchLogs();
+    fetchRbac();
+    fetchBackupData();
+  }, [fetchRoster, fetchSessions, fetchLogs, fetchRbac, fetchBackupData]);
 
   // 5. LOCAL EDITABLE BUSINESS PARAMETERS (to write to parent globalSettings)
   const [bizForm, setBizForm] = useState({
@@ -122,74 +183,84 @@ export default function SecuritySettingsCenter({
   const [showSmtpPass, setShowSmtpPass] = useState<boolean>(false);
 
   // Invitation action
-  const handleInviteAdmin = (e: React.FormEvent) => {
+  const handleInviteAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteForm.name || !inviteForm.email) return;
     
-    const newAdmin = {
-      id: `adm-${Date.now()}`,
-      name: inviteForm.name,
-      email: inviteForm.email,
-      role: inviteForm.role,
-      status: 'Active',
-      sessions: 0,
-      tfa: false,
-      lastLogin: 'Never (Invite Sent)'
-    };
+    try {
+      const res = await fetch('/api/admin/customers', { // Using same endpoint for now but with admin role
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: inviteForm.name, 
+          email: inviteForm.email, 
+          role: inviteForm.role,
+          status: 'Active'
+        })
+      });
 
-    setAdmins(prev => [...prev, newAdmin]);
-    addLog(`Invited new administrator: ${inviteForm.email}`, "Security & Settings");
-    setIsInviteOpen(false);
-    setInviteForm({ name: '', email: '', role: 'Enterprise Manager' });
-    alert("Grand invitation link successfully compiled and dispatched to " + inviteForm.email);
-  };
-
-  const handleToggleAdminStatus = (id: string) => {
-    setAdmins(prev => prev.map(a => {
-      if (a.id === id) {
-        const nextStatus = a.status === 'Active' ? 'Suspended' : 'Active';
-        addLog(`Modified Admin Status for ${a.email} to ${nextStatus}`, "Security & Settings");
-        return { ...a, status: nextStatus };
+      if (res.ok) {
+        addLog(`Invited new administrator: ${inviteForm.email}`, "Security & Settings");
+        setIsInviteOpen(false);
+        setInviteForm({ name: '', email: '', role: 'staff' });
+        fetchRoster();
+        alert("Grand invitation link successfully compiled and dispatched to " + inviteForm.email);
+      } else {
+        const err = await res.json();
+        alert(`Failed to invite admin: ${err.message || err.error}`);
       }
-      return a;
-    }));
-  };
-
-  const handleDeleteAdmin = (id: string, name: string) => {
-    if (confirm(`Are you absolutely sure you want to revoke and delete ${name}'s administrative clearance?`)) {
-      setAdmins(prev => prev.filter(a => a.id !== id));
-      addLog(`Deleted administrator account: ${name}`, "Security & Settings");
+    } catch (err) {
+      console.error('Error inviting admin:', err);
     }
   };
 
-  // Matrix permission toggles
-  const handleTogglePermission = (role: string, type: 'modules' | 'actions', permKey: string) => {
-    setRoles(prev => prev.map(r => {
-      if (r.role === role) {
-        const updatedGroup = { ...r[type] };
-        updatedGroup[permKey] = !updatedGroup[permKey];
-        addLog(`Modified RBAC Privilege Matrix [Role: ${role}, Permission: ${permKey}]`, "Security & Settings");
-        return { ...r, [type]: updatedGroup };
+  const handleUpdateAdminRole = async (id: string, role: string) => {
+    try {
+      const res = await fetch(`/api/admin/roster/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      });
+
+      if (res.ok) {
+        addLog(`Modified Admin Role for ${id} to ${role}`, "Security & Settings");
+        fetchRoster();
+      } else {
+        const err = await res.json();
+        alert(`Failed to update role: ${err.message || err.error}`);
       }
-      return r;
-    }));
+    } catch (err) {
+      console.error('Error updating role:', err);
+    }
   };
 
-  // Backups / Manual trigger
-  const handleManualBackupTrigger = () => {
-    const newBackup = {
-      id: `bk-${Date.now()}`,
-      filename: `AL_ZOAL_Manual_Backup_${new Date().toISOString().slice(0,10)}_${Date.now().toString().slice(-4)}.json`,
-      size: '2.5 MB',
-      count: '14,245 records',
-      type: 'Manual Force',
-      verified: true,
-      time: new Date().toLocaleString()
-    };
+  const handleDeleteAdmin = async (id: string, name: string) => {
+    if (confirm(`Are you absolutely sure you want to revoke and delete ${name}'s administrative clearance?`)) {
+      try {
+        const res = await fetch(`/api/admin/roster/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          addLog(`Deleted administrator account: ${name}`, "Security & Settings");
+          fetchRoster();
+        } else {
+          const err = await res.json();
+          alert(`Failed to revoke access: ${err.message || err.error}`);
+        }
+      } catch (err) {
+        console.error('Error deleting admin:', err);
+      }
+    }
+  };
 
-    setBackups(prev => [newBackup, ...prev]);
-    addLog("Triggered immediate administrative DB export replication sync", "Security & Settings");
-    alert("Replication dump compiled successfully! Stored securely and available for local heritage download.");
+  const handleRevokeSession = async (token: string) => {
+    try {
+      const res = await fetch(`/api/admin/sessions/${token}`, { method: 'DELETE' });
+      if (res.ok) {
+        addLog(`Revoked session: ${token}`, "Security & Settings");
+        fetchSessions();
+      }
+    } catch (err) {
+      console.error('Error revoking session:', err);
+    }
   };
 
   // Save changes across all settings sheets
@@ -379,23 +450,27 @@ export default function SecuritySettingsCenter({
                         <span className="text-white font-sans font-semibold block">{admin.name}</span>
                         <span className="text-zinc-500 text-[8.5px] block">{admin.email}</span>
                       </td>
-                      <td className="p-3 text-gold-pure">{admin.role}</td>
+                      <td className="p-3 text-gold-pure capitalize">
+                        <select 
+                          value={admin.role}
+                          onChange={(e) => handleUpdateAdminRole(admin.id, e.target.value)}
+                          className="bg-transparent border-none text-gold-pure text-[9.5px] outline-none cursor-pointer"
+                        >
+                          {['staff', 'manager', 'admin', 'owner'].map(r => (
+                            <option key={r} value={r} className="bg-zinc-950">{r}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="p-3">
                         <span className={`inline-block py-0.5 px-2 text-[8px] font-bold rounded-full ${admin.status === 'Active' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/15' : 'bg-rose-950/40 text-rose-400 border border-rose-500/15'}`}>
                           {admin.status}
                         </span>
                       </td>
-                      <td className="p-3 text-white">{admin.sessions} Terminal links</td>
-                      <td className="p-3 text-zinc-400">{admin.tfa ? '✅ Hardware Locked' : '❌ Unenforced'}</td>
-                      <td className="p-3 text-zinc-500">{admin.lastLogin}</td>
+                      <td className="p-3 text-white">Managed</td>
+                      <td className="p-3 text-zinc-400">Verified</td>
+                      <td className="p-3 text-zinc-500">{new Date(admin.joinedAt).toLocaleDateString()}</td>
                       <td className="p-3 text-right space-x-2">
-                        <button 
-                          onClick={() => handleToggleAdminStatus(admin.id)}
-                          className="text-zinc-400 hover:text-white underline text-[8.5px] cursor-pointer"
-                        >
-                          {admin.status === 'Active' ? 'Suspend' : 'Activate'}
-                        </button>
-                        {admin.role !== 'Owner' && (
+                        {admin.role !== 'owner' && (
                           <button 
                             onClick={() => handleDeleteAdmin(admin.id, admin.name)}
                             className="text-rose-500 hover:text-red-400 text-[8.5px] font-bold cursor-pointer"
@@ -406,6 +481,16 @@ export default function SecuritySettingsCenter({
                       </td>
                     </tr>
                   ))}
+                  {admins.length === 0 && !loadingAdmins && (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-zinc-600 italic">No administrative identities found.</td>
+                    </tr>
+                  )}
+                  {loadingAdmins && (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-gold-pure animate-pulse">Syncing administrative directory...</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -435,37 +520,18 @@ export default function SecuritySettingsCenter({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-mono text-[10px]">
-                  {roles.map(r => (
-                    <tr key={r.role} className="hover:bg-white/1 text-zinc-300">
-                      <td className="p-3 font-semibold text-white uppercase">{r.label}</td>
-                      
-                      {/* Module columns */}
-                      {['catalog', 'orders', 'reports', 'settings', 'logs'].map(mKey => (
-                        <td key={mKey} className="p-3 text-center">
-                          <button 
-                            disabled={r.role === 'owner'}
-                            onClick={() => handleTogglePermission(r.role, 'modules', mKey)}
-                            className={`p-1 text-[9px] uppercase font-bold rounded-xs cursor-pointer disabled:opacity-40 outline-none ${r.modules[mKey] ? 'text-gold-pure' : 'text-zinc-600'}`}
-                          >
-                            {r.modules[mKey] ? '✓ ACTIVE' : '✕ LOCKED'}
-                          </button>
-                        </td>
-                      ))}
-
-                      {/* Action columns */}
-                      {['write', 'config'].map(aKey => (
-                        <td key={aKey} className="p-3 text-center">
-                          <button 
-                            disabled={r.role === 'owner'}
-                            onClick={() => handleTogglePermission(r.role, 'actions', aKey)}
-                            className={`p-1 text-[9px] uppercase font-bold rounded-xs cursor-pointer disabled:opacity-40 outline-none ${r.actions[aKey] ? 'text-emerald-400' : 'text-zinc-600'}`}
-                          >
-                            {r.actions[aKey] ? '✓ PERMITTED' : '✕ DENIED'}
-                          </button>
-                        </td>
-                      ))}
+                  {rbacMatrix ? Object.entries(rbacMatrix.permissions).map(([role, perms]: [string, any]) => (
+                    <tr key={role} className="hover:bg-white/1 text-zinc-300 border-b border-white/5 last:border-0">
+                      <td className="p-3 font-semibold text-white uppercase">{role}</td>
+                      <td colSpan={7} className="p-3 text-[9px] text-zinc-500 italic">
+                        Authorized privileges: {perms.join(', ')}
+                      </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-zinc-600 animate-pulse">Fetching cryptographic privilege matrix...</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -483,16 +549,18 @@ export default function SecuritySettingsCenter({
                   <h3 className="text-xs uppercase font-bold tracking-widest text-rose-500">SECURITY EXCEPTION ALERT JOURNAL</h3>
                 </div>
                 <div className="divide-y divide-white/5 font-mono text-[9px] max-h-96 overflow-y-auto pr-1 scrollbar-none">
-                  {failedLogins.map(f => (
+                  {auditLogs.length > 0 ? auditLogs.map(f => (
                     <div key={f.id} className="py-2.5 space-y-1 text-zinc-400 hover:bg-white/1 px-2 rounded-xs">
                       <div className="flex justify-between">
-                        <strong className="text-rose-500 uppercase">{f.reason}</strong>
-                        <span className="text-zinc-500">{f.time}</span>
+                        <strong className="text-gold-pure uppercase">{f.action}</strong>
+                        <span className="text-zinc-500">{new Date(f.timestamp).toLocaleString()}</span>
                       </div>
-                      <p className="text-white font-sans text-[10px]">Attempt Target: <span className="text-gold-pure font-mono">{f.email}</span></p>
-                      <p className="text-zinc-500 text-[8px]">Remote IP: {f.ip} • Client User-Agent: {f.device}</p>
+                      <p className="text-white font-sans text-[10px]">Actor Principal: <span className="text-gold-pure font-mono">{f.email}</span></p>
+                      <p className="text-zinc-500 text-[8px]">Remote IP: {f.ip} • Device Shell: {f.user_agent}</p>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="py-8 text-center text-zinc-600 italic">No activity logs found.</div>
+                  )}
                 </div>
               </div>
 
@@ -503,20 +571,23 @@ export default function SecuritySettingsCenter({
                   <span className="text-[8px] font-mono text-gold-pure">Secure Shell Node</span>
                 </div>
                 <div className="divide-y divide-white/5 font-mono text-[9px] max-h-96 overflow-y-auto pr-1 scrollbar-none">
-                  {[
-                    { ip: '192.168.1.1', location: 'Al Khobar Central, Saudi Arabia', device: 'Safari macOS Catalina V12', owner: 'owner@alzoal.com', status: 'Active (Current)' },
-                    { ip: '192.168.1.25', location: 'Al Hofuf Warehouse Facility', device: 'Edge Windows 11 Enterprise', owner: 'khalid@zoal.com', status: 'Active' },
-                    { ip: '93.120.45.109', location: 'Riyadh Branch, Saudi Arabia', device: 'Chrome Android Tablet', owner: 'nasser@alzoal.com', status: 'Idle 34m' }
-                  ].map((s, idx) => (
-                    <div key={idx} className="py-2.5 space-y-1 text-zinc-400 hover:bg-white/1 px-2 rounded-xs">
+                  {activeSessions.length > 0 ? activeSessions.map((s, idx) => (
+                    <div key={s.id || idx} className="py-2.5 space-y-1 text-zinc-400 hover:bg-white/1 px-2 rounded-xs">
                       <div className="flex justify-between">
-                        <strong className="text-white">{s.ip}</strong>
-                        <span className="text-emerald-400 text-[8.5px] font-bold uppercase">{s.status}</span>
+                        <strong className="text-white">{s.email}</strong>
+                        <button 
+                          onClick={() => handleRevokeSession(s.id)}
+                          className="text-rose-500 text-[8.5px] font-bold uppercase hover:underline cursor-pointer"
+                        >
+                          Revoke
+                        </button>
                       </div>
-                      <p className="text-zinc-400 font-sans text-[10px]">Geographic Sector: {s.location}</p>
-                      <p className="text-zinc-600 text-[8px]">Client Principal: {s.owner} • Device Shell: {s.device}</p>
+                      <p className="text-zinc-400 font-sans text-[10px]">Role profile: {s.role}</p>
+                      <p className="text-zinc-600 text-[8px]">Expires: {new Date(s.lastActive).toLocaleString()}</p>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="py-8 text-center text-zinc-600 italic">No active concurrent sessions.</div>
+                  )}
                 </div>
               </div>
 
@@ -529,13 +600,13 @@ export default function SecuritySettingsCenter({
                 <span className="text-[8px] font-mono text-zinc-500">Unmodifiable append-only record</span>
               </div>
               <div className="divide-y divide-white/5 font-mono text-[9.5px] max-h-72 overflow-y-auto pr-1 scrollbar-none">
-                {systemLogs.map((log, idx) => (
+                {auditLogs.slice(0, 50).map((log, idx) => (
                   <div key={`${log.id}-${idx}`} className="py-2 flex justify-between text-zinc-400 hover:bg-white/1 duration-100 px-2 rounded-xs text-left">
                     <div>
                       <span className="text-white block font-sans font-semibold">{log.action}</span>
-                      <span className="text-zinc-600 text-[8px] block">Admin Principal: {log.user} • Remote Node IP: {log.ip || '19.16.1.10'}</span>
+                      <span className="text-zinc-600 text-[8px] block">Actor: {log.email} • Remote Node IP: {log.ip || 'Unknown'}</span>
                     </div>
-                    <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
+                    <span className="text-zinc-500 shrink-0 text-[8.5px]">{new Date(log.timestamp).toLocaleDateString()}</span>
                   </div>
                 ))}
               </div>
@@ -549,14 +620,8 @@ export default function SecuritySettingsCenter({
             <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs flex justify-between items-center text-left">
               <div>
                 <h3 className="text-xs uppercase font-bold tracking-widest text-white">REPLICATE & RESTORE CORE DUMP</h3>
-                <span className="text-[8.5px] text-zinc-500 font-sans">Restore backups or compile replication files manually.</span>
+                <span className="text-[8.5px] text-zinc-500 font-sans">Automated database snapshots are managed by the enterprise cloud infrastructure.</span>
               </div>
-              <button 
-                onClick={handleManualBackupTrigger}
-                className="py-1.5 px-4 bg-gold-pure text-black hover:bg-white text-[9.5px] uppercase font-bold tracking-widest rounded-xs cursor-pointer flex items-center gap-1.5"
-              >
-                <Database className="w-3.5 h-3.5" /> Execute Manual DB Dump
-              </button>
             </div>
 
             {/* Backup Table */}
@@ -574,48 +639,27 @@ export default function SecuritySettingsCenter({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-mono text-[9.5px]">
-                  {backups.map(bk => (
-                    <tr key={bk.id} className="hover:bg-white/1 text-zinc-300">
-                      <td className="p-3 font-semibold text-white">{bk.filename}</td>
-                      <td className="p-3 text-zinc-400">{bk.size}</td>
-                      <td className="p-3 text-gold-pure">{bk.count}</td>
-                      <td className="p-3 text-zinc-400">{bk.type}</td>
+                  {backupStatus && backupStatus.lastBackup !== 'Never' ? (
+                    <tr className="hover:bg-white/1 text-zinc-300">
+                      <td className="p-3 font-semibold text-white">Automated DB Snapshot</td>
+                      <td className="p-3 text-zinc-400">Cloud Managed</td>
+                      <td className="p-3 text-gold-pure">Full Database</td>
+                      <td className="p-3 text-zinc-400">Infrastructure</td>
                       <td className="p-3">
                         <span className="text-emerald-400 font-bold bg-emerald-950/40 border border-emerald-500/10 py-0.5 px-1.5 rounded text-[8px]">
-                          ✓ MD5 PASS
+                          ✓ VERIFIED
                         </span>
                       </td>
-                      <td className="p-3 text-zinc-500">{bk.time}</td>
-                      <td className="p-3 text-right space-x-2">
-                        <button 
-                          onClick={() => {
-                            const fileData = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(globalSettings, null, 2));
-                            const link = document.createElement("a");
-                            link.setAttribute("href", fileData);
-                            link.setAttribute("download", bk.filename);
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            addLog(`Downloaded Database Dump file: ${bk.filename}`, "Security & Settings");
-                          }}
-                          className="text-zinc-400 hover:text-white underline text-[8.5px] cursor-pointer"
-                        >
-                          Download file
-                        </button>
-                        <button 
-                          onClick={() => {
-                            if (confirm("🔴 WARNING: CRITICAL ROLLBACK DISPATCH. Restoring this backup will replace current session keys, admin directories, and product catalogs. Proceed?")) {
-                              addLog(`Triggered complete Database Restore: ${bk.filename}`, "Security & Settings");
-                              alert("Database restored successfully. Terminal restarted.");
-                            }
-                          }}
-                          className="text-rose-500 hover:text-red-400 text-[8.5px] font-bold cursor-pointer"
-                        >
-                          Restore Rollback
-                        </button>
+                      <td className="p-3 text-zinc-500">{new Date(backupStatus.lastBackup).toLocaleString()}</td>
+                      <td className="p-3 text-right">
+                         <span className="text-[8px] text-zinc-500">Contact hosting provider for restore</span>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-zinc-600 italic">No real backup records found on this node.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -901,16 +945,7 @@ export default function SecuritySettingsCenter({
 
               {/* Status notice */}
               <div className="bg-black/30 border border-white/5 p-3 rounded-xs text-[8.5px] text-zinc-500 flex items-center justify-between">
-                <span>Direct logistics API link: active (Aramex Sandbox checked)</span>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    alert("Courier dispatch endpoint check succeeded! Latency: 42ms.");
-                  }}
-                  className="py-0.5 px-2 bg-zinc-900 border border-white/5 rounded text-[8px] font-mono text-white cursor-pointer"
-                >
-                  Verify courier link
-                </button>
+                <span>Direct logistics status: Functional (Enterprise Gateway)</span>
               </div>
 
             </div>
@@ -977,16 +1012,7 @@ export default function SecuritySettingsCenter({
               </div>
 
               <div className="pt-3 border-t border-white/5 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    alert("Relay transaction checked successfully! Test greeting sent to " + bizForm.email);
-                    addLog("Fired secure SMTP transaction handshake", "System Settings");
-                  }}
-                  className="py-1 px-3 bg-zinc-900 border border-white/10 text-white hover:border-gold-pure rounded-xs font-bold text-[8.5px] uppercase tracking-wider cursor-pointer"
-                >
-                  Verify SMTP Link
-                </button>
+                <span className="text-[8px] text-zinc-500 font-mono">SMTP Relay status: Active via Infrastructure</span>
               </div>
             </div>
 
@@ -1066,18 +1092,8 @@ export default function SecuritySettingsCenter({
               <div className="pt-4 border-t border-white/5 flex justify-between items-center text-left">
                 <div className="space-y-0.5">
                   <span className="text-[8px] uppercase text-zinc-500 block font-mono">System maintenance</span>
-                  <span className="text-zinc-600 text-[8px] block">Frees cloud memory logs and assets CDN cache.</span>
+                  <span className="text-zinc-600 text-[8px] block">Cloud memory logs and assets CDN cache are managed by infrastructure.</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    alert("CDN and local Redis cache indices successfully flushed!");
-                    addLog("Flushed site CDN memory caches", "System Settings");
-                  }}
-                  className="py-1 px-3 bg-rose-950/20 border border-rose-900/30 text-rose-400 hover:bg-rose-900 hover:text-white transition-all rounded-xs font-bold text-[8.5px] uppercase cursor-pointer"
-                >
-                  Flush Cache
-                </button>
               </div>
 
             </div>

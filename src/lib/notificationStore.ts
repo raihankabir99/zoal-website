@@ -300,11 +300,7 @@ export function useNotificationEngine(currentUser: any) {
       readCount,
       unreadCount: unread,
       archivedCount,
-      averageLatencyMs: null,
-      alertsProcessed: null,
-      realtimeScore: null,
-      coveragePercentage: null,
-      totalEventsProcessed: null
+      timestamp: new Date().toISOString()
     };
   }, [userNotifications]);
 

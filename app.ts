@@ -79,6 +79,8 @@ import * as productImportModule from './server/product_import.ts';
 import * as healthMonitorModule from './server/health_monitor.ts';
 import * as supportModule from './server/support.ts';
 import * as crmModule from './server/crm.ts';
+import * as adminModule from './server/admin.ts';
+import * as operationsModule from './server/operations.ts';
 
 import {
   securityHeadersMiddleware,
@@ -4585,6 +4587,20 @@ app.get('/api/support/teams', requirePermission('can_manage_support'), async (re
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
 app.put('/api/cms/pages/:id', authenticateRequest, cmsModule.updateCmsPage);
+
+// Regional Operations & Security Center Endpoints
+app.get('/api/operations/health', operationsModule.getHealthData);
+app.get('/api/operations/backups', operationsModule.getBackupData);
+app.get('/api/operations/alerts', operationsModule.getAlertData);
+app.get('/api/operations/certification', operationsModule.getCertificationData);
+
+app.get('/api/admin/roster', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getAdminRoster);
+app.patch('/api/admin/roster/:id', authenticateRequest, requireRole(['admin', 'owner']), adminModule.updateAdminRole);
+app.delete('/api/admin/roster/:id', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeAdminAccess);
+app.get('/api/admin/audit-logs', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getAuditLogs);
+app.get('/api/admin/active-sessions', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getActiveSessions);
+app.get('/api/admin/rbac-matrix', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getRbacMatrix);
+app.delete('/api/admin/sessions/:token', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeSession);
 
 // Homepage Heroes routes
 app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);

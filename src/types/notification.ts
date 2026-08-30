@@ -23,9 +23,5 @@ export interface NotificationAuditReport {
   readCount: number;
   unreadCount: number;
   archivedCount: number;
-  averageLatencyMs: number | null;
-  alertsProcessed: number | null;
-  realtimeScore: number | null;
-  coveragePercentage: number | null;
-  totalEventsProcessed: number | null;
+  timestamp?: string;
 }
