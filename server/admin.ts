@@ -8,19 +8,38 @@ function getClient() {
 }
 
 /**
+ * Defense-in-depth authorization for Security Center APIs.
+ * These handlers use the service-role client, so route-level auth must never be
+ * the only protection. Every handler verifies the server-derived actor here.
+ */
+function requireSecurityAdmin(req: Request, res: Response) {
+  const actor = (req as any).user;
+  if (!actor?.id || !actor?.role) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+
+  if (!['owner', 'admin'].includes(actor.role)) {
+    res.status(403).json({ error: 'Security Center access requires owner or admin role' });
+    return null;
+  }
+
+  return actor;
+}
+
+/**
  * GET /api/admin/rbac-matrix
- * Fetches the authoritative RBAC matrix from backend/security.ts
+ * Fetches the authoritative RBAC matrix from backend/security.ts.
  */
 export async function getRbacMatrix(req: Request, res: Response) {
+  if (!requireSecurityAdmin(req, res)) return;
   return res.json({
     hierarchy: ROLE_HIERARCHY,
     permissions: ROLE_PERMISSIONS
   });
 }
 
-/**
- * Audit Logging Helper
- */
+/** Audit Logging Helper */
 async function logAdminAction(actor: any, action: string, ip: string, userAgent: string, targetId?: string) {
   const supabase = getClient();
   if (!supabase) return;
@@ -30,7 +49,7 @@ async function logAdminAction(actor: any, action: string, ip: string, userAgent:
       user_id: actor.id,
       email: actor.email,
       action: targetId ? `${action} (Target: ${targetId})` : action,
-      ip: ip,
+      ip,
       user_agent: userAgent,
       timestamp: new Date().toISOString()
     });
@@ -39,11 +58,9 @@ async function logAdminAction(actor: any, action: string, ip: string, userAgent:
   }
 }
 
-/**
- * GET /api/admin/roster
- * Fetches all privileged users (staff, manager, admin, owner).
- */
+/** GET /api/admin/roster */
 export async function getAdminRoster(req: Request, res: Response) {
+  if (!requireSecurityAdmin(req, res)) return;
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
@@ -63,7 +80,7 @@ export async function getAdminRoster(req: Request, res: Response) {
       role: u.role,
       status: u.is_verified ? 'Active' : 'Pending',
       joinedAt: u.created_at,
-      lastActive: new Date().toISOString() // Placeholder, ideally from zoal_sessions or activity_logs
+      lastActive: null
     }));
 
     return res.json(roster);
@@ -72,87 +89,97 @@ export async function getAdminRoster(req: Request, res: Response) {
   }
 }
 
-/**
- * PATCH /api/admin/roster/:id
- * Updates admin role.
- */
+/** PATCH /api/admin/roster/:id */
 export async function updateAdminRole(req: Request, res: Response) {
+  const actor = requireSecurityAdmin(req, res);
+  if (!actor) return;
+
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
   const { id } = req.params;
   const { role } = req.body;
-  const actor = (req as any).user;
 
   if (!['staff', 'manager', 'admin', 'owner'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
-
-  // Prevent role escalation: cannot grant a role higher than your own
-  const actorLevel = ROLE_HIERARCHY[actor.role] || 0;
-  const targetLevel = ROLE_HIERARCHY[role] || 0;
-  if (targetLevel > actorLevel && actor.role !== 'owner') {
-    return res.status(403).json({ error: 'Cannot escalate role above your own level' });
+  if (id === actor.id) {
+    return res.status(400).json({ error: 'Cannot change your own administrative role' });
   }
 
   try {
-    const { error } = await supabase
+    const { data: target, error: targetError } = await supabase
       .from('zoal_users')
-      .update({ role })
-      .eq('id', id);
+      .select('id, role')
+      .eq('id', id)
+      .maybeSingle();
 
+    if (targetError) throw targetError;
+    if (!target) return res.status(404).json({ error: 'Target administrator not found' });
+
+    if (target.role === 'owner' && actor.role !== 'owner') {
+      return res.status(403).json({ error: 'Only an owner can modify another owner' });
+    }
+    if (role === 'owner' && actor.role !== 'owner') {
+      return res.status(403).json({ error: 'Only an owner can grant owner role' });
+    }
+
+    const actorLevel = ROLE_HIERARCHY[actor.role] || 0;
+    const targetLevel = ROLE_HIERARCHY[role] || 0;
+    if (targetLevel > actorLevel) {
+      return res.status(403).json({ error: 'Cannot grant a role above your own level' });
+    }
+
+    const { error } = await supabase.from('zoal_users').update({ role }).eq('id', id);
     if (error) throw error;
 
     await logAdminAction(actor, `UPDATE_ROLE: ${role}`, req.ip || '', req.headers['user-agent'] || '', id);
-
     return res.json({ success: true, message: 'Role updated successfully' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 }
 
-/**
- * DELETE /api/admin/roster/:id
- * Revokes admin access by downgrading to customer or deactivating.
- */
+/** DELETE /api/admin/roster/:id */
 export async function revokeAdminAccess(req: Request, res: Response) {
+  const actor = requireSecurityAdmin(req, res);
+  if (!actor) return;
+
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
   const { id } = req.params;
-  const actor = (req as any).user;
-
-  if (id === actor.id) {
-    return res.status(400).json({ error: 'Cannot revoke your own access' });
-  }
+  if (id === actor.id) return res.status(400).json({ error: 'Cannot revoke your own access' });
 
   try {
-    // Check target role first
-    const { data: target } = await supabase.from('zoal_users').select('role').eq('id', id).single();
-    if (target?.role === 'owner' && actor.role !== 'owner') {
+    const { data: target, error: targetError } = await supabase
+      .from('zoal_users')
+      .select('id, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (targetError) throw targetError;
+    if (!target) return res.status(404).json({ error: 'Target administrator not found' });
+
+    if (target.role === 'owner' && actor.role !== 'owner') {
       return res.status(403).json({ error: 'Only an owner can revoke another owner' });
     }
 
     const { error } = await supabase
       .from('zoal_users')
-      .update({ role: 'customer' }) // Downgrade to customer instead of hard delete
+      .update({ role: 'customer' })
       .eq('id', id);
-
     if (error) throw error;
 
     await logAdminAction(actor, 'REVOKE_ACCESS', req.ip || '', req.headers['user-agent'] || '', id);
-
     return res.json({ success: true, message: 'Admin access revoked' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 }
 
-/**
- * GET /api/admin/audit-logs
- * Fetches canonical activity logs.
- */
+/** GET /api/admin/audit-logs */
 export async function getAuditLogs(req: Request, res: Response) {
+  if (!requireSecurityAdmin(req, res)) return;
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
@@ -162,20 +189,16 @@ export async function getAuditLogs(req: Request, res: Response) {
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(200);
-
     if (error) throw error;
-
     return res.json(logs || []);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 }
 
-/**
- * GET /api/admin/active-sessions
- * Fetches real sessions from zoal_sessions.
- */
+/** GET /api/admin/active-sessions */
 export async function getActiveSessions(req: Request, res: Response) {
+  if (!requireSecurityAdmin(req, res)) return;
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
@@ -185,7 +208,6 @@ export async function getActiveSessions(req: Request, res: Response) {
       .select('*, zoal_users(first_name, last_name, email, role)')
       .gt('expires_at', new Date().toISOString())
       .order('expires_at', { ascending: false });
-
     if (error) throw error;
 
     const mapped = (sessions || []).map((s: any) => {
@@ -209,43 +231,65 @@ export async function getActiveSessions(req: Request, res: Response) {
   }
 }
 
-/**
- * DELETE /api/admin/sessions/:token
- * Revokes a specific session.
- */
+/** DELETE /api/admin/sessions/:token */
 export async function revokeSession(req: Request, res: Response) {
+  const actor = requireSecurityAdmin(req, res);
+  if (!actor) return;
+
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
-  const { token: sessionId } = req.params; // It's passed as the opaque sessionId hash
-  const actor = (req as any).user;
+  const { token } = req.params;
+  if (!token || token.length < 16 || token.length > 512) {
+    return res.status(400).json({ error: 'Invalid session identifier' });
+  }
 
   try {
-    // Retrieve active sessions to match the hashed token safely on the server
-    const { data: sessions, error: fetchErr } = await supabase
+    // 1. Try to see if this matches a raw token directly
+    const { data: rawSession, error: rawError } = await supabase
       .from('zoal_sessions')
-      .select('token');
+      .select('token, user_id')
+      .eq('token', token)
+      .maybeSingle();
 
-    if (fetchErr) throw fetchErr;
+    let targetToken = '';
+    let targetUserId = '';
 
-    const targetSession = (sessions || []).find(
-      (s: any) => crypto.createHash('sha256').update(s.token).digest('hex') === sessionId
-    );
+    if (rawSession) {
+      targetToken = rawSession.token;
+      targetUserId = rawSession.user_id;
+    } else {
+      // 2. Otherwise, treat it as a secure hashed session ID and match via SHA-256
+      const { data: allSessions, error: allSessionsError } = await supabase
+        .from('zoal_sessions')
+        .select('token, user_id');
+      
+      if (allSessionsError) throw allSessionsError;
 
-    if (!targetSession) {
-      return res.status(404).json({ error: 'NOT_FOUND', message: 'Session not found or already revoked.' });
+      const matched = (allSessions || []).find(
+        (s: any) => crypto.createHash('sha256').update(s.token).digest('hex') === token
+      );
+
+      if (matched) {
+        targetToken = matched.token;
+        targetUserId = matched.user_id;
+      }
     }
 
-    const { error: deleteErr } = await supabase
+    if (!targetToken) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const { error: deleteError } = await supabase
       .from('zoal_sessions')
       .delete()
-      .eq('token', targetSession.token);
+      .eq('token', targetToken);
 
-    if (deleteErr) throw deleteErr;
+    if (deleteError) throw deleteError;
 
-    // Never log or print the raw token - log the masked sessionId hash instead
-    const maskedToken = sessionId.substring(0, 10) + '...';
-    await logAdminAction(actor, 'REVOKE_SESSION', req.ip || '', req.headers['user-agent'] || '', maskedToken);
+    // Do not place the raw session token in the audit ledger. Log only a masked/truncated identifier.
+    const maskedLogToken = token.length === 64 ? token.substring(0, 10) + '...' : targetUserId;
+    await logAdminAction(actor, 'REVOKE_SESSION', req.ip || '', req.headers['user-agent'] || '', maskedLogToken);
 
     return res.json({ success: true, message: 'Session revoked' });
   } catch (err: any) {
