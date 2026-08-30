@@ -52,9 +52,9 @@ export default function AdminNotificationDetailsPanel({
 
     // 1. ORDERS
     if (c.includes('order') || t.includes('order')) {
-      const orderNum = n.metadata?.order_id || n.message.match(/#AZ-\d+/)?.[0] || '#AZ-4820';
-      const customerName = n.metadata?.customer_name || 'John Smith';
-      const totalVal = n.metadata?.total ? `SAR ${n.metadata.total}` : 'SAR 2,450';
+      const orderNum = n.metadata?.order_id || n.message.match(/#AZ-\d+/)?.[0] || 'N/A';
+      const customerName = n.metadata?.customer_name || 'N/A';
+      const totalVal = n.metadata?.total ? `SAR ${n.metadata.total}` : 'N/A';
       return {
         type: 'order',
         emoji: '🛒',
@@ -63,10 +63,10 @@ export default function AdminNotificationDetailsPanel({
         fields: [
           { label: 'Order Number', value: orderNum },
           { label: 'Customer', value: customerName },
-          { label: 'Status', value: n.metadata?.status || 'Active' },
+          { label: 'Status', value: n.metadata?.status || 'Processing' },
           { label: 'Total', value: totalVal },
-          { label: 'Payment', value: 'Paid via Secure Gateway' },
-          { label: 'Delivery', value: 'Express Courier' }
+          { label: 'Payment', value: n.metadata?.payment_status || 'Verified' },
+          { label: 'Source', value: n.metadata?.source || 'Online Store' }
         ],
         actions: [
           { label: 'View Order', icon: ShoppingBag, primary: true },
@@ -74,11 +74,9 @@ export default function AdminNotificationDetailsPanel({
           { label: 'Contact Customer', icon: Phone }
         ],
         timeline: [
-          { time: '10 mins ago', text: 'Order placed & confirmed by customer' },
-          { time: '9 mins ago', text: 'Payment received via secure Gateway' },
-          { time: 'Just now', text: 'Sent to Riyadh Central Fulfillment' }
+          { time: timeAgo(n.timestamp), text: `Notification generated: ${n.title}` }
         ],
-        internalNote: 'VIP member. Premium packaging requested. Deliver before sunset.'
+        internalNote: n.metadata?.internal_note || 'No internal notes provided for this event.'
       };
     }
 
@@ -92,21 +90,19 @@ export default function AdminNotificationDetailsPanel({
         title: 'Inventory Control',
         fields: [
           { label: 'Product', value: productName },
-          { label: 'Warehouse', value: 'Riyadh Logistics Central' },
-          { label: 'Current Stock', value: '8 units remaining' },
-          { label: 'Alert Level', value: '15% luxury threshold breached' },
-          { label: 'Action Needed', value: 'Approve restock purchase order' }
+          { label: 'Warehouse', value: n.metadata?.warehouse || 'N/A' },
+          { label: 'Current Level', value: n.metadata?.current_level || 'Check Required' },
+          { label: 'Alert Trigger', value: 'Threshold Breached' },
+          { label: 'Action Needed', value: 'Audit required' }
         ],
         actions: [
           { label: 'Open Inventory', icon: Package, primary: true },
           { label: 'Update Stock', icon: RefreshCw }
         ],
         timeline: [
-          { time: '2 hours ago', text: 'Item stock falls below set limit' },
-          { time: '1.5 hours ago', text: 'System automatic alert dispatch' },
-          { time: 'Just now', text: 'Automated supplier restock quote prepared' }
+          { time: timeAgo(n.timestamp), text: 'Inventory threshold alert recorded' }
         ],
-        internalNote: 'High demand season. Restock priority is flagged as URGENT.'
+        internalNote: n.metadata?.internal_note || 'Inventory audit required for this SKU.'
       };
     }
 
@@ -118,21 +114,19 @@ export default function AdminNotificationDetailsPanel({
         color: 'text-[#D4AF37]',
         title: 'Security Workspace',
         fields: [
-          { label: 'Event Type', value: 'Administrative Access Sync' },
-          { label: 'IP Address', value: '192.168.1.145' },
-          { label: 'Node', value: 'Riyadh Flagship Node' },
-          { label: 'Impact', value: 'None - Authorized Access' },
-          { label: 'Security Level', value: 'Standard Monitoring' }
+          { label: 'Event Type', value: n.title },
+          { label: 'IP Address', value: n.metadata?.ip_address || 'Internal System' },
+          { label: 'Identity', value: n.user_email || 'System' },
+          { label: 'Impact', value: 'Security Logged' },
+          { label: 'Level', value: n.priority.toUpperCase() }
         ],
         actions: [
           { label: 'View Log', icon: Lock, primary: true }
         ],
         timeline: [
-          { time: '45 mins ago', text: 'Authentication handshake received' },
-          { time: '44 mins ago', text: 'MFA verified successfully' },
-          { time: 'Just now', text: 'Secure session token generated' }
+          { time: timeAgo(n.timestamp), text: 'Security event captured and archived' }
         ],
-        internalNote: 'Standard weekly automated synchronization. No action required.'
+        internalNote: n.metadata?.internal_note || 'Automated security telemetry record.'
       };
     }
 
@@ -144,21 +138,19 @@ export default function AdminNotificationDetailsPanel({
         color: 'text-[#D4AF37]',
         title: 'AI Narrative Render Workspace',
         fields: [
-          { label: 'Campaign Name', value: 'AL ZOAL Al Raqi Campaign' },
-          { label: 'AI Model', value: 'Gemini 2.5 Pro Ultra' },
-          { label: 'Render Time', value: '14.2s (Optimized)' },
-          { label: 'Status', value: 'Completed in High Definition' },
-          { label: 'Next Step', value: 'Distribute to digital displays' }
+          { label: 'Task Name', value: n.title },
+          { label: 'Engine', value: n.metadata?.engine || 'ZOAL Enterprise Core' },
+          { label: 'Processing', value: 'Verified' },
+          { label: 'Status', value: 'Completed' },
+          { label: 'Source', value: n.category }
         ],
         actions: [
           { label: 'Open Campaign', icon: Sparkles, primary: true }
         ],
         timeline: [
-          { time: '6 hours ago', text: 'Prompts processed by Creative Engine' },
-          { time: '6 hours ago', text: 'Multi-agent rendering initiated' },
-          { time: 'Just now', text: 'Visual assets verified and stored' }
+          { time: timeAgo(n.timestamp), text: 'AI processing and validation completed' }
         ],
-        internalNote: 'Pre-approved by Creative Director for digital-out-of-home screens.'
+        internalNote: n.metadata?.internal_note || 'System generated event log.'
       };
     }
 
@@ -169,21 +161,19 @@ export default function AdminNotificationDetailsPanel({
       color: 'text-indigo-400',
       title: 'Customer Workspace',
       fields: [
-        { label: 'Customer', value: 'Ahmad Bin-Talal' },
+        { label: 'Customer', value: n.metadata?.customer_name || n.user_email || 'N/A' },
         { label: 'Subject', value: n.title },
-        { label: 'Ticket Status', value: 'Pending Concierge Review' },
-        { label: 'Assigned Staff', value: 'Luxury Concierge Desk' },
-        { label: 'Last Activity', value: 'Account pre-approval completed' }
+        { label: 'Ticket Status', value: n.metadata?.ticket_status || 'Logged' },
+        { label: 'Assigned Staff', value: n.assigned_staff_id || 'System Queue' },
+        { label: 'Priority', value: n.priority.toUpperCase() }
       ],
       actions: [
         { label: 'Open Customer Profile', icon: User, primary: true }
       ],
       timeline: [
-        { time: '1 day ago', text: 'Request submitted by customer portal' },
-        { time: '18 hours ago', text: 'Identity & VIP criteria verified' },
-        { time: 'Just now', text: 'Pending manual welcome greeting confirmation' }
+        { time: timeAgo(n.timestamp), text: 'Customer interaction event recorded' }
       ],
-      internalNote: 'Highly anticipated client. Prepare personalized welcome telephone call.'
+      internalNote: n.metadata?.internal_note || 'Automated customer service record.'
     };
   };
 
