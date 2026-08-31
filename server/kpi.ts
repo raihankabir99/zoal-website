@@ -1,9 +1,16 @@
-import { getSupabaseClient } from './supabase';
+import { getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
 
+const ALLOWED_KPI_NAMES = [
+  'Revenue', 'Orders', 'AOV', 'Customers', 'CAC', 'DAU', 
+  'Latency', 'Order Dispatch Latency (Hrs)', 'Customer Acquisition Cost (CAC)', 
+  'Average Order Value (AOV)', 'Daily Active Users (DAU)',
+  'Profit', 'Margin', 'Refund Rate'
+];
+
 export async function getKpiData(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
 
   try {
     const { range = 'yearly' } = req.query;
@@ -30,21 +37,55 @@ export async function getKpiData(req: Request, res: Response) {
     }
 
     // 1. Fetch Authoritative Data
-    // We only count orders that are 'paid', 'processing', 'shipped', or 'delivered' as revenue.
-    // 'partially_refunded' is included but ideally we'd subtract refunds if the schema supported fine-grained refund amounts easily.
+    // We only count orders that are 'paid', 'processing', 'shipped', 'delivered', or 'partially_refunded' as revenue source.
     const VALID_REVENUE_STATUSES = ['paid', 'processing', 'shipped', 'delivered', 'partially_refunded'];
     
     const { data: orders, error: ordersError } = await supabase
       .from('zoal_orders')
-      .select('total_amount, status, created_at')
+      .select('id, total_amount, status, created_at')
       .gte('created_at', startDate.toISOString())
       .in('status', VALID_REVENUE_STATUSES);
     
+    // Fetch Refunds for the same orders to ensure Refund-Aware Revenue
+    const orderIds = orders?.map(o => o.id) || [];
+    let totalRefunds = 0;
+    if (orderIds.length > 0) {
+      const { data: payments, error: paymentsError } = await supabase
+        .from('zoal_payment_transactions')
+        .select('refund_amount')
+        .in('order_id', orderIds);
+      
+      if (!paymentsError) {
+        totalRefunds = payments?.reduce((sum, p) => sum + Number(p.refund_amount || 0), 0) || 0;
+      }
+    }
+
     // Authoritative Customer Count (excluding staff/admin)
     const { count: customerCount, error: usersError } = await supabase
       .from('zoal_users')
       .select('*', { count: 'exact', head: true })
       .eq('role', 'customer');
+
+    // Best Effort CAC (Ads Spend / New Customers in period)
+    const { data: growthReports } = await supabase
+      .from('zoal_growth_reports')
+      .select('ads_spend')
+      .gte('captured_at', startDate.toISOString());
+    
+    const { count: newCustomersCount } = await supabase
+      .from('zoal_users')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'customer')
+      .gte('created_at', startDate.toISOString());
+
+    // Best Effort DAU (Distinct active users in last 24h)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: activeLogs } = await supabase
+      .from('zoal_activity_logs')
+      .select('user_id')
+      .gte('timestamp', oneDayAgo);
+    
+    const distinctActiveUsers = new Set(activeLogs?.map(l => l.user_id).filter(Boolean)).size;
 
     const { data: targets, error: targetsError } = await supabase.from('zoal_kpi_targets').select('*');
     
@@ -54,9 +95,10 @@ export async function getKpiData(req: Request, res: Response) {
     }
 
     // 2. Calculate Authoritative Metrics
-    const totalRevenue = orders?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0;
+    const grossRevenue = orders?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0;
+    const netRevenue = Math.max(0, grossRevenue - totalRefunds);
     const orderCount = orders?.length || 0;
-    const aov = orderCount > 0 ? totalRevenue / orderCount : 0;
+    const aov = orderCount > 0 ? netRevenue / orderCount : 0;
     
     // Revenue by month (last 6 months)
     const monthlyRevenue: Record<string, number> = {};
@@ -65,6 +107,10 @@ export async function getKpiData(req: Request, res: Response) {
       monthlyRevenue[month] = (monthlyRevenue[month] || 0) + Number(o.total_amount);
     });
 
+    // Calculate CAC
+    const totalAdsSpend = growthReports?.reduce((sum, r) => sum + Number(r.ads_spend || 0), 0) || 0;
+    const cac = (newCustomersCount && newCustomersCount > 0) ? (totalAdsSpend / newCustomersCount) : -1;
+
     // 3. Construct Snapshots (Live & Historical)
     const { data: historicalSnapshots } = await supabase
       .from('zoal_kpi_snapshots')
@@ -72,16 +118,15 @@ export async function getKpiData(req: Request, res: Response) {
       .order('captured_at', { ascending: false })
       .limit(50);
 
-    // Marked as "Unavailable" as authoritative source data (spend/telemetry) is not yet in schema
-    const UNAVAILABLE = -1; // UI will handle -1 as "Not Available"
+    const UNAVAILABLE = -1;
 
     const liveSnapshots = [
-      { metric_name: 'Revenue', value: totalRevenue, period: range, captured_at: new Date().toISOString() },
+      { metric_name: 'Revenue', value: netRevenue, period: range, captured_at: new Date().toISOString() },
       { metric_name: 'Orders', value: orderCount, period: range, captured_at: new Date().toISOString() },
       { metric_name: 'AOV', value: aov, period: range, captured_at: new Date().toISOString() },
       { metric_name: 'Customers', value: customerCount || 0, period: range, captured_at: new Date().toISOString() },
-      { metric_name: 'CAC', value: UNAVAILABLE, period: range, captured_at: new Date().toISOString() },
-      { metric_name: 'DAU', value: UNAVAILABLE, period: range, captured_at: new Date().toISOString() },
+      { metric_name: 'CAC', value: cac > 0 ? cac : UNAVAILABLE, period: range, captured_at: new Date().toISOString() },
+      { metric_name: 'DAU', value: distinctActiveUsers > 0 ? distinctActiveUsers : UNAVAILABLE, period: range, captured_at: new Date().toISOString() },
       { metric_name: 'Latency', value: UNAVAILABLE, period: range, captured_at: new Date().toISOString() }
     ];
 
@@ -89,12 +134,12 @@ export async function getKpiData(req: Request, res: Response) {
       snapshots: [...liveSnapshots, ...(historicalSnapshots || [])], 
       targets,
       live: {
-        totalRevenue,
+        totalRevenue: netRevenue,
         orderCount,
         aov,
         customerCount,
         monthlyRevenue,
-        unavailable_metrics: ['CAC', 'DAU', 'Latency', 'Profit', 'Margin']
+        unavailable_metrics: ['Latency', 'Profit', 'Margin']
       }
     });
   } catch (err) {
@@ -104,14 +149,14 @@ export async function getKpiData(req: Request, res: Response) {
 }
 
 export async function setKpiTarget(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
 
   const { metric_name, target_value, deadline, id } = req.body;
 
   // Strict Validation
-  if (!metric_name || typeof metric_name !== 'string') {
-    return res.status(400).json({ error: 'Invalid metric_name.' });
+  if (!metric_name || typeof metric_name !== 'string' || !ALLOWED_KPI_NAMES.some(name => metric_name.includes(name))) {
+    return res.status(400).json({ error: 'Invalid or unauthorized metric_name.' });
   }
   if (target_value === undefined || typeof target_value !== 'number' || target_value < 0 || !isFinite(target_value)) {
     return res.status(400).json({ error: 'Invalid target_value. Must be a non-negative number.' });
@@ -129,8 +174,8 @@ export async function setKpiTarget(req: Request, res: Response) {
 }
 
 export async function deleteKpiTarget(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
 
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: 'Target ID is required.' });
