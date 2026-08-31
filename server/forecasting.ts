@@ -3,16 +3,9 @@ import { getServiceSupabaseClient } from './supabase.ts';
 import { authenticateRequest } from '../backend/security.ts';
 
 type DailyPoint = { period: string; revenue: number; orders: number; customers: number };
-
 const FORECAST_HORIZONS = [7, 30, 90] as const;
 const MIN_HISTORY_DAYS = 14;
 const MODEL_VERSION = 'baseline-wma-v1';
-
-function auth(req: Request, res: Response): Promise<boolean> {
-  return new Promise((resolve) => {
-    authenticateRequest(req as any, res, () => resolve(true));
-  });
-}
 
 function weightedAverage(values: number[]): number {
   if (!values.length) return 0;
@@ -40,10 +33,7 @@ function buildDailySeries(rows: any[]): DailyPoint[] {
     if (row.customer_id) bucket.customers.add(String(row.customer_id));
     buckets.set(period, bucket);
   }
-
-  return [...buckets.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([period, value]) => ({ period, revenue: value.revenue, orders: value.orders, customers: value.customers.size }));
+  return [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([period, value]) => ({ period, revenue: value.revenue, orders: value.orders, customers: value.customers.size }));
 }
 
 function fillMissingDays(series: DailyPoint[], cutoff: Date): DailyPoint[] {
@@ -61,136 +51,92 @@ function fillMissingDays(series: DailyPoint[], cutoff: Date): DailyPoint[] {
 }
 
 function project(series: DailyPoint[], horizon: number) {
-  const window = Math.min(7, series.length);
-  const recent = series.slice(-window);
-  return {
-    revenue: weightedAverage(recent.map(p => p.revenue)),
-    orders: weightedAverage(recent.map(p => p.orders)),
-    customers: weightedAverage(recent.map(p => p.customers)),
-    horizon
-  };
+  const recent = series.slice(-Math.min(7, series.length));
+  return { revenue: weightedAverage(recent.map(p => p.revenue)), orders: weightedAverage(recent.map(p => p.orders)), customers: weightedAverage(recent.map(p => p.customers)), horizon };
 }
 
-export async function getForecasts(req: Request, res: Response) {
-  if (!(await auth(req, res))) return;
-  const user = (req as any).user;
-  if (!['owner', 'admin', 'manager'].includes(user?.role)) {
-    return res.status(403).json({ error: 'Forbidden', message: 'Executive Forecast requires owner, admin, or manager access.' });
-  }
-
-  const supabase = getServiceSupabaseClient();
-  if (!supabase) return res.status(500).json({ error: 'Forecast data service unavailable.' });
-
-  const cutoff = new Date();
-  cutoff.setUTCDate(cutoff.getUTCDate() - 1);
-  cutoff.setUTCHours(23, 59, 59, 999);
-  const historyStart = new Date(cutoff);
-  historyStart.setUTCDate(historyStart.getUTCDate() - 365);
-  historyStart.setUTCHours(0, 0, 0, 0);
-
-  const { data: orders, error } = await supabase
-    .from('zoal_orders')
-    .select('id, customer_id, total_amount, status, payment_status, created_at')
-    .gte('created_at', historyStart.toISOString())
-    .lte('created_at', cutoff.toISOString())
-    .in('status', ['paid', 'processing', 'shipped', 'delivered']);
-
-  if (error) return res.status(500).json({ error: error.message });
-
-  const rawSeries = buildDailySeries(orders || []);
-  const history = fillMissingDays(rawSeries, cutoff);
-  const historyDays = history.length;
-  const sufficientHistory = historyDays >= MIN_HISTORY_DAYS;
-
-  const actualRevenue = history.reduce((sum, p) => sum + p.revenue, 0);
-  const actualOrders = history.reduce((sum, p) => sum + p.orders, 0);
-  const actualCustomers = history.reduce((sum, p) => sum + p.customers, 0);
-
-  if (!sufficientHistory) {
-    return res.json({
-      status: 'insufficient_history',
-      data_cutoff: cutoff.toISOString(),
-      generated_at: new Date().toISOString(),
-      forecast_method: MODEL_VERSION,
-      history_days: historyDays,
-      minimum_history_days: MIN_HISTORY_DAYS,
-      historical: history,
-      forecasts: [],
-      accuracy: { status: 'unavailable', wape: null, sample_size: 0 },
-      financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' }
-    });
-  }
-
-  const forecasts = FORECAST_HORIZONS.map(horizon => {
-    const daily = project(history, horizon);
-    const forecast = {
-      horizon_days: horizon,
-      forecast_revenue: Number((daily.revenue * horizon).toFixed(2)),
-      forecast_orders: Number((daily.orders * horizon).toFixed(2)),
-      forecast_customers: Number((daily.customers * horizon).toFixed(2)),
-      forecast_method: MODEL_VERSION,
-      model_version: MODEL_VERSION,
-      data_cutoff: cutoff.toISOString()
-    };
-    return forecast;
-  });
-
-  // Time-ordered rolling holdout backtest using the same baseline model.
-  const holdoutSize = Math.min(7, Math.floor(history.length / 4));
-  const train = history.slice(0, -holdoutSize);
-  const holdout = history.slice(-holdoutSize);
-  const backtestPrediction = weightedAverage(train.slice(-7).map(p => p.revenue));
-  const accuracyWape = wape(holdout.map(p => p.revenue), holdout.map(() => backtestPrediction));
-
-  // Profit is deliberately unavailable: the current authoritative order schema has no COGS field.
-  const response = {
-    status: 'verified',
-    data_cutoff: cutoff.toISOString(),
-    generated_at: new Date().toISOString(),
-    forecast_method: MODEL_VERSION,
-    model_version: MODEL_VERSION,
-    history_days: historyDays,
-    minimum_history_days: MIN_HISTORY_DAYS,
-    historical: history,
-    summary: {
-      actual_revenue: Number(actualRevenue.toFixed(2)),
-      actual_orders: actualOrders,
-      actual_customers: actualCustomers
-    },
-    forecasts,
-    accuracy: {
-      status: accuracyWape === null ? 'unavailable' : 'backtested',
-      wape: accuracyWape,
-      sample_size: holdout.length
-    },
-    financial: {
-      profit_forecast: null,
-      status: 'insufficient_authoritative_cost_data'
+export function getForecasts(req: Request, res: Response) {
+  authenticateRequest(req as any, res, async () => {
+    const user = (req as any).user;
+    if (!['owner', 'admin', 'manager'].includes(user?.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Executive Forecast requires owner, admin, or manager access.' });
     }
-  };
 
-  // Persist only server-generated, traceable forecast snapshots. Never persist fabricated values.
-  const rows = forecasts.map(f => ({
-    metric: 'revenue',
-    period_start: cutoff.toISOString(),
-    horizon_days: f.horizon_days,
-    actual_value: response.summary.actual_revenue,
-    forecast_value: f.forecast_revenue,
-    forecast_method: f.forecast_method,
-    cutoff_at: cutoff.toISOString(),
-    generated_at: response.generated_at,
-    model_version: f.model_version,
-    data_status: 'verified',
-    sample_size: historyDays,
-    accuracy_wape: accuracyWape,
-    forecast_type: 'Revenue',
-    predicted_value: f.forecast_revenue,
-    history_data: { actual_revenue: response.summary.actual_revenue, history_days: historyDays, wape: accuracyWape },
-    scenario: `Automated ${f.horizon_days}-day revenue forecast`
-  }));
+    const supabase = getServiceSupabaseClient();
+    if (!supabase) return res.status(500).json({ error: 'Forecast data service unavailable.' });
 
-  const { error: persistError } = await supabase.from('zoal_forecasts').insert(rows);
-  if (persistError) console.error('Forecast snapshot persistence failed:', persistError.message);
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+    cutoff.setUTCHours(23, 59, 59, 999);
+    const historyStart = new Date(cutoff);
+    historyStart.setUTCDate(historyStart.getUTCDate() - 365);
+    historyStart.setUTCHours(0, 0, 0, 0);
 
-  return res.json(response);
+    const { data: orders, error } = await supabase
+      .from('zoal_orders')
+      .select('id, customer_id, total_amount, status, payment_status, created_at')
+      .gte('created_at', historyStart.toISOString())
+      .lte('created_at', cutoff.toISOString())
+      .in('status', ['paid', 'processing', 'shipped', 'delivered']);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const history = fillMissingDays(buildDailySeries(orders || []), cutoff);
+    const historyDays = history.length;
+    const actualRevenue = history.reduce((sum, p) => sum + p.revenue, 0);
+    const actualOrders = history.reduce((sum, p) => sum + p.orders, 0);
+    const actualCustomers = history.reduce((sum, p) => sum + p.customers, 0);
+
+    if (historyDays < MIN_HISTORY_DAYS) {
+      return res.json({
+        status: 'insufficient_history', data_cutoff: cutoff.toISOString(), generated_at: new Date().toISOString(),
+        forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, history_days: historyDays,
+        minimum_history_days: MIN_HISTORY_DAYS, historical: history, forecasts: [],
+        accuracy: { status: 'unavailable', wape: null, sample_size: 0 },
+        financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' }
+      });
+    }
+
+    const forecasts = FORECAST_HORIZONS.map(horizon => {
+      const daily = project(history, horizon);
+      return {
+        horizon_days: horizon,
+        forecast_revenue: Number((daily.revenue * horizon).toFixed(2)),
+        forecast_orders: Number((daily.orders * horizon).toFixed(2)),
+        forecast_customers: Number((daily.customers * horizon).toFixed(2)),
+        forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, data_cutoff: cutoff.toISOString()
+      };
+    });
+
+    const holdoutSize = Math.min(7, Math.floor(history.length / 4));
+    const train = history.slice(0, -holdoutSize);
+    const holdout = history.slice(-holdoutSize);
+    const backtestPrediction = weightedAverage(train.slice(-7).map(p => p.revenue));
+    const accuracyWape = wape(holdout.map(p => p.revenue), holdout.map(() => backtestPrediction));
+    const generatedAt = new Date().toISOString();
+
+    const response = {
+      status: 'verified', data_cutoff: cutoff.toISOString(), generated_at: generatedAt,
+      forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, history_days: historyDays,
+      minimum_history_days: MIN_HISTORY_DAYS, historical: history,
+      summary: { actual_revenue: Number(actualRevenue.toFixed(2)), actual_orders: actualOrders, actual_customers: actualCustomers },
+      forecasts,
+      accuracy: { status: accuracyWape === null ? 'unavailable' : 'backtested', wape: accuracyWape, sample_size: holdout.length },
+      financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' }
+    };
+
+    const rows = forecasts.map(f => ({
+      metric: 'revenue', period_start: cutoff.toISOString(), horizon_days: f.horizon_days,
+      actual_value: response.summary.actual_revenue, forecast_value: f.forecast_revenue,
+      forecast_method: f.forecast_method, cutoff_at: cutoff.toISOString(), generated_at: generatedAt,
+      model_version: f.model_version, data_status: 'verified', sample_size: historyDays, accuracy_wape: accuracyWape,
+      forecast_type: 'Revenue', predicted_value: f.forecast_revenue,
+      history_data: { actual_revenue: response.summary.actual_revenue, history_days: historyDays, wape: accuracyWape },
+      scenario: `Automated ${f.horizon_days}-day revenue forecast`
+    }));
+
+    const { error: persistError } = await supabase.from('zoal_forecasts').insert(rows);
+    if (persistError) console.error('Forecast snapshot persistence failed:', persistError.message);
+    return res.json(response);
+  });
 }
