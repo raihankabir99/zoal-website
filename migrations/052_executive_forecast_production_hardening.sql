@@ -16,37 +16,27 @@ ALTER TABLE public.zoal_forecasts
   ADD COLUMN IF NOT EXISTS accuracy_wape NUMERIC(10,2);
 
 ALTER TABLE public.zoal_forecasts ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Executive forecast read access" ON public.zoal_forecasts;
-DROP POLICY IF EXISTS "Executive forecast service insert" ON public.zoal_forecasts;
-DROP POLICY IF EXISTS "Executive forecast service update" ON public.zoal_forecasts;
-DROP POLICY IF EXISTS "Executive forecast service delete" ON public.zoal_forecasts;
 
 CREATE POLICY "Executive forecast read access"
   ON public.zoal_forecasts
   FOR SELECT
   TO authenticated
-  USING (
-    is_owner(auth.uid()::text)
-    OR is_admin(auth.uid()::text)
-    OR is_manager(auth.uid()::text)
-  );
-
--- Forecast snapshots are written by the trusted server using the service role.
--- No authenticated client is granted INSERT/UPDATE/DELETE access.
+  USING (is_owner(auth.uid()::text) OR is_admin(auth.uid()::text) OR is_manager(auth.uid()::text));
 
 REVOKE ALL ON TABLE public.zoal_forecasts FROM anon, authenticated;
 
 CREATE INDEX IF NOT EXISTS idx_zoal_forecasts_period_horizon
   ON public.zoal_forecasts (period_start, horizon_days);
-
 CREATE INDEX IF NOT EXISTS idx_zoal_forecasts_metric_generated
   ON public.zoal_forecasts (metric, generated_at DESC);
 
-ALTER TABLE public.zoal_forecasts
-  ADD CONSTRAINT zoal_forecasts_horizon_days_chk
-  CHECK (horizon_days IS NULL OR horizon_days IN (7,30,90));
-
-ALTER TABLE public.zoal_forecasts
-  ADD CONSTRAINT zoal_forecasts_sample_size_chk
-  CHECK (sample_size IS NULL OR sample_size >= 0);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'zoal_forecasts_horizon_days_chk' AND conrelid = 'public.zoal_forecasts'::regclass) THEN
+    ALTER TABLE public.zoal_forecasts ADD CONSTRAINT zoal_forecasts_horizon_days_chk CHECK (horizon_days IS NULL OR horizon_days IN (7,30,90));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'zoal_forecasts_sample_size_chk' AND conrelid = 'public.zoal_forecasts'::regclass) THEN
+    ALTER TABLE public.zoal_forecasts ADD CONSTRAINT zoal_forecasts_sample_size_chk CHECK (sample_size IS NULL OR sample_size >= 0);
+  END IF;
+END $$;
