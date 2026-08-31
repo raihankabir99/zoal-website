@@ -478,14 +478,24 @@ export const EnterpriseKpiDashboard: React.FC = () => {
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
                   <label className="text-zinc-500 text-[9px] uppercase font-mono tracking-wider block mb-1">Metric Name</label>
-                  <input 
-                    type="text" 
+                  <select 
                     required
-                    placeholder="e.g. Average Order Value (AOV)"
                     value={formMetric}
                     onChange={(e) => setFormMetric(e.target.value)}
                     className="w-full bg-black border border-white/5 focus:border-gold-pure/40 text-white p-2 rounded-xs text-xs outline-none"
-                  />
+                  >
+                    <option value="" disabled>Select Metric</option>
+                    <option value="Revenue">Revenue</option>
+                    <option value="Orders">Orders</option>
+                    <option value="AOV">Average Order Value (AOV)</option>
+                    <option value="Customers">Customers</option>
+                    <option value="CAC">Customer Acquisition Cost (CAC)</option>
+                    <option value="DAU">Daily Active Users (DAU)</option>
+                    <option value="Latency">Latency</option>
+                    <option value="Profit">Profit</option>
+                    <option value="Margin">Margin</option>
+                    <option value="Refund Rate">Refund Rate</option>
+                  </select>
                 </div>
 
                 <div>

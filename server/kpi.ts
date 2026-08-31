@@ -3,9 +3,7 @@ import { Request, Response } from 'express';
 
 const ALLOWED_KPI_NAMES = [
   'Revenue', 'Orders', 'AOV', 'Customers', 'CAC', 'DAU',
-  'Latency', 'Order Dispatch Latency (Hrs)', 'Customer Acquisition Cost (CAC)',
-  'Average Order Value (AOV)', 'Daily Active Users (DAU)',
-  'Profit', 'Margin', 'Refund Rate'
+  'Latency', 'Profit', 'Margin', 'Refund Rate'
 ];
 
 function getRangeStart(range: unknown): Date {
@@ -113,8 +111,8 @@ export async function setKpiTarget(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
 
   const { metric_name, target_value, deadline, id } = req.body;
-  if (!metric_name || typeof metric_name !== 'string' || !ALLOWED_KPI_NAMES.some(name => metric_name.includes(name))) {
-    return res.status(400).json({ error: 'Invalid or unauthorized metric_name.' });
+  if (!metric_name || typeof metric_name !== 'string' || !ALLOWED_KPI_NAMES.includes(metric_name)) {
+    return res.status(400).json({ error: 'Invalid or unauthorized metric_name. Must be one of: ' + ALLOWED_KPI_NAMES.join(', ') });
   }
   if (target_value === undefined || typeof target_value !== 'number' || target_value < 0 || !isFinite(target_value)) {
     return res.status(400).json({ error: 'Invalid target_value. Must be a non-negative number.' });
