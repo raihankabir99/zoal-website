@@ -33,6 +33,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
   // States
   const [snapshots, setSnapshots] = useState<KpiSnapshot[]>([]);
   const [targets, setTargets] = useState<KpiTarget[]>([]);
+  const [liveData, setLiveData] = useState<any>(null);
 
   // Realtime connection status
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
@@ -77,6 +78,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
       const data = await res.json();
       setSnapshots(data.snapshots || []);
       setTargets(data.targets || []);
+      setLiveData(data.live || null);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Error syncing with strategic KPI registry.');
@@ -193,18 +195,30 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     }
   };
 
-  // KPI Calculations / Comparisons
+  // KPI Calculations / Comparisons (using authoritative live backend KPI values)
   const kpiComparisons = useMemo(() => {
     return targets.map(t => {
-      const snap = snapshots.find(s => s.metric_name === t.metric_name);
-      const value = snap ? snap.value : 0;
+      let value = 0;
+      if (liveData) {
+        const name = t.metric_name.toLowerCase();
+        if (name.includes('revenue')) value = liveData.totalRevenue ?? 0;
+        else if (name.includes('order')) value = liveData.orderCount ?? 0;
+        else if (name.includes('aov') || name.includes('average order value')) value = liveData.aov ?? 0;
+        else if (name.includes('customer')) value = liveData.customerCount ?? 0;
+        else if (name.includes('profit')) value = liveData.profit ?? -1;
+        else if (name.includes('margin')) value = liveData.margin ?? -1;
+        else value = -1; // CAC, DAU, Latency, Refund Rate etc.
+      } else {
+        const snap = snapshots.find(s => s.metric_name === t.metric_name);
+        value = snap ? snap.value : 0;
+      }
       
       // Calculate progress percentage
       // For CAC or Latency, lower is better, so calculate inverse
       let progress = 0;
       const isLowerBetter = t.metric_name.toLowerCase().includes('cac') || t.metric_name.toLowerCase().includes('latency');
       
-      if (t.target_value > 0) {
+      if (t.target_value > 0 && value !== -1) {
         if (isLowerBetter) {
           progress = value <= t.target_value ? 100 : Math.max(0, Math.round((t.target_value / value) * 100));
         } else {
@@ -219,7 +233,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
         isLowerBetter
       };
     });
-  }, [targets, snapshots]);
+  }, [targets, liveData, snapshots]);
 
   // Filters and pagination
   const filteredKpis = useMemo(() => {
