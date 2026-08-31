@@ -239,56 +239,51 @@ export async function revokeSession(req: Request, res: Response) {
   const supabase = getClient();
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
-  const { token } = req.params;
-  if (!token || token.length < 16 || token.length > 512) {
-    return res.status(400).json({ error: 'Invalid session identifier' });
+  const { token: sessionId } = req.params;
+  if (!sessionId || sessionId.length !== 64 || !/^[0-9a-f]{64}$/i.test(sessionId)) {
+    return res.status(400).json({ error: 'Invalid session identifier structure' });
   }
 
   try {
-    // 1. Try to see if this matches a raw token directly
-    const { data: rawSession, error: rawError } = await supabase
+    // 1. Retrieve sessions and fetch associated user roles to check privilege hierarchy
+    const { data: allSessions, error: fetchErr } = await supabase
       .from('zoal_sessions')
-      .select('token, user_id')
-      .eq('token', token)
-      .maybeSingle();
+      .select('token, user_id, zoal_users(role)');
 
-    let targetToken = '';
-    let targetUserId = '';
+    if (fetchErr) throw fetchErr;
 
-    if (rawSession) {
-      targetToken = rawSession.token;
-      targetUserId = rawSession.user_id;
-    } else {
-      // 2. Otherwise, treat it as a secure hashed session ID and match via SHA-256
-      const { data: allSessions, error: allSessionsError } = await supabase
-        .from('zoal_sessions')
-        .select('token, user_id');
-      
-      if (allSessionsError) throw allSessionsError;
+    const targetSession = (allSessions || []).find(
+      (s: any) => crypto.createHash('sha256').update(s.token).digest('hex') === sessionId
+    );
 
-      const matched = (allSessions || []).find(
-        (s: any) => crypto.createHash('sha256').update(s.token).digest('hex') === token
-      );
-
-      if (matched) {
-        targetToken = matched.token;
-        targetUserId = matched.user_id;
-      }
-    }
-
-    if (!targetToken) {
+    if (!targetSession) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
+    const targetUserRole = (targetSession.zoal_users as any)?.role || 'customer';
+
+    // 2. Prevent IDOR / Hierarchy Violation
+    const actorLevel = ROLE_HIERARCHY[actor.role] || 0;
+    const targetLevel = ROLE_HIERARCHY[targetUserRole] || 0;
+    
+    if (targetLevel > actorLevel && actor.role !== 'owner') {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Cannot revoke session of a higher-privileged user.' });
+    }
+
+    if (targetUserRole === 'owner' && actor.role !== 'owner') {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Only an owner can revoke an owner\'s session.' });
+    }
+
+    // 3. Delete the session using its secure token on the server
     const { error: deleteError } = await supabase
       .from('zoal_sessions')
       .delete()
-      .eq('token', targetToken);
+      .eq('token', targetSession.token);
 
     if (deleteError) throw deleteError;
 
-    // Do not place the raw session token in the audit ledger. Log only a masked/truncated identifier.
-    const maskedLogToken = token.length === 64 ? token.substring(0, 10) + '...' : targetUserId;
+    // 4. Log the action securely using only the opaque session ID hash
+    const maskedLogToken = sessionId.substring(0, 10) + '...';
     await logAdminAction(actor, 'REVOKE_SESSION', req.ip || '', req.headers['user-agent'] || '', maskedLogToken);
 
     return res.json({ success: true, message: 'Session revoked' });
@@ -323,7 +318,7 @@ export async function inviteAdmin(req: Request, res: Response) {
   const cleanEmail = email.trim().toLowerCase();
 
   // 3. Strict Role Validation
-  const allowedAdminRoles = ['staff', 'editor', 'manager', 'admin', 'owner'];
+  const allowedAdminRoles = ['staff', 'manager', 'admin', 'owner'];
   if (!role || !allowedAdminRoles.includes(role)) {
     return res.status(400).json({ error: 'INVALID_ROLE', message: 'A valid privileged administrative role is required.' });
   }

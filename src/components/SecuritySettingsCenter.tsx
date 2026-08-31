@@ -254,7 +254,7 @@ export default function SecuritySettingsCenter({
     try {
       const res = await fetch(`/api/admin/sessions/${token}`, { method: 'DELETE' });
       if (res.ok) {
-        addLog(`Revoked session: ${token}`, "Security & Settings");
+        addLog(`Revoked session: ${token.substring(0, 10)}...`, "Security & Settings");
         fetchSessions();
       }
     } catch (err) {
