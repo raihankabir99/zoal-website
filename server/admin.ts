@@ -205,16 +205,14 @@ export async function getActiveSessions(req: Request, res: Response) {
   try {
     const { data: sessions, error } = await supabase
       .from('zoal_sessions')
-      .select('*, zoal_users(first_name, last_name, email, role)')
+      .select('opaque_session_id, expires_at, zoal_users(first_name, last_name, email, role)')
       .gt('expires_at', new Date().toISOString())
       .order('expires_at', { ascending: false });
     if (error) throw error;
 
     const mapped = (sessions || []).map((s: any) => {
-      // Use standard SHA-256 to hash the token into a secure opaque ID
-      const opaqueId = crypto.createHash('sha256').update(s.token).digest('hex');
       return {
-        id: opaqueId,
+        id: s.opaque_session_id,
         user: `${s.zoal_users?.first_name || ''} ${s.zoal_users?.last_name || ''}`.trim() || s.zoal_users?.email || 'Unknown',
         email: s.zoal_users?.email || 'N/A',
         role: s.zoal_users?.role || 'customer',
@@ -240,21 +238,19 @@ export async function revokeSession(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
   const { token: sessionId } = req.params;
-  if (!sessionId || sessionId.length !== 64 || !/^[0-9a-f]{64}$/i.test(sessionId)) {
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.trim().length === 0) {
     return res.status(400).json({ error: 'Invalid session identifier structure' });
   }
 
   try {
-    // 1. Retrieve sessions and fetch associated user roles to check privilege hierarchy
-    const { data: allSessions, error: fetchErr } = await supabase
+    // 1. Retrieve sessions directly by its secure opaque_session_id to prevent any raw token exposure
+    const { data: targetSession, error: fetchErr } = await supabase
       .from('zoal_sessions')
-      .select('token, user_id, zoal_users(role)');
+      .select('opaque_session_id, user_id, zoal_users(role)')
+      .eq('opaque_session_id', sessionId)
+      .maybeSingle();
 
     if (fetchErr) throw fetchErr;
-
-    const targetSession = (allSessions || []).find(
-      (s: any) => crypto.createHash('sha256').update(s.token).digest('hex') === sessionId
-    );
 
     if (!targetSession) {
       return res.status(404).json({ error: 'Session not found' });
@@ -274,15 +270,15 @@ export async function revokeSession(req: Request, res: Response) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Only an owner can revoke an owner\'s session.' });
     }
 
-    // 3. Delete the session using its secure token on the server
+    // 3. Delete the session directly by its opaque_session_id
     const { error: deleteError } = await supabase
       .from('zoal_sessions')
       .delete()
-      .eq('token', targetSession.token);
+      .eq('opaque_session_id', sessionId);
 
     if (deleteError) throw deleteError;
 
-    // 4. Log the action securely using only the opaque session ID hash
+    // 4. Log the action securely using only the opaque session ID hash/mask
     const maskedLogToken = sessionId.substring(0, 10) + '...';
     await logAdminAction(actor, 'REVOKE_SESSION', req.ip || '', req.headers['user-agent'] || '', maskedLogToken);
 

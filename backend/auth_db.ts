@@ -38,6 +38,7 @@ export interface Session {
   userId: string;
   expiresAt: string;
   rememberMe: boolean;
+  opaqueSessionId?: string;
 }
 
 export interface ActivityLog {
@@ -111,7 +112,8 @@ export function toSupabaseSession(s: Session) {
     token: s.token,
     user_id: s.userId,
     expires_at: s.expiresAt,
-    remember_me: s.rememberMe
+    remember_me: s.rememberMe,
+    opaque_session_id: s.opaqueSessionId || crypto.randomUUID()
   };
 }
 
@@ -120,7 +122,8 @@ export function fromSupabaseSession(ss: any): Session {
     token: ss.token,
     userId: ss.user_id,
     expiresAt: ss.expires_at,
-    rememberMe: ss.remember_me
+    rememberMe: ss.remember_me,
+    opaqueSessionId: ss.opaque_session_id
   };
 }
 
