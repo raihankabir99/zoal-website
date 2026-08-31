@@ -1,19 +1,23 @@
-import { getSupabaseClient } from './supabase';
+import { getServiceSupabaseClient } from './supabase';
 
-export async function getCoreBusinessStats() {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return { totalOrders: 120, totalRevenue: 48500, activeCustomers: 45, averageOrderValue: 404 };
-  }
-  try {
-    const { count: totalOrders } = await supabase.from('zoal_orders').select('*', { count: 'exact', head: true });
-    return {
-      totalOrders: totalOrders || 0,
-      totalRevenue: 50000,
-      activeCustomers: 50,
-      averageOrderValue: 450
-    };
-  } catch (e) {
-    return { totalOrders: 0, totalRevenue: 0, activeCustomers: 0, averageOrderValue: 0 };
-  }
+export async function getCoreBusinessStats(startDate?: string, endDate?: string) {
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) throw new Error('Supabase service client not initialized.');
+
+  const { data, error } = await supabase.rpc('zoal_business_insights_core_stats', {
+    p_start: startDate ?? null,
+    p_end: endDate ?? null
+  });
+
+  if (error) throw new Error(`Business Insights core stats query failed: ${error.message}`);
+
+  return data ?? {
+    totalOrders: 0,
+    totalRevenue: 0,
+    activeCustomers: 0,
+    averageOrderValue: 0,
+    lowStockCount: 0,
+    revenueStatusBasis: 'paid_non_cancelled_non_refunded',
+    profitStatus: 'not_available_without_authoritative_cogs'
+  };
 }
