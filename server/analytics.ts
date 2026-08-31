@@ -1,51 +1,37 @@
-import { getSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
+import { getServiceSupabaseClient } from './supabase';
 
 export async function getRegionalAnalytics(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
 
   try {
-    // We aggregate revenue by city from orders and their associated addresses
-    const { data: orders, error } = await supabase
-      .from('zoal_orders')
-      .select(`
-        total_amount,
-        zoal_addresses (
-          city
-        )
-      `)
-      .eq('payment_status', 'paid');
+    const start = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+    const end = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
 
-    if (error) {
-      console.error('Regional Analytics Fetch Error:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    const cityStats: Record<string, { revenue: number; orders: number }> = {};
-    
-    orders.forEach((o: any) => {
-      const city = o.zoal_addresses?.city || 'Unknown';
-      if (!cityStats[city]) {
-        cityStats[city] = { revenue: 0, orders: 0 };
-      }
-      cityStats[city].revenue += Number(o.total_amount);
-      cityStats[city].orders += 1;
+    const { data, error } = await supabase.rpc('zoal_business_insights_regional', {
+      p_start: start ?? null,
+      p_end: end ?? null
     });
 
-    const report = Object.entries(cityStats).map(([region, stats]) => ({
-      region,
-      revenue: stats.revenue,
-      orderCount: stats.orders,
+    if (error) {
+      console.error('Regional Analytics Query Error:', error);
+      return res.status(500).json({ error: 'Failed to fetch regional analytics.' });
+    }
+
+    const report = (data || []).map((row: any) => ({
+      region: row.region,
+      revenue: Number(row.revenue || 0),
+      orderCount: Number(row.order_count || 0),
       status: 'Active',
-      growth: '+12.5%', // Synthetic growth as we don't have historical comparison logic yet
+      growth: null,
+      growthStatus: 'not_available_without_comparison_period',
       capturedAt: new Date().toISOString()
     }));
 
-    // If no real data, return empty or a sample message to avoid frontend crash but indicate no real data yet
-    res.json(report.length > 0 ? report : []);
+    return res.json(report);
   } catch (err) {
     console.error('Regional Analytics Error:', err);
-    res.status(500).json({ error: 'Internal Server Error during regional analysis.' });
+    return res.status(500).json({ error: 'Internal Server Error during regional analysis.' });
   }
 }
