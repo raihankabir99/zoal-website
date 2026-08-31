@@ -482,7 +482,7 @@ export default function AdminDashboard({
   }, [subscribers]);
 
   useEffect(() => {
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
     const authHeaders = { 'Authorization': `Bearer ${token}` };
 
     fetch('/api/marketing-data', { headers: authHeaders })

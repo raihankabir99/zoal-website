@@ -446,30 +446,6 @@ export async function authenticateRequest(req: any, res: Response, next: NextFun
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
   
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    headerValue === 'Bearer dev-preview-token'
-  ) {
-    req.user = {
-      id: 'dev-preview',
-      email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-      firstName: 'RKInfinity',
-      lastName: 'Developer',
-      name: 'RKInfinity Developer',
-      phone: '',
-      role: 'owner',
-      isVerified: true,
-      addresses: [],
-      permissions: [
-        'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-        'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-        'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-        'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-      ]
-    };
-    return next();
-  }
-  
   if (!headerValue || !headerValue.startsWith('Bearer ')) {
     return res.status(401).json({ 
       error: 'Unauthorized', 
@@ -505,30 +481,6 @@ export async function authenticateRequest(req: any, res: Response, next: NextFun
 export async function optionalAuthenticate(req: any, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    headerValue === 'Bearer dev-preview-token'
-  ) {
-    req.user = {
-      id: 'dev-preview',
-      email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-      firstName: 'RKInfinity',
-      lastName: 'Developer',
-      name: 'RKInfinity Developer',
-      phone: '',
-      role: 'owner',
-      isVerified: true,
-      addresses: [],
-      permissions: [
-        'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-        'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-        'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-        'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-      ]
-    };
-    return next();
-  }
 
   if (!headerValue || !headerValue.startsWith('Bearer ')) {
     req.user = null;

@@ -365,7 +365,7 @@ export const CampaignsMarketingPanel: React.FC<CampaignsMarketingPanelProps> = (
                       <button
                         onClick={async () => {
                           const nextStatus = b.status === 'active' ? 'inactive' : 'active';
-                          const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+                          const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
                           try {
                             const res = await fetch(`/api/homepage-heroes/${b.id}`, {
                               method: 'PUT',
@@ -394,7 +394,7 @@ export const CampaignsMarketingPanel: React.FC<CampaignsMarketingPanelProps> = (
                       <button
                         onClick={async () => {
                           if (window.confirm(`Delete slider banner "${b.title}"?`)) {
-                            const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+                            const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
                             try {
                               const res = await fetch(`/api/homepage-heroes/${b.id}`, {
                                 method: 'DELETE',
@@ -785,7 +785,7 @@ export const CampaignsMarketingPanel: React.FC<CampaignsMarketingPanelProps> = (
                 priority: 10
               };
               try {
-                const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+                const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
                 const res = await fetch('/api/homepage-heroes', {
                   method: 'POST',
                   headers: { 

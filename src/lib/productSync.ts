@@ -17,13 +17,13 @@ export interface CacheMetadata {
   syncInProgress: boolean;
 }
 
-// Helper to retrieve valid auth token (falling back to dev-preview-token if not logged in)
+// Helper to retrieve valid auth token
 function getAuthToken(): string {
-  if (typeof window === 'undefined') return 'dev-preview-token';
+  if (typeof window === 'undefined') return '';
   return (
     localStorage.getItem('zoal_auth_token') ||
     sessionStorage.getItem('zoal_auth_token') ||
-    'dev-preview-token'
+    ''
   );
 }
 

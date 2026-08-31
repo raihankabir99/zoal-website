@@ -194,8 +194,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
       };
 
       // Call API Endpoint POST `/api/simulation/runs`
-      // Use local session token if available or fallback
-      const sessionToken = localStorage.getItem('supabase-token') || 'dev-preview-token';
+      const sessionToken = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch('/api/simulation/runs', {
         method: 'POST',
         headers: {

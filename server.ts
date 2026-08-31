@@ -561,25 +561,25 @@ async function sendEmailWithRetry(order: any, emailLogId: string, maxAttempts = 
 
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
-app.put('/api/cms/pages/:id', authenticateRequest, cmsModule.updateCmsPage);
+app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
 
 // Homepage Heroes routes
 app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);
-app.post('/api/homepage-heroes', authenticateRequest, cmsModule.createHomepageHero);
-app.put('/api/homepage-heroes/:id', authenticateRequest, cmsModule.updateHomepageHero);
-app.delete('/api/homepage-heroes/:id', authenticateRequest, cmsModule.deleteHomepageHero);
-app.post('/api/homepage-heroes/:id/duplicate', authenticateRequest, cmsModule.duplicateHomepageHero);
+app.post('/api/homepage-heroes', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.createHomepageHero);
+app.put('/api/homepage-heroes/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateHomepageHero);
+app.delete('/api/homepage-heroes/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.deleteHomepageHero);
+app.post('/api/homepage-heroes/:id/duplicate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.duplicateHomepageHero);
 
 // Homepage Editorial routes
 app.get('/api/homepage-editorial', cmsModule.getHomepageEditorialBlocks);
-app.post('/api/homepage-editorial', authenticateRequest, cmsModule.createHomepageEditorialBlock);
-app.put('/api/homepage-editorial/:id', authenticateRequest, cmsModule.updateHomepageEditorialBlock);
-app.delete('/api/homepage-editorial/:id', authenticateRequest, cmsModule.deleteHomepageEditorialBlock);
-app.post('/api/homepage-editorial/:id/duplicate', authenticateRequest, cmsModule.duplicateHomepageEditorialBlock);
+app.post('/api/homepage-editorial', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.createHomepageEditorialBlock);
+app.put('/api/homepage-editorial/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateHomepageEditorialBlock);
+app.delete('/api/homepage-editorial/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.deleteHomepageEditorialBlock);
+app.post('/api/homepage-editorial/:id/duplicate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.duplicateHomepageEditorialBlock);
 
 // Marketing Automation Routes
 app.get('/api/marketing-data', marketingModule.getMarketingData);
-app.post('/api/marketing/campaigns', authenticateRequest, marketingModule.createCampaign);
+app.post('/api/marketing/campaigns', authenticateRequest, requireRole(['admin', 'manager', 'staff']), marketingModule.createCampaign);
 
 // Legal Policy Routes
 app.get('/api/legal/documents', optionalAuthenticate, legalModule.getLegalDocuments);
@@ -592,7 +592,7 @@ app.delete('/api/legal/documents/:id', authenticateRequest, requireRole(['admin'
 
 // Tax Management Routes
 app.get('/api/taxes', taxModule.getTaxData);
-app.put('/api/taxes/rates/:id', authenticateRequest, taxModule.updateTaxRate);
+app.put('/api/taxes/rates/:id', authenticateRequest, requireRole(['admin', 'manager', 'owner']), taxModule.updateTaxRate);
 
 // AI Workspace Routes
 app.get('/api/ai/workspace', authenticateRequest, aiModule.getAiWorkspaceData);
@@ -622,37 +622,37 @@ app.get('/api/simulation/models', authenticateRequest, requireRole(['admin', 'ow
 app.get('/api/simulation/runs', authenticateRequest, requireRole(['admin', 'owner']), simulationModule.getSimulationRuns);
 app.post('/api/simulation/runs', authenticateRequest, requireRole(['admin', 'owner']), simulationModule.createSimulationRun);
 
-app.post('/api/marketing/email', authenticateRequest, marketingModule.sendEmailCampaign);
+app.post('/api/marketing/email', authenticateRequest, requireRole(['admin', 'manager', 'staff']), marketingModule.sendEmailCampaign);
 
 // AI Translation & Enterprise Multi-Language Routes (Phase 13)
 app.get('/api/ai/translations', aiTranslationsModule.getTranslations);
-app.post('/api/ai/translations/generate', authenticateRequest, userRateLimiterMiddleware(30), aiTranslationsModule.generateAiTranslation);
-app.put('/api/ai/translations/:id/draft', authenticateRequest, aiTranslationsModule.updateTranslationDraft);
-app.post('/api/ai/translations/:id/submit', authenticateRequest, aiTranslationsModule.submitForReview);
-app.post('/api/ai/translations/:id/approve', authenticateRequest, aiTranslationsModule.approveTranslation);
-app.post('/api/ai/translations/:id/reject', authenticateRequest, aiTranslationsModule.rejectTranslation);
+app.post('/api/ai/translations/generate', authenticateRequest, userRateLimiterMiddleware(30), requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.generateAiTranslation);
+app.put('/api/ai/translations/:id/draft', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateTranslationDraft);
+app.post('/api/ai/translations/:id/submit', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.submitForReview);
+app.post('/api/ai/translations/:id/approve', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.approveTranslation);
+app.post('/api/ai/translations/:id/reject', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rejectTranslation);
 app.get('/api/ai/translations/:id/preview', aiTranslationsModule.previewPublishTranslation);
-app.post('/api/ai/translations/:id/publish', authenticateRequest, aiTranslationsModule.publishTranslation);
-app.post('/api/ai/translations/:id/rollback', authenticateRequest, aiTranslationsModule.rollbackTranslation);
+app.post('/api/ai/translations/:id/publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.publishTranslation);
+app.post('/api/ai/translations/:id/rollback', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rollbackTranslation);
 app.get('/api/ai/translations/:id/history', aiTranslationsModule.getPublishHistory);
 app.get('/api/ai/translations/:id/compare', aiTranslationsModule.compareVersions);
-app.delete('/api/ai/translations/:id', authenticateRequest, aiTranslationsModule.deleteTranslation);
+app.delete('/api/ai/translations/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.deleteTranslation);
 
 app.get('/api/ai/translations/queue', aiTranslationsModule.getQueueJobs);
-app.post('/api/ai/translations/queue/action', authenticateRequest, aiTranslationsModule.handleQueueAction);
-app.post('/api/ai/translations/batch', authenticateRequest, aiTranslationsModule.createBatchTranslation);
+app.post('/api/ai/translations/queue/action', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.handleQueueAction);
+app.post('/api/ai/translations/batch', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createBatchTranslation);
 app.get('/api/ai/translations/cache', aiTranslationsModule.getCacheStats);
-app.post('/api/ai/translations/cache/invalidate', authenticateRequest, aiTranslationsModule.invalidateCache);
+app.post('/api/ai/translations/cache/invalidate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.invalidateCache);
 app.get('/api/ai/translations/metrics', aiTranslationsModule.getTranslationMetrics);
 app.get('/api/ai/translations/export', aiTranslationsModule.exportTranslationReport);
 
 app.get('/api/ai/translations/sync/health', aiTranslationsModule.getLocalizationHealth);
 app.get('/api/ai/translations/sync/tasks', aiTranslationsModule.getLocalizationTasks);
-app.post('/api/ai/translations/sync/tasks', authenticateRequest, aiTranslationsModule.createLocalizationTask);
-app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, aiTranslationsModule.updateLocalizationTask);
+app.post('/api/ai/translations/sync/tasks', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createLocalizationTask);
+app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateLocalizationTask);
 app.get('/api/ai/translations/sync/notifications', aiTranslationsModule.getNotifications);
-app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, aiTranslationsModule.markNotificationsRead);
-app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, aiTranslationsModule.triggerSourceContentChange);
+app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.markNotificationsRead);
+app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.triggerSourceContentChange);
 app.get('/api/ai/translations/sync/diff', aiTranslationsModule.getContentDiff);
 app.get('/api/ai/translations/sync/dependencies', aiTranslationsModule.getDependencies);
 app.get('/api/ai/translations/sync/reports', aiTranslationsModule.getLocalizationReports);
@@ -669,10 +669,10 @@ app.get('/api/ai/translations/quality/export', aiTranslationsModule.exportQualit
 
 // Phase 13 Multi-Language Expansion Routes
 app.get('/api/ai/languages', aiTranslationsModule.getSupportedLanguages);
-app.post('/api/ai/languages/toggle', authenticateRequest, aiTranslationsModule.toggleLanguage);
+app.post('/api/ai/languages/toggle', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.toggleLanguage);
 app.get('/api/ai/translations/matrix', aiTranslationsModule.getTranslationMatrix);
 app.get('/api/ai/translations/pack/export', aiTranslationsModule.exportLanguagePack);
-app.post('/api/ai/translations/pack/import', authenticateRequest, aiTranslationsModule.importLanguagePack);
+app.post('/api/ai/translations/pack/import', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.importLanguagePack);
 app.get('/api/ai/translations/memory', aiTranslationsModule.getTranslationMemory);
 app.get('/api/operations/health', operationsModule.getHealthData);
 app.get('/api/operations/backup', operationsModule.getBackupData);
@@ -763,36 +763,7 @@ app.post('/api/auth/session', handleSessionSync);
 
 // Development Configuration & Bypass Verification
 app.get('/api/auth/dev-config', (req, res) => {
-  const isDevMode = 
-    process.env.NODE_ENV !== 'production' &&
-    process.env.VERCEL_ENV !== 'production' &&
-    process.env.AI_STUDIO_DEV_MODE === 'true' &&
-    process.env.DEV_ADMIN_BYPASS === 'true';
-
-  if (isDevMode) {
-    return res.json({
-      devMode: true,
-      user: {
-        id: 'dev-preview',
-        email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-        firstName: 'RKInfinity',
-        lastName: 'Developer',
-        name: 'RKInfinity Developer',
-        phone: '',
-        role: 'owner',
-        isVerified: true,
-        addresses: [],
-        permissions: [
-          'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-          'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-          'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-          'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-        ]
-      }
-    });
-  } else {
-    return res.json({ devMode: false });
-  }
+  return res.json({ devMode: false });
 });
 
 // Change Password (Authenticated User)
@@ -2692,34 +2663,34 @@ app.post('/api/contact', validateContactSecurity, async (req, res) => {
 // ENTERPRISE BLOG & NEWS CMS API ROUTES
 // -------------------------------------------------------------
 app.get('/api/blog', blogModule.getBlogPosts);
-app.post('/api/blog', authenticateRequest, blogModule.createBlogPost);
-app.put('/api/blog/:id', authenticateRequest, blogModule.updateBlogPost);
-app.delete('/api/blog/:id', authenticateRequest, blogModule.deleteBlogPost);
+app.post('/api/blog', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createBlogPost);
+app.put('/api/blog/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateBlogPost);
+app.delete('/api/blog/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteBlogPost);
 
 app.get('/api/blog/categories', blogModule.getCategories);
-app.post('/api/blog/categories', authenticateRequest, blogModule.createCategory);
-app.put('/api/blog/categories/:id', authenticateRequest, blogModule.updateCategory);
-app.delete('/api/blog/categories/:id', authenticateRequest, blogModule.deleteCategory);
+app.post('/api/blog/categories', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createCategory);
+app.put('/api/blog/categories/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateCategory);
+app.delete('/api/blog/categories/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteCategory);
 
 app.get('/api/blog/tags', blogModule.getTags);
-app.post('/api/blog/tags', authenticateRequest, blogModule.createTag);
-app.delete('/api/blog/tags/:id', authenticateRequest, blogModule.deleteTag);
+app.post('/api/blog/tags', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createTag);
+app.delete('/api/blog/tags/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteTag);
 
 app.get('/api/blog/comments', blogModule.getComments);
-app.post('/api/blog/comments', authenticateRequest, blogModule.createComment);
-app.put('/api/blog/comments/:id', authenticateRequest, blogModule.updateCommentStatus);
-app.delete('/api/blog/comments/:id', authenticateRequest, blogModule.deleteComment);
+app.post('/api/blog/comments', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createComment);
+app.put('/api/blog/comments/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateCommentStatus);
+app.delete('/api/blog/comments/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteComment);
 
 app.get('/api/blog/authors', blogModule.getAuthors);
-app.post('/api/blog/authors', authenticateRequest, blogModule.createAuthor);
+app.post('/api/blog/authors', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createAuthor);
 
 app.get('/api/blog/media', blogModule.getMedia);
-app.post('/api/blog/media', authenticateRequest, blogModule.uploadMedia);
-app.put('/api/blog/media/:id', authenticateRequest, blogModule.updateMedia);
-app.delete('/api/blog/media/:id', authenticateRequest, blogModule.deleteMedia);
+app.post('/api/blog/media', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.uploadMedia);
+app.put('/api/blog/media/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateMedia);
+app.delete('/api/blog/media/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteMedia);
 
 app.get('/api/blog/seo/:postId', blogModule.getSeo);
-app.post('/api/blog/seo', authenticateRequest, blogModule.upsertSeo);
+app.post('/api/blog/seo', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.upsertSeo);
 
 app.get('/api/blog/search', blogModule.searchBlog);
 app.get('/api/blog/sitemap', blogModule.generateBlogSitemap);
@@ -2727,10 +2698,10 @@ app.get('/api/blog/rss', blogModule.generateBlogRss);
 
 app.post('/api/blog/newsletter', blogModule.subscribeNewsletter);
 app.get('/api/blog/revisions/:postId', blogModule.getRevisions);
-app.post('/api/blog/revisions', authenticateRequest, blogModule.createRevision);
-app.get('/api/blog/schedule', authenticateRequest, blogModule.getSchedules);
-app.post('/api/blog/schedule', authenticateRequest, blogModule.scheduleBlogPost);
-app.post('/api/blog/schedule/cancel', authenticateRequest, blogModule.cancelPostSchedule);
+app.post('/api/blog/revisions', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createRevision);
+app.get('/api/blog/schedule', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.getSchedules);
+app.post('/api/blog/schedule', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.scheduleBlogPost);
+app.post('/api/blog/schedule/cancel', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.cancelPostSchedule);
 app.post('/api/blog/posts/:id/view', blogModule.trackBlogPostView);
 app.post('/api/blog/:id/view', blogModule.trackBlogPostView);
 
@@ -2752,9 +2723,9 @@ app.post('/api/admin/products/sync-verify', authenticateRequest, requireRole(['a
 // -------------------------------------------------------------
 app.get('/api/warehouses', warehousesModule.getWarehouses);
 app.get('/api/warehouses/:id', warehousesModule.getWarehouseById);
-app.post('/api/warehouses', warehousesModule.createWarehouse);
-app.put('/api/warehouses/:id', warehousesModule.updateWarehouse);
-app.delete('/api/warehouses/:id', warehousesModule.deleteWarehouse);
+app.post('/api/warehouses', authenticateRequest, requireRole(['admin', 'staff']), warehousesModule.createWarehouse);
+app.put('/api/warehouses/:id', authenticateRequest, requireRole(['admin', 'staff']), warehousesModule.updateWarehouse);
+app.delete('/api/warehouses/:id', authenticateRequest, requireRole(['admin', 'staff']), warehousesModule.deleteWarehouse);
 
 // -------------------------------------------------------------
 // ENTERPRISE CUSTOMER CRM & INVITATION AUTHENTICATION API ROUTES

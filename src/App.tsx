@@ -524,11 +524,10 @@ function AppContent() {
     let active = true;
     let subscription: any = null;
 
-    // 1. Prioritize real Supabase sessions first
+    // 1. Check real Supabase session
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (!active) return;
       if (session) {
-        // Real authenticated session exists! Overwrite dev-preview-token if any
         const token = session.access_token;
         localStorage.setItem('zoal_auth_token', token);
         setAuthStatusMessage('Preparing Profile...');
@@ -538,49 +537,18 @@ function AppContent() {
           }
         });
       } else {
-        // No active Supabase session, check if Dev Preview is active
-        checkDevConfig();
+        proceedWithStandardNoSession();
       }
     }).catch((err) => {
       console.warn('Initial session check failed:', err);
       if (active) {
-        checkDevConfig();
+        proceedWithStandardNoSession();
       }
     });
 
-    function checkDevConfig() {
-      if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
-        proceedWithStandardNoSession();
-        return;
-      }
-      fetch('/api/auth/dev-config')
-        .then(res => {
-          if (!res.ok) throw new Error('Not dev mode');
-          return res.json();
-        })
-        .then(config => {
-          if (!active) return;
-          if (config.devMode && config.user) {
-            // Dev Mode session is active! Set token and profiles
-            localStorage.setItem('zoal_auth_token', 'dev-preview-token');
-            setCurrentUser(config.user);
-            setCurrentPage('admin');
-            setIsAuthLoading(false);
-            setupAuthStateListener();
-          } else {
-            proceedWithStandardNoSession();
-          }
-        })
-        .catch(() => {
-          if (active) proceedWithStandardNoSession();
-        });
-    }
-
     function proceedWithStandardNoSession() {
-      // Clear dev-preview-token if it is stale and no real session is present
-      if (localStorage.getItem('zoal_auth_token') === 'dev-preview-token') {
-        localStorage.removeItem('zoal_auth_token');
-      }
+      localStorage.removeItem('zoal_auth_token');
+      sessionStorage.removeItem('zoal_auth_token');
       setIsAuthLoading(false);
       setupAuthStateListener();
     }
@@ -600,13 +568,10 @@ function AppContent() {
           }
           fetchProfile(token);
         } else {
-          const currentToken = localStorage.getItem('zoal_auth_token');
-          if (currentToken !== 'dev-preview-token') {
-            localStorage.removeItem('zoal_auth_token');
-            sessionStorage.removeItem('zoal_auth_token');
-            setCurrentUser(null);
-            setIsAuthLoading(false);
-          }
+          localStorage.removeItem('zoal_auth_token');
+          sessionStorage.removeItem('zoal_auth_token');
+          setCurrentUser(null);
+          setIsAuthLoading(false);
         }
       });
       subscription = sub.data?.subscription;
@@ -642,12 +607,9 @@ function AppContent() {
       .catch((err) => {
         console.warn('Auto-login session restoration failed:', err.message);
         if (active) {
-          const currentToken = localStorage.getItem('zoal_auth_token');
-          if (currentToken !== 'dev-preview-token') {
-            localStorage.removeItem('zoal_auth_token');
-            sessionStorage.removeItem('zoal_auth_token');
-            setCurrentUser(null);
-          }
+          localStorage.removeItem('zoal_auth_token');
+          sessionStorage.removeItem('zoal_auth_token');
+          setCurrentUser(null);
         }
       })
       .finally(() => {

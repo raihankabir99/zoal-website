@@ -284,7 +284,7 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
       if (!targetProd) return;
 
       const newLoc = `${selectedWarehouse.warehouse_name} - Shelf A1`;
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch(`/api/products/${assignProductId}`, {
         method: 'PUT',
         headers: { 
@@ -615,7 +615,7 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
                             onClick={() => {
                               const newLocation = prompt('Enter new Warehouse Location string:', loc);
                               if (newLocation && newLocation !== loc) {
-                                const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+                                const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
                                 fetch(`/api/products/${p.id}`, {
                                   method: 'PUT',
                                   headers: { 

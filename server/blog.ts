@@ -6,21 +6,7 @@ async function getOptionalUser(req: any) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
   
-  if (!headerValue) return null;
-
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    headerValue === 'Bearer dev-preview-token'
-  ) {
-    return {
-      id: 'dev-preview',
-      email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-      role: 'owner',
-      permissions: ['can_manage_cms']
-    };
-  }
-
-  if (!headerValue.startsWith('Bearer ')) return null;
+  if (!headerValue || !headerValue.startsWith('Bearer ')) return null;
   const token = headerValue.substring(7);
   const supabase = getSupabaseClient();
   if (!supabase) return null;

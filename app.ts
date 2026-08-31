@@ -864,34 +864,6 @@ async function handleSessionSync(req: any, res: any) {
       token = headerValue.substring(7);
     }
 
-    if (
-      process.env.NODE_ENV !== 'production' &&
-      process.env.AI_STUDIO_DEV_MODE === 'true' &&
-      process.env.DEV_ADMIN_BYPASS === 'true' &&
-      token === 'dev-preview-token'
-    ) {
-      return res.json({
-        success: true,
-        user: {
-          id: 'dev-preview',
-          email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-          firstName: 'RKInfinity',
-          lastName: 'Developer',
-          name: 'RKInfinity Developer',
-          phone: '',
-          role: 'owner',
-          isVerified: true,
-          addresses: [],
-          permissions: [
-            'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-            'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-            'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-            'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-          ]
-        }
-      });
-    }
-
     if (!token) {
       return res.status(401).json({ error: 'No session token provided.' });
     }
@@ -916,35 +888,7 @@ app.post('/api/auth/session', handleSessionSync);
 
 // Development Configuration & Bypass Verification
 app.get('/api/auth/dev-config', (req, res) => {
-  const isDevMode =
-    process.env.NODE_ENV !== 'production' &&
-    process.env.AI_STUDIO_DEV_MODE === 'true' &&
-    process.env.DEV_ADMIN_BYPASS === 'true';
-
-  if (isDevMode) {
-    return res.json({
-      devMode: true,
-      user: {
-        id: 'dev-preview',
-        email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-        firstName: 'RKInfinity',
-        lastName: 'Developer',
-        name: 'RKInfinity Developer',
-        phone: '',
-        role: 'owner',
-        isVerified: true,
-        addresses: [],
-        permissions: [
-          'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-          'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-          'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-          'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-        ]
-      }
-    });
-  } else {
-    return res.json({ devMode: false });
-  }
+  return res.json({ devMode: false });
 });
 
 // Secure User Promotion API
@@ -4586,7 +4530,7 @@ app.get('/api/support/teams', requirePermission('can_manage_support'), async (re
 
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
-app.put('/api/cms/pages/:id', authenticateRequest, cmsModule.updateCmsPage);
+app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
 
 // Regional Operations & Security Center Endpoints
 app.get('/api/operations/health', operationsModule.getHealthData);
@@ -4643,7 +4587,7 @@ app.delete('/api/legal/documents/:id', authenticateRequest, requireRole(['admin'
 
 // Tax Management Routes
 app.get('/api/taxes', taxModule.getTaxData);
-app.put('/api/taxes/rates/:id', authenticateRequest, taxModule.updateTaxRate);
+app.put('/api/taxes/rates/:id', authenticateRequest, requireRole(['admin', 'manager', 'owner']), taxModule.updateTaxRate);
 
 // AI Workspace Routes
 app.get('/api/ai/workspace', aiModule.getAiWorkspaceData);
@@ -4651,35 +4595,35 @@ app.post('/api/ai/workspace/logs', authenticateRequest, aiModule.logAiAction);
 
 // AI Enterprise Translation Queue Routes
 app.get('/api/ai/translations', aiTranslationsModule.getTranslations);
-app.post('/api/ai/translations/generate', authenticateRequest, aiTranslationsModule.generateAiTranslation);
-app.put('/api/ai/translations/draft', authenticateRequest, aiTranslationsModule.updateTranslationDraft);
-app.post('/api/ai/translations/submit', authenticateRequest, aiTranslationsModule.submitForReview);
-app.post('/api/ai/translations/approve', authenticateRequest, aiTranslationsModule.approveTranslation);
-app.post('/api/ai/translations/reject', authenticateRequest, aiTranslationsModule.rejectTranslation);
-app.post('/api/ai/translations/publish', authenticateRequest, aiTranslationsModule.publishTranslation);
-app.post('/api/ai/translations/rollback', authenticateRequest, aiTranslationsModule.rollbackTranslation);
+app.post('/api/ai/translations/generate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.generateAiTranslation);
+app.put('/api/ai/translations/draft', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateTranslationDraft);
+app.post('/api/ai/translations/submit', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.submitForReview);
+app.post('/api/ai/translations/approve', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.approveTranslation);
+app.post('/api/ai/translations/reject', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rejectTranslation);
+app.post('/api/ai/translations/publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.publishTranslation);
+app.post('/api/ai/translations/rollback', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rollbackTranslation);
 app.get('/api/ai/translations/history', aiTranslationsModule.getPublishHistory);
 app.get('/api/ai/translations/compare', aiTranslationsModule.compareVersions);
-app.post('/api/ai/translations/preview-publish', authenticateRequest, aiTranslationsModule.previewPublishTranslation);
-app.delete('/api/ai/translations/:id', authenticateRequest, aiTranslationsModule.deleteTranslation);
+app.post('/api/ai/translations/preview-publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.previewPublishTranslation);
+app.delete('/api/ai/translations/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.deleteTranslation);
 
 // Phase 10 Enterprise Queue & Batch Routes
 app.get('/api/ai/translations/queue', aiTranslationsModule.getQueueJobs);
-app.post('/api/ai/translations/queue/action', authenticateRequest, aiTranslationsModule.handleQueueAction);
-app.post('/api/ai/translations/batch', authenticateRequest, aiTranslationsModule.createBatchTranslation);
+app.post('/api/ai/translations/queue/action', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.handleQueueAction);
+app.post('/api/ai/translations/batch', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createBatchTranslation);
 app.get('/api/ai/translations/cache', aiTranslationsModule.getCacheStats);
-app.post('/api/ai/translations/cache/invalidate', authenticateRequest, aiTranslationsModule.invalidateCache);
+app.post('/api/ai/translations/cache/invalidate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.invalidateCache);
 app.get('/api/ai/translations/metrics', aiTranslationsModule.getTranslationMetrics);
 app.get('/api/ai/translations/export', aiTranslationsModule.exportTranslationReport);
 
 // Phase 11 Enterprise Localization Intelligence & Continuous Sync Routes
 app.get('/api/ai/translations/sync/health', aiTranslationsModule.getLocalizationHealth);
 app.get('/api/ai/translations/sync/tasks', aiTranslationsModule.getLocalizationTasks);
-app.post('/api/ai/translations/sync/tasks', authenticateRequest, aiTranslationsModule.createLocalizationTask);
-app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, aiTranslationsModule.updateLocalizationTask);
+app.post('/api/ai/translations/sync/tasks', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createLocalizationTask);
+app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateLocalizationTask);
 app.get('/api/ai/translations/sync/notifications', aiTranslationsModule.getNotifications);
-app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, aiTranslationsModule.markNotificationsRead);
-app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, aiTranslationsModule.triggerSourceContentChange);
+app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.markNotificationsRead);
+app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.triggerSourceContentChange);
 app.get('/api/ai/translations/sync/diff', aiTranslationsModule.getContentDiff);
 app.get('/api/ai/translations/sync/dependencies', aiTranslationsModule.getDependencies);
 app.get('/api/ai/translations/sync/reports', aiTranslationsModule.getLocalizationReports);

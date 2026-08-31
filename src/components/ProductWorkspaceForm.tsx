@@ -115,7 +115,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
         formData.append('bucket', bucket);
         formData.append('path', filePath);
 
-        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
         let publicUrl = '';
 
         try {

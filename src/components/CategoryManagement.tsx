@@ -146,7 +146,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       formData.append('bucket', 'categories');
       formData.append('path', filePath);
 
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
 
       try {
         const res = await fetch('/api/storage/upload', {
@@ -249,7 +249,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token || 'dev-preview-token'}`
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({ bucket: 'categories', path: storagePath })
             });
@@ -504,7 +504,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       formData.append('bucket', 'categories');
       formData.append('path', filePath);
 
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
 
       // 2. Upload the new image using the existing upload service
       try {
@@ -1533,7 +1533,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       });
 
       // 7. Delete previous image from Storage after successful save
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const deletePhoto = async (oldUrl: string) => {
         if (!oldUrl) return;
         let storagePath = '';
