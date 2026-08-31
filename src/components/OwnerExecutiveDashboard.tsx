@@ -26,34 +26,22 @@ export default function OwnerExecutiveDashboard({
   orders,
   products
 }: OwnerExecutiveDashboardProps) {
-  // 1. Core Financial Aggregators
+  // 1. Core Authoritative Financial Aggregators
   const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
   
-  // Cost price analysis (Profit = Selling Price - Cost Price)
-  // Fallback cost is 30% of total if not defined
-  const totalCost = products.reduce((sum, p) => {
-    const cost = p.costPrice || (p.price * 0.3);
-    const inStock = p.inventory || 0;
-    return sum + (cost * inStock);
-  }, 0);
+  // Authoritative Profit & Margin: Requires verified accounting COGS. Set to null / Not Available as mandated.
+  const totalProfit: number | null = null;
+  const profitMargin: number | null = null;
+  const operatingExpenses: number | null = null;
+  const netYield: number | null = null;
 
-  // Profit calculation (Orders subtotal profit margins)
-  const totalProfit = orders.reduce((sum, o) => {
-    // If order items have price and cost, aggregate actual margins
-    const orderProfit = o.items.reduce((pSum, item) => {
-      const matchProd = products.find(p => p.name === item.name);
-      const cost = matchProd?.costPrice || (item.price * 0.3);
-      return pSum + ((item.price - cost) * item.quantity);
-    }, 0);
-    return sum + (orderProfit > 0 ? orderProfit : o.total * 0.7);
-  }, 0);
-
-  const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 70;
-  const operatingExpenses = totalRevenue * 0.12; // Simulated operational amortization (rent, courier sync, utility: 12%)
-  const netYield = totalProfit - operatingExpenses;
-
-  // 2. regional and branch analysis
+  // 2. Regional and Branch Analysis (fetched from authoritative /api/analytics/regional)
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [regionalRecords, setRegionalRecords] = useState<any[]>([]);
+  const [forecastRecords, setForecastRecords] = useState<any[]>([]);
+  const [isRegionalLoading, setIsRegionalLoading] = useState<boolean>(true);
+  const [isForecastLoading, setIsForecastLoading] = useState<boolean>(true);
+
   const branches = [
     { id: 'all', name: 'Consolidated S.A.' },
     { id: 'riyadh', name: 'Branch A Elite Lounge' },
@@ -62,31 +50,46 @@ export default function OwnerExecutiveDashboard({
     { id: 'hofuf', name: 'Hofuf Heritage Club' }
   ];
 
-  // Branch allocations
-  const branchRevenueMap: Record<string, number> = {
-    riyadh: totalRevenue * 0.42,
-    khobar: totalRevenue * 0.28,
-    jeddah: totalRevenue * 0.18,
-    hofuf: totalRevenue * 0.12,
-  };
+  useEffect(() => {
+    async function fetchAuthoritativeBackendData() {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-  const branchProfitMap: Record<string, number> = {
-    riyadh: totalProfit * 0.45,
-    khobar: totalProfit * 0.26,
-    jeddah: totalProfit * 0.17,
-    hofuf: totalProfit * 0.12,
-  };
+        // Fetch regional analytics
+        const regRes = await fetch('/api/analytics/regional', { headers });
+        if (regRes.ok) {
+          const regJson = await regRes.json();
+          setRegionalRecords(Array.isArray(regJson) ? regJson : []);
+        }
 
-  const activeBranchRevenue = selectedBranch === 'all' ? totalRevenue : branchRevenueMap[selectedBranch];
-  const activeBranchProfit = selectedBranch === 'all' ? totalProfit : branchProfitMap[selectedBranch];
+        // Fetch forecasting
+        const fcRes = await fetch('/api/forecasting', { headers });
+        if (fcRes.ok) {
+          const fcJson = await fcRes.json();
+          if (fcJson && fcJson.forecasts) {
+            setForecastRecords(fcJson.forecasts);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch authoritative analytics:', err);
+      } finally {
+        setIsRegionalLoading(false);
+        setIsForecastLoading(false);
+      }
+    }
+    fetchAuthoritativeBackendData();
+  }, []);
 
-  // 3. Category Yield Analysis
-  const categoriesList = [
-    { name: 'Specialty Coffee & Cafe', value: totalRevenue * 0.45, color: '#D4AF37' },
-    { name: 'Traditional Sudanese Bakery', value: totalRevenue * 0.22, color: '#AA8C2C' },
-    { name: 'Traditional Organic Market', value: totalRevenue * 0.18, color: '#F2F2F2' },
-    { name: 'Premium Sudanese Toob', value: totalRevenue * 0.15, color: '#555555' }
-  ];
+  const activeBranchRevenue = selectedBranch === 'all' 
+    ? totalRevenue 
+    : (regionalRecords.find(r => r.region?.toLowerCase()?.includes(selectedBranch))?.revenue || 0);
+  
+  const activeBranchProfit = null; // Requires authoritative COGS
+
+  // 3. Category Yield Analysis (Authoritative or Not Available)
+  const categoriesList: { name: string; value: number; color: string }[] = [];
 
   // 4. Low stock count
   const lowStockProducts = products.filter(p => (p.inventory || 0) <= 5);
@@ -94,17 +97,12 @@ export default function OwnerExecutiveDashboard({
   // 5. AI Business Insights (Gemini Integration)
   const [aiBriefing, setAiBriefing] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
-  const [aiForecasts, setAiForecasts] = useState<any[]>([
-    { month: "Aug 2026", revenue: Math.round(totalRevenue * 1.06), profit: Math.round(totalProfit * 1.07) },
-    { month: "Sep 2026", revenue: Math.round(totalRevenue * 1.15), profit: Math.round(totalProfit * 1.17) },
-    { month: "Oct 2026", revenue: Math.round(totalRevenue * 1.28), profit: Math.round(totalProfit * 1.30) },
-  ]);
+  const [aiForecasts, setAiForecasts] = useState<any[]>([]);
 
   const triggerAiAnalysis = async () => {
     setIsAiLoading(true);
     setAiBriefing('');
     try {
-      // 1. Retrieve the secure session token from Supabase
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
 
@@ -114,7 +112,6 @@ export default function OwnerExecutiveDashboard({
         return;
       }
 
-      // 2. Transmit to the strategic executive insights endpoint
       const response = await fetch('/api/executive/insights', {
         method: 'POST',
         headers: { 
@@ -123,16 +120,9 @@ export default function OwnerExecutiveDashboard({
         },
         body: JSON.stringify({
           totalRevenue,
-          totalProfit,
+          totalProfit: null,
           totalOrders: orders.length,
-          lowStockCount: lowStockProducts.length,
-          categoryPerformance: categoriesList,
-          branchPerformance: {
-            riyadh: branchRevenueMap.riyadh,
-            khobar: branchRevenueMap.khobar,
-            jeddah: branchRevenueMap.jeddah,
-            hofuf: branchRevenueMap.hofuf
-          }
+          lowStockCount: lowStockProducts.length
         })
       });
 
@@ -141,6 +131,8 @@ export default function OwnerExecutiveDashboard({
         setAiBriefing(data.insights);
         if (data.forecast) {
           setAiForecasts(data.forecast);
+        } else if (forecastRecords.length > 0) {
+          setAiForecasts(forecastRecords.map(f => ({ month: `Horizon ${f.horizon_days}D`, revenue: f.forecast_revenue, profit: null })));
         }
       } else {
         setAiBriefing(`### ❌ Operational Failure\n\n${data.error || 'Unable to assemble dynamic AI briefings.'}`);
@@ -153,10 +145,9 @@ export default function OwnerExecutiveDashboard({
     }
   };
 
-  // Trigger once on load
   useEffect(() => {
     triggerAiAnalysis();
-  }, []);
+  }, [forecastRecords]);
 
   // Simple Markdown parsing helper for Boutique UI elegance
   const renderMarkdown = (text: string) => {
@@ -185,32 +176,20 @@ export default function OwnerExecutiveDashboard({
       .join('');
   };
 
-  // 6. Interactive Peak-Hour Staff Calculator
+  // 6. Interactive Peak-Hour Staff Calculator (Authoritative or Not Available - No Math.random)
   const [selectedHour, setSelectedHour] = useState<number>(18);
   const [calcResult, setCalcResult] = useState<any>({
-    activeOrders: 4,
-    recommendedStaff: 3,
-    efficiencyScore: "Optimal Service Status"
+    activeOrders: null,
+    recommendedStaff: null,
+    efficiencyScore: "Staffing Insight: Not Available (Requires Telemetry)"
   });
 
   const runCalculation = (hour: number) => {
-    // Generate organic numbers based on luxury hours (Coffee hours peaks at 16:00 - 20:00)
-    let active = 1;
-    if (hour >= 16 && hour <= 20) {
-      active = Math.round(5 + (hour - 16) * 1.5 + (Math.sin(hour) * 2));
-    } else if (hour >= 8 && hour <= 12) {
-      active = Math.round(3 + (hour - 8) * 0.8);
-    } else {
-      active = Math.round(1 + Math.random());
-    }
-
-    const recStaff = active <= 2 ? 1 : active <= 5 ? 2 : active <= 8 ? 4 : 5;
-    const efficiency = recStaff >= 4 ? "Critical Density - Dispatch Support" : "High Touch Luxury Standard";
-
+    // Zero random numbers or synthetic calculations. Represent as Not Available.
     setCalcResult({
-      activeOrders: active,
-      recommendedStaff: recStaff,
-      efficiencyScore: efficiency
+      activeOrders: null,
+      recommendedStaff: null,
+      efficiencyScore: "Staffing Insight: Not Available"
     });
   };
 
@@ -230,7 +209,6 @@ export default function OwnerExecutiveDashboard({
       "Validating 15% VAT transactional accuracy with Saudi ZATCA standards...",
       "Matching Order record IDs against connected Supabase instances...",
       "Analyzing warehouse stock report levels for critical inventory risks...",
-      "Recalculating exact gross margin yields vs operational overhead (12% amortized)...",
       "Audit fully complete. All compliance registers successfully verified and locked."
     ];
 
@@ -315,15 +293,15 @@ export default function OwnerExecutiveDashboard({
             <Award className="w-3.5 h-3.5 text-gold-pure" />
           </div>
           <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-gold-pure text-md font-sans tracking-tight">
-              {activeBranchProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+            <strong className="text-gold-pure text-sm font-sans tracking-tight">
+              Not Available
             </strong>
-            <span className="text-gold-pure text-[8.5px] font-mono font-bold">
-              {profitMargin.toFixed(1)}% Yield
+            <span className="text-zinc-500 text-[8.5px] font-mono">
+              Requires COGS
             </span>
           </div>
           <span className="text-zinc-600 font-mono text-[8px] block">
-            Deducting production raw costs
+            Authoritative accounting COGS required
           </span>
         </div>
 
@@ -331,19 +309,19 @@ export default function OwnerExecutiveDashboard({
         <div className="bg-zinc-950/40 backdrop-blur-md border border-white/5 p-4 rounded-xs space-y-1 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-20 h-20 bg-red-500/5 rounded-full blur-2xl group-hover:bg-red-500/10 duration-300" />
           <div className="flex justify-between items-center text-zinc-500 font-mono text-[8px] uppercase tracking-widest">
-            <span>Operational Overhead (Rent/Sync)</span>
+            <span>Operational Overhead</span>
             <Sliders className="w-3.5 h-3.5 text-zinc-500" />
           </div>
           <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-zinc-300 text-md font-sans tracking-tight">
-              {(operatingExpenses * (selectedBranch === 'all' ? 1 : 0.25)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+            <strong className="text-zinc-300 text-sm font-sans tracking-tight">
+              Not Available
             </strong>
             <span className="text-zinc-500 text-[8.5px] font-mono">
-              Amortized 12%
+              Unamortized
             </span>
           </div>
           <span className="text-zinc-600 font-mono text-[8px] block">
-            Estimated regional running costs
+            Requires expense telemetry
           </span>
         </div>
 
@@ -355,11 +333,11 @@ export default function OwnerExecutiveDashboard({
             <Landmark className="w-3.5 h-3.5 text-emerald-400" />
           </div>
           <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-emerald-400 text-md font-sans tracking-tight">
-              {(netYield * (selectedBranch === 'all' ? 1 : 0.25)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+            <strong className="text-emerald-400 text-sm font-sans tracking-tight">
+              Not Available
             </strong>
-            <span className="text-emerald-400 text-[8.5px] font-mono font-bold">
-              Pure Dividend
+            <span className="text-zinc-500 text-[8.5px] font-mono">
+              Requires Profit
             </span>
           </div>
           <span className="text-zinc-600 font-mono text-[8px] block">
@@ -377,28 +355,21 @@ export default function OwnerExecutiveDashboard({
           <div className="flex justify-between items-center border-b border-white/5 pb-2">
             <div>
               <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Financial Velocity Trends</span>
-              <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Revenue & Profit Growth Projection</h3>
+              <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Revenue Growth Trajectory</h3>
             </div>
             <div className="text-[8px] font-mono text-zinc-500 flex gap-3">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#D4AF37]" /> Revenue</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Profit</span>
             </div>
           </div>
           <div className="h-64 font-mono text-[8.5px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={[
-                { name: 'Feb', revenue: Math.round(totalRevenue * 0.4), profit: Math.round(totalProfit * 0.4) },
-                { name: 'Mar', revenue: Math.round(totalRevenue * 0.55), profit: Math.round(totalProfit * 0.54) },
-                { name: 'Apr', revenue: Math.round(totalRevenue * 0.7), profit: Math.round(totalProfit * 0.71) },
-                { name: 'May', revenue: Math.round(totalRevenue * 0.8), profit: Math.round(totalProfit * 0.8) },
-                { name: 'Jun', revenue: Math.round(totalRevenue * 0.92), profit: Math.round(totalProfit * 0.91) },
-                { name: 'Jul', revenue: Math.round(totalRevenue), profit: Math.round(totalProfit) },
+                { name: 'Total', revenue: totalRevenue, profit: 0 }
               ]}>
                 <XAxis dataKey="name" stroke="#555" fontSize={8} />
                 <YAxis stroke="#555" fontSize={8} />
                 <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
                 <Line type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} dot={{ r: 3, fill: '#D4AF37' }} />
-                <Line type="monotone" dataKey="profit" stroke="#34D399" strokeWidth={2} strokeDasharray="3 3" dot={{ r: 3, fill: '#34D399' }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -410,36 +381,32 @@ export default function OwnerExecutiveDashboard({
             <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Segment Allocation</span>
             <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Category Distribution Share</h3>
           </div>
-          <div className="h-44 font-mono text-[9px] flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={categoriesList}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={35}
-                  outerRadius={55}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {categoriesList.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="h-44 font-mono text-[9px] flex items-center justify-center text-zinc-500">
+            {categoriesList.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoriesList}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={35}
+                    outerRadius={55}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {categoriesList.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <span className="text-[9px] text-zinc-600 uppercase tracking-widest">Category Data: Not Available</span>
+            )}
           </div>
-          <div className="space-y-1.5 text-[8px] font-mono border-t border-white/5 pt-3">
-            {categoriesList.map((cat, idx) => (
-              <div key={idx} className="flex justify-between items-center text-zinc-400">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
-                  {cat.name}
-                </span>
-                <span className="text-white font-bold">{Math.round((cat.value / totalRevenue) * 100)}%</span>
-              </div>
-            ))}
+          <div className="space-y-1.5 text-[8px] font-mono border-t border-white/5 pt-3 text-center text-zinc-600">
+            Requires Authoritative Category Metrics
           </div>
         </div>
 
