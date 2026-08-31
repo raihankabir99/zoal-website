@@ -198,25 +198,41 @@ export const EnterpriseKpiDashboard: React.FC = () => {
   // KPI Calculations / Comparisons (using authoritative live backend KPI values)
   const kpiComparisons = useMemo(() => {
     return targets.map(t => {
-      let value = 0;
+      let value = -1;
       if (liveData) {
-        const name = t.metric_name.toLowerCase();
-        if (name.includes('revenue')) value = liveData.totalRevenue ?? 0;
-        else if (name.includes('order')) value = liveData.orderCount ?? 0;
-        else if (name.includes('aov') || name.includes('average order value')) value = liveData.aov ?? 0;
-        else if (name.includes('customer')) value = liveData.customerCount ?? 0;
-        else if (name.includes('profit')) value = liveData.profit ?? -1;
-        else if (name.includes('margin')) value = liveData.margin ?? -1;
-        else value = -1; // CAC, DAU, Latency, Refund Rate etc.
-      } else {
-        const snap = snapshots.find(s => s.metric_name === t.metric_name);
-        value = snap ? snap.value : 0;
+        switch (t.metric_name) {
+          case 'Revenue':
+            value = liveData.totalRevenue ?? -1;
+            break;
+          case 'Orders':
+            value = liveData.orderCount ?? -1;
+            break;
+          case 'AOV':
+            value = liveData.aov ?? -1;
+            break;
+          case 'Customers':
+            value = liveData.customerCount ?? -1;
+            break;
+          case 'Profit':
+            value = liveData.profit ?? -1;
+            break;
+          case 'Margin':
+            value = liveData.margin ?? -1;
+            break;
+          case 'CAC':
+          case 'DAU':
+          case 'Latency':
+          case 'Refund Rate':
+          default:
+            value = -1;
+            break;
+        }
       }
       
       // Calculate progress percentage
       // For CAC or Latency, lower is better, so calculate inverse
       let progress = 0;
-      const isLowerBetter = t.metric_name.toLowerCase().includes('cac') || t.metric_name.toLowerCase().includes('latency');
+      const isLowerBetter = t.metric_name === 'CAC' || t.metric_name === 'Latency';
       
       if (t.target_value > 0 && value !== -1) {
         if (isLowerBetter) {
@@ -233,7 +249,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
         isLowerBetter
       };
     });
-  }, [targets, liveData, snapshots]);
+  }, [targets, liveData]);
 
   // Filters and pagination
   const filteredKpis = useMemo(() => {
