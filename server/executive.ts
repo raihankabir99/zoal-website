@@ -1,30 +1,32 @@
 import { Request, Response } from 'express';
-import { getSupabaseClient } from './supabase';
+import { getCoreBusinessStats } from './data_aggregator';
 
 export async function getExecutiveInsights(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return res.json({
-      summary: 'Executive dashboard operating on standard thresholds.',
-      revenueGrowth: '18.4%',
-      marginTarget: '32.1%',
-      topCategory: 'Specialty Coffee & Toobs'
-    });
-  }
-
   try {
-    const { count: ordersCount } = await supabase.from('zoal_orders').select('*', { count: 'exact', head: true });
+    const start = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+    const end = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+    const stats = await getCoreBusinessStats(start, end);
+
     res.json({
-      summary: 'Enterprise metrics active.',
-      totalOrdersCount: ordersCount || 0,
-      revenueGrowth: '18.4%',
-      marginTarget: '32.1%'
+      summary: 'Executive metrics generated from authoritative Business Insights data.',
+      totalOrdersCount: Number(stats.totalOrders || 0),
+      totalRevenue: Number(stats.totalRevenue || 0),
+      averageOrderValue: Number(stats.averageOrderValue || 0),
+      activeCustomers: Number(stats.activeCustomers || 0),
+      lowStockCount: Number(stats.lowStockCount || 0),
+      revenueStatusBasis: stats.revenueStatusBasis,
+      financialMetrics: {
+        profit: null,
+        margin: null,
+        status: 'not_available_without_authoritative_cogs'
+      },
+      forecast: {
+        status: 'not_provided_by_executive_summary',
+        note: 'Use the forecasting endpoint for validated projections; do not infer profit from revenue.'
+      }
     });
   } catch (err: any) {
-    res.json({
-      summary: 'Executive dashboard initialized.',
-      revenueGrowth: '18.4%',
-      marginTarget: '32.1%'
-    });
+    console.error('Executive Insights Error:', err);
+    res.status(500).json({ error: 'Failed to generate authoritative executive insights.' });
   }
 }
