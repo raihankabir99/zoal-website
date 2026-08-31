@@ -101,27 +101,6 @@ export const EnterpriseGrowthAnalytics: React.FC = () => {
     };
   }, []);
 
-  // Seeding initial growth metrics if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const initialReports = [
-        { traffic_count: 14500, seo_score: 84, ads_spend: 4200.00, organic_count: 8500, referral_count: 3100, conversion_rate: 3.2, campaign_roi: 4.8, funnels_data: { impressions: 14500, click_throughs: 3100, cart_additions: 890, checkouts: 460 } },
-        { traffic_count: 18200, seo_score: 88, ads_spend: 5400.00, organic_count: 11000, referral_count: 4200, conversion_rate: 3.8, campaign_roi: 5.2, funnels_data: { impressions: 18200, click_throughs: 4200, cart_additions: 1250, checkouts: 690 } },
-        { traffic_count: 24500, seo_score: 92, ads_spend: 6800.00, organic_count: 14800, referral_count: 5900, conversion_rate: 4.5, campaign_roi: 5.9, funnels_data: { impressions: 24500, click_throughs: 5900, cart_additions: 1840, checkouts: 1100 } }
-      ];
-
-      for (const r of initialReports) {
-        await supabaseClient.from('zoal_growth_reports').insert(r);
-      }
-      await fetchGrowthData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // CRUD Forms handlers
   const handleOpenCreate = () => {
     setEditingReport(null);
@@ -319,15 +298,8 @@ export const EnterpriseGrowthAnalytics: React.FC = () => {
               <BarChart3 className="w-12 h-12 text-gold-pure/40 mx-auto" />
               <h3 className="text-white font-bold uppercase tracking-widest font-display text-sm font-sans">Growth Ledgers Empty</h3>
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                Supabase registers do not contain organic growth trajectories. Generating marketing and campaign conversion records immediately unlocks detailed cohort visualizations.
+                Supabase registers do not contain organic growth trajectories. Register marketing and campaign conversion records to unlock detailed cohort visualizations.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Seed Growth Logs
-              </button>
             </div>
           ) : (
             <div className="space-y-6">

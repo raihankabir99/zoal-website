@@ -103,40 +103,6 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
     };
   }, []);
 
-  // Seed initial briefings if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const seedData = [
-        {
-          briefing_type: 'Daily',
-          risks: '- **Riyadh Courier Congestion**: Minor dispatch bottlenecks on Al-Shati couriers.\n- **Saffron Coffee Sourcing**: Supply chain friction from Yemen mountain passes.',
-          recommendations: '- **Reallocate couriers**: Direct Riyadh backup staff to high-density lounge areas.\n- **Pre-purchase micro-lots**: Reserve coffee varieties in 30kg batches to bypass future delays.',
-          revenue_summary: { title: 'Boutique Revenue Spike', highlight: 'Bakeries up 14% WoW', text: 'Daily sales aggregated at 18,200 SAR with high boutique retention.' },
-          inventory_summary: { title: 'Dammam Depot nominal', highlight: 'Saffron Specialty at 20%', text: 'Stock of Yemen beans stands at critical 5kg threshold in Riyadh.' },
-          customer_summary: { title: 'High-Touch Elite registers', highlight: 'Loyalty index 8.4/10', text: 'VIP registrations increased by 22 after grand launch ceremonies.' }
-        },
-        {
-          briefing_type: 'Weekly',
-          risks: '- **VAT audits approaching**: ZATCA integration requires audit locks.\n- **Textile raw shipping latency**: Cotton imports from Sudanese ports experiencing customs delays.',
-          recommendations: '- **Run full compliance audits**: Lock CRM transactions ahead of tax registries submissions.\n- **Pre-embroider standard borders**: Keep standard size Sudanese Toobs prepared in Dammam for express ship.',
-          revenue_summary: { title: 'Weekly Revenue High', highlight: '125,000 SAR aggregated', text: 'Saffron mocktails and premium hand-embroidered gowns drove 62% of revenue.' },
-          inventory_summary: { title: 'Customs queue warnings', highlight: 'Toob drapes at 15%', text: 'Dammam warehouse stock must be replenished with silk threads.' },
-          customer_summary: { title: 'VIP Loyalty Program success', highlight: '500+ Active subscribers', text: 'Exclusive launch coupon ZOALGOLD saw high conversions among Riyadh collectors.' }
-        }
-      ];
-
-      for (const b of seedData) {
-        await supabaseClient.from('zoal_ai_briefings').insert(b);
-      }
-      await fetchBriefings();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // AI Generation trigger (Smarter simulation that compiles real stats!)
   const handleTriggerAiGeneration = async () => {
     try {
@@ -348,13 +314,6 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
                 No active strategic logs found in Supabase. Run the Cognitive live synthesis model to compile immediate risks, recommendations, and metrics.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Auto-Seed Benchmarks
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

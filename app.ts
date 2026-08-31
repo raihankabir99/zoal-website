@@ -4645,6 +4645,7 @@ app.get('/api/analytics/regional', authenticateRequest, requireRole(['owner', 'a
 // KPI Engine Routes
 app.get('/api/kpi', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.getKpiData);
 app.post('/api/kpi/targets', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.setKpiTarget);
+app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.deleteKpiTarget);
 
 // Growth Analytics Routes
 app.get('/api/analytics/growth', authenticateRequest, requireRole(['owner', 'admin']), growthModule.getGrowthReports);

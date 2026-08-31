@@ -100,29 +100,6 @@ export const EnterpriseRegionalAnalytics: React.FC = () => {
     };
   }, []);
 
-  // Seeding initial Saudi Arabian cities for high visual quality
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const saudiCities = [
-        { country: 'Saudi Arabia', city: 'Riyadh', orders_count: 340, revenue: 125000.00, customers_count: 290, shipping_cost: 11900.00, growth_rate: 18.2 },
-        { country: 'Saudi Arabia', city: 'Khobar', orders_count: 210, revenue: 84000.00, customers_count: 180, shipping_cost: 7350.00, growth_rate: 14.5 },
-        { country: 'Saudi Arabia', city: 'Jeddah', orders_count: 155, revenue: 54000.00, customers_count: 130, shipping_cost: 5425.00, growth_rate: 11.8 },
-        { country: 'Saudi Arabia', city: 'Al Hofuf', orders_count: 120, revenue: 38000.00, customers_count: 110, shipping_cost: 4200.00, growth_rate: 22.4 },
-        { country: 'Saudi Arabia', city: 'Dammam', orders_count: 95, revenue: 29000.00, customers_count: 85, shipping_cost: 3325.00, growth_rate: 9.6 }
-      ];
-
-      for (const item of saudiCities) {
-        await supabaseClient.from('zoal_regional_analytics').insert(item);
-      }
-      await fetchRegionalData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // Open Form for Create
   const handleOpenCreate = () => {
     setEditingRecord(null);
@@ -321,15 +298,8 @@ export const EnterpriseRegionalAnalytics: React.FC = () => {
               <Globe className="w-12 h-12 text-gold-pure/40 mx-auto" />
               <h3 className="text-white font-bold uppercase tracking-widest font-display text-sm font-sans">No Regional Units Configured</h3>
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                The database registers contain no localized city statistics for regional marketing audits. Seeding authentic Dammam, Hofuf, Riyadh, and Jeddah benchmarks immediately unlocks dynamic visualizations.
+                The database registers contain no localized city statistics for regional marketing audits. Register authentic benchmarks to unlock dynamic visualizations.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Auto-Seed Saudi Benchmarks
-              </button>
             </div>
           ) : (
             <div className="space-y-6">

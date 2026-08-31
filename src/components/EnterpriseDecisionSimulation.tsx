@@ -130,27 +130,6 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
     };
   }, []);
 
-  // Seeding models if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const seedModels = [
-        { name: 'Pricing Simulation', description: 'Optimizes premium gown and luxury Sudanese coffee prices against regional Hofuf and Riyadh indices.', risk_weight: 4.5, variables: { base_price: 350, elasticity: -1.2 } },
-        { name: 'Warehouse Expansion', description: 'Simulates profit margins and dispatch throughput of establishing a secondary fulfillment terminal in Dammam.', risk_weight: 5.8, variables: { footprint_sqm: 1200, rent_sar: 140000 } },
-        { name: 'Discount Campaign Impact', description: 'Forecasts flash-discount conversion curves and customer lifetime value spikes.', risk_weight: 3.2, variables: { default_discount: 15, duration_days: 7 } }
-      ];
-
-      for (const m of seedModels) {
-        await supabaseClient.from('zoal_decision_models').insert(m);
-      }
-      await fetchSimulationData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // Run Simulation Calculation (Client-side projection logic that writes to DB)
   const handleRunSimulation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -417,15 +396,8 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
               <Compass className="w-12 h-12 text-gold-pure/40 mx-auto" />
               <h3 className="text-white font-bold uppercase tracking-widest font-display text-sm font-sans">Sovereign Simulation Templates Empty</h3>
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                Supabase registers possess no decision structures. Initializing foundational Pricing, Expansion, and Flash Campaign templates immediately unlocks dynamic visualizer runs.
+                Supabase registers possess no decision structures. Register foundational Pricing, Expansion, and Flash Campaign templates to unlock dynamic visualizer runs.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Auto-Seed Decision Templates
-              </button>
             </div>
           ) : (
             <div className="space-y-6">
