@@ -26,8 +26,23 @@ export default function OwnerExecutiveDashboard({
   orders,
   products
 }: OwnerExecutiveDashboardProps) {
-  // 1. Core Authoritative Financial Aggregators
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  // 1. Core Authoritative Financial State from Backend KPI Engine
+  const [kpiData, setKpiData] = useState<{
+    totalRevenue: number | null;
+    totalOrders: number | null;
+    averageOrderValue: number | null;
+    activeCustomers: number | null;
+    lowStockCount: number | null;
+    regional: any[];
+  }>({
+    totalRevenue: null,
+    totalOrders: null,
+    averageOrderValue: null,
+    activeCustomers: null,
+    lowStockCount: null,
+    regional: []
+  });
+  const [isLoadingKpi, setIsLoadingKpi] = useState<boolean>(true);
   
   // Authoritative Profit & Margin: Requires verified accounting COGS. Set to null / Not Available as mandated.
   const totalProfit: number | null = null;
@@ -35,7 +50,7 @@ export default function OwnerExecutiveDashboard({
   const operatingExpenses: number | null = null;
   const netYield: number | null = null;
 
-  // 2. Regional and Branch Analysis (fetched from authoritative /api/analytics/regional)
+  // 2. Regional and Branch Analysis
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [regionalRecords, setRegionalRecords] = useState<any[]>([]);
   const [forecastRecords, setForecastRecords] = useState<any[]>([]);
@@ -57,11 +72,21 @@ export default function OwnerExecutiveDashboard({
         const token = session?.access_token;
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-        // Fetch regional analytics
-        const regRes = await fetch('/api/analytics/regional', { headers });
-        if (regRes.ok) {
-          const regJson = await regRes.json();
-          setRegionalRecords(Array.isArray(regJson) ? regJson : []);
+        // Fetch KPI engine data
+        const kpiRes = await fetch('/api/kpi?range=yearly', { headers });
+        if (kpiRes.ok) {
+          const kpiJson = await kpiRes.json();
+          if (kpiJson && kpiJson.live) {
+            setKpiData({
+              totalRevenue: kpiJson.live.totalRevenue ?? 0,
+              totalOrders: kpiJson.live.orderCount ?? 0,
+              averageOrderValue: kpiJson.live.aov ?? 0,
+              activeCustomers: kpiJson.live.customerCount ?? 0,
+              lowStockCount: kpiJson.live.lowStockCount ?? 0,
+              regional: kpiJson.live.regional || []
+            });
+            setRegionalRecords(kpiJson.live.regional || []);
+          }
         }
 
         // Fetch forecasting
@@ -70,11 +95,17 @@ export default function OwnerExecutiveDashboard({
           const fcJson = await fcRes.json();
           if (fcJson && fcJson.forecasts) {
             setForecastRecords(fcJson.forecasts);
+            setAiForecasts(fcJson.forecasts.map((f: any) => ({
+              month: `Horizon ${f.horizon_days}D`,
+              revenue: f.forecast_revenue,
+              profit: null
+            })));
           }
         }
       } catch (err) {
         console.error('Failed to fetch authoritative analytics:', err);
       } finally {
+        setIsLoadingKpi(false);
         setIsRegionalLoading(false);
         setIsForecastLoading(false);
       }
@@ -83,7 +114,7 @@ export default function OwnerExecutiveDashboard({
   }, []);
 
   const activeBranchRevenue = selectedBranch === 'all' 
-    ? totalRevenue 
+    ? (kpiData.totalRevenue ?? 0)
     : (regionalRecords.find(r => r.region?.toLowerCase()?.includes(selectedBranch))?.revenue || 0);
   
   const activeBranchProfit = null; // Requires authoritative COGS
@@ -91,8 +122,8 @@ export default function OwnerExecutiveDashboard({
   // 3. Category Yield Analysis (Authoritative or Not Available)
   const categoriesList: { name: string; value: number; color: string }[] = [];
 
-  // 4. Low stock count
-  const lowStockProducts = products.filter(p => (p.inventory || 0) <= 5);
+  // 4. Low stock count from authoritative backend
+  const lowStockCount = kpiData.lowStockCount ?? 0;
 
   // 5. AI Business Insights (Gemini Integration)
   const [aiBriefing, setAiBriefing] = useState<string>('');
@@ -119,21 +150,16 @@ export default function OwnerExecutiveDashboard({
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          totalRevenue,
+          totalRevenue: kpiData.totalRevenue ?? 0,
           totalProfit: null,
-          totalOrders: orders.length,
-          lowStockCount: lowStockProducts.length
+          totalOrders: kpiData.totalOrders ?? 0,
+          lowStockCount
         })
       });
 
       const data = await response.json();
       if (data.success) {
         setAiBriefing(data.insights);
-        if (data.forecast) {
-          setAiForecasts(data.forecast);
-        } else if (forecastRecords.length > 0) {
-          setAiForecasts(forecastRecords.map(f => ({ month: `Horizon ${f.horizon_days}D`, revenue: f.forecast_revenue, profit: null })));
-        }
       } else {
         setAiBriefing(`### ❌ Operational Failure\n\n${data.error || 'Unable to assemble dynamic AI briefings.'}`);
       }
@@ -146,8 +172,10 @@ export default function OwnerExecutiveDashboard({
   };
 
   useEffect(() => {
-    triggerAiAnalysis();
-  }, [forecastRecords]);
+    if (!isLoadingKpi) {
+      triggerAiAnalysis();
+    }
+  }, [isLoadingKpi, forecastRecords]);
 
   // Simple Markdown parsing helper for Boutique UI elegance
   const renderMarkdown = (text: string) => {
@@ -176,16 +204,15 @@ export default function OwnerExecutiveDashboard({
       .join('');
   };
 
-  // 6. Interactive Peak-Hour Staff Calculator (Authoritative or Not Available - No Math.random)
+  // 6. Interactive Peak-Hour Staff Calculator (Authoritative or Not Available)
   const [selectedHour, setSelectedHour] = useState<number>(18);
   const [calcResult, setCalcResult] = useState<any>({
     activeOrders: null,
     recommendedStaff: null,
-    efficiencyScore: "Staffing Insight: Not Available (Requires Telemetry)"
+    efficiencyScore: "Staffing Insight: Not Available"
   });
 
   const runCalculation = (hour: number) => {
-    // Zero random numbers or synthetic calculations. Represent as Not Available.
     setCalcResult({
       activeOrders: null,
       recommendedStaff: null,
@@ -198,28 +225,19 @@ export default function OwnerExecutiveDashboard({
   }, [selectedHour]);
 
   // 7. Audit Compliance Center
-  const [complianceStatus, setComplianceStatus] = useState<string>('IDLE');
+  const [complianceStatus, setComplianceStatus] = useState<string>('NOT_CONNECTED');
   const [auditLogs, setAuditLogs] = useState<string[]>([]);
 
   const runComplianceAudit = () => {
     setComplianceStatus('RUNNING');
-    setAuditLogs([]);
-    const logs = [
-      "Initiating Business Entity Audit (GCC Luxury S.A. Compliance)...",
-      "Validating 15% VAT transactional accuracy with Saudi ZATCA standards...",
-      "Matching Order record IDs against connected Supabase instances...",
-      "Analyzing warehouse stock report levels for critical inventory risks...",
-      "Audit fully complete. All compliance registers successfully verified and locked."
-    ];
-
-    logs.forEach((log, idx) => {
-      setTimeout(() => {
-        setAuditLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${log}`]);
-        if (idx === logs.length - 1) {
-          setComplianceStatus('SUCCESS');
-        }
-      }, (idx + 1) * 800);
-    });
+    setAuditLogs([
+      `[${new Date().toLocaleTimeString()}] Initiating Business Entity Audit...`,
+      `[${new Date().toLocaleTimeString()}] Connecting to ZATCA Verification API...`,
+      `[${new Date().toLocaleTimeString()}] Audit workflow requires connected verification service. Status: Not Connected.`
+    ]);
+    setTimeout(() => {
+      setComplianceStatus('NOT_CONNECTED');
+    }, 1200);
   };
 
   return (
@@ -276,8 +294,8 @@ export default function OwnerExecutiveDashboard({
             <strong className="text-white text-md font-sans tracking-tight">
               {activeBranchRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
             </strong>
-            <span className="text-emerald-400 text-[8px] font-mono font-bold flex items-center gap-0.5">
-              <TrendingUp className="w-2.5 h-2.5" /> +14.2%
+            <span className="text-zinc-500 text-[8px] font-mono font-bold">
+              Growth: Not Available
             </span>
           </div>
           <span className="text-zinc-600 font-mono text-[8px] block">
@@ -364,7 +382,7 @@ export default function OwnerExecutiveDashboard({
           <div className="h-64 font-mono text-[8.5px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={[
-                { name: 'Total', revenue: totalRevenue, profit: 0 }
+                { name: 'Total', revenue: kpiData.totalRevenue ?? 0 }
               ]}>
                 <XAxis dataKey="name" stroke="#555" fontSize={8} />
                 <YAxis stroke="#555" fontSize={8} />
@@ -381,32 +399,11 @@ export default function OwnerExecutiveDashboard({
             <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Segment Allocation</span>
             <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Category Distribution Share</h3>
           </div>
-          <div className="h-44 font-mono text-[9px] flex items-center justify-center text-zinc-500">
-            {categoriesList.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoriesList}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={35}
-                    outerRadius={55}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {categoriesList.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <span className="text-[9px] text-zinc-600 uppercase tracking-widest">Category Data: Not Available</span>
-            )}
+          <div className="h-44 font-mono text-[9px] flex items-center justify-center text-zinc-500 text-center px-4">
+            <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Category Analytics: Not Available — Requires authoritative category metrics</span>
           </div>
           <div className="space-y-1.5 text-[8px] font-mono border-t border-white/5 pt-3 text-center text-zinc-600">
-            Requires Authoritative Category Metrics
+            Authoritative category metrics required
           </div>
         </div>
 
@@ -465,8 +462,8 @@ export default function OwnerExecutiveDashboard({
           <div className="p-6 space-y-5 bg-zinc-950/20">
             <div>
               <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Predictive Analytics</span>
-              <h4 className="text-[10px] uppercase font-mono text-white font-bold tracking-wider">3-Month Business Forecast</h4>
-              <p className="text-[9px] text-zinc-500 font-sans leading-relaxed mt-1">Generated dynamically based on standard GAGR index models paired with current profit yields.</p>
+              <h4 className="text-[10px] uppercase font-mono text-white font-bold tracking-wider">Revenue Forecast — WMA Baseline</h4>
+              <p className="text-[9px] text-zinc-500 font-sans leading-relaxed mt-1">Generated dynamically based on server-side weighted moving average regression models.</p>
             </div>
 
             <div className="h-44 font-mono text-[8px]">
@@ -476,23 +473,18 @@ export default function OwnerExecutiveDashboard({
                   <YAxis stroke="#444" fontSize={8} />
                   <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 9 }} />
                   <Bar dataKey="revenue" fill="#D4AF37" name="Proj. Revenue" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="profit" fill="#10B981" name="Proj. Profit" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             <div className="border-t border-white/5 pt-3 space-y-1.5 font-mono text-[8px] text-zinc-400">
               <div className="flex justify-between">
-                <span>August Target:</span>
-                <span className="text-white font-bold">{(aiForecasts[0]?.revenue || 0).toLocaleString()} SAR</span>
+                <span>Profit Forecast:</span>
+                <span className="text-zinc-500 font-bold">Not Available</span>
               </div>
               <div className="flex justify-between">
-                <span>September Target:</span>
-                <span className="text-white font-bold">{(aiForecasts[1]?.revenue || 0).toLocaleString()} SAR</span>
-              </div>
-              <div className="flex justify-between">
-                <span>October Target:</span>
-                <span className="text-white font-bold">{(aiForecasts[2]?.revenue || 0).toLocaleString()} SAR</span>
+                <span>Horizon Data Cutoff:</span>
+                <span className="text-white font-bold">Verified Backend</span>
               </div>
             </div>
           </div>
@@ -507,55 +499,11 @@ export default function OwnerExecutiveDashboard({
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
           <div className="border-b border-white/5 pb-2">
             <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Premium Directory</span>
-            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Top Performers</h3>
+            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Customer Intelligence</h3>
           </div>
 
-          <div className="space-y-4 font-mono text-[9px]">
-            {/* VIP clientele */}
-            <div className="space-y-2">
-              <span className="text-zinc-500 text-[8px] uppercase tracking-widest block font-bold">VIP Clientele Index</span>
-              <div className="divide-y divide-white/5">
-                {[
-                  { name: "Amna Al-Saeed", transactions: "14 purchases", volume: "12,450 SAR LTV", role: "VIP Customer" },
-                  { name: "Khalid bin Al-Waleed", transactions: "9 purchases", volume: "8,920 SAR LTV", role: "Gold Tier Customer" },
-                  { name: "Ambassador Al-Sabah", transactions: "5 purchases", volume: "6,800 SAR LTV", role: "Gold Tier Customer" }
-                ].map((cli, cIdx) => (
-                  <div key={cIdx} className="py-2 flex justify-between items-center hover:bg-white/1 duration-100 px-1 rounded-sm">
-                    <div>
-                      <span className="text-white font-sans font-bold block">{cli.name}</span>
-                      <span className="text-zinc-600 text-[7.5px] uppercase block">{cli.role}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-gold-pure font-bold block">{cli.volume}</span>
-                      <span className="text-zinc-500 text-[7.5px] block">{cli.transactions}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top Products */}
-            <div className="space-y-2">
-              <span className="text-zinc-500 text-[8px] uppercase tracking-widest block font-bold">Top Performing Products</span>
-              <div className="divide-y divide-white/5">
-                {[
-                  { name: "Saffron Specialty Blend Coffee", revenue: "24,500 SAR", margin: "74% Margin", status: "High Velocity" },
-                  { name: "Luxury Hand-Spun Silk Toob", revenue: "18,400 SAR", margin: "68% Margin", status: "Prestige Elite" },
-                  { name: "Kordofan Organic Hibiscus Crystals", revenue: "9,250 SAR", margin: "71% Margin", status: "Stable Yield" }
-                ].map((prod, pIdx) => (
-                  <div key={pIdx} className="py-2 flex justify-between items-center hover:bg-white/1 duration-100 px-1 rounded-sm">
-                    <div>
-                      <span className="text-white font-sans font-semibold block">{prod.name}</span>
-                      <span className="text-zinc-600 text-[7.5px] uppercase block">{prod.status}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-emerald-400 font-bold block">{prod.revenue}</span>
-                      <span className="text-zinc-500 text-[7.5px] block">{prod.margin}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="space-y-6 py-8 text-center font-mono text-[9px] text-zinc-500 px-4">
+            <p className="uppercase tracking-widest leading-relaxed">Customer Intelligence: Not Available — Requires authoritative customer analytics</p>
           </div>
         </div>
 
@@ -567,7 +515,7 @@ export default function OwnerExecutiveDashboard({
           </div>
 
           <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
-            Select a target hours coordinate to calculate active operational volume levels dynamically compiled from live historic sales, and calculate the exact support staff quantity recommended to preserve high-luxury service standards.
+            Select a target hours coordinate to review active operational volume levels compiled from backend telemetry.
           </p>
 
           <div className="space-y-4 pt-2 font-mono text-[9px]">
@@ -596,26 +544,26 @@ export default function OwnerExecutiveDashboard({
             <div className="grid grid-cols-3 gap-2 pt-2 text-center text-[10px]">
               <div className="bg-black/60 border border-white/5 p-3 rounded-xs space-y-1">
                 <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Active Traffic</span>
-                <strong className="text-white text-md block font-sans">{calcResult.activeOrders} Orders/hr</strong>
+                <strong className="text-zinc-400 text-xs block font-sans">Not Available</strong>
               </div>
               <div className="bg-black/60 border border-white/5 p-3 rounded-xs space-y-1">
                 <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Support Staff</span>
-                <strong className="text-gold-pure text-md block font-sans">{calcResult.recommendedStaff} Staff</strong>
+                <strong className="text-zinc-400 text-xs block font-sans">Not Available</strong>
               </div>
               <div className="bg-black/60 border border-white/5 p-3 rounded-xs space-y-1">
                 <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Service Protocol</span>
-                <strong className="text-emerald-400 text-[8.5px] block font-sans leading-tight mt-1">{calcResult.efficiencyScore}</strong>
+                <strong className="text-zinc-400 text-[8.5px] block font-sans leading-tight mt-1">Staffing Insight: Not Available</strong>
               </div>
             </div>
 
             {/* Quick Action */}
             <button
               onClick={() => {
-                alert(`Prestige Staff Scheduling keys successfully synced! Allocated ${calcResult.recommendedStaff} elite staff members to Sufi specialty coffee table coordination at ${selectedHour}:00 AST.`);
+                alert(`Staffing Insight: Not Available — Requires authoritative telemetry.`);
               }}
-              className="w-full py-2 bg-zinc-900 hover:bg-[#D4AF37] hover:text-black text-white uppercase tracking-widest font-bold text-[8.5px] border border-white/10 transition-all cursor-pointer"
+              className="w-full py-2 bg-zinc-900 text-zinc-500 uppercase tracking-widest font-bold text-[8.5px] border border-white/10 cursor-not-allowed"
             >
-              Sync Staff Matrix Schedules
+              Sync Staff Matrix Schedules (Unavailable)
             </button>
           </div>
         </div>
@@ -627,7 +575,7 @@ export default function OwnerExecutiveDashboard({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-2 gap-4">
           <div>
             <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Regulatory Gatekeeper</span>
-            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Compliance Auditor (Saudi ZATCA Compliant)</h3>
+            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Compliance Auditor (Verification Service)</h3>
           </div>
           <button
             onClick={runComplianceAudit}
@@ -649,7 +597,7 @@ export default function OwnerExecutiveDashboard({
               ))
             ) : (
               <div className="h-full flex items-center justify-center text-zinc-600 uppercase tracking-widest text-[8.5px]">
-                Click "Trigger compliance audit" to verify financial integrity.
+                Audit workflow requires connected verification service.
               </div>
             )}
           </div>
@@ -659,23 +607,19 @@ export default function OwnerExecutiveDashboard({
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>ZATCA TRN Verification:</span>
-                <span className="text-emerald-400 font-bold">15-Digit Registered</span>
+                <span className="text-zinc-400 font-bold">Not Connected</span>
               </div>
               <div className="flex justify-between">
                 <span>Standard GCC VAT Code:</span>
-                <span className="text-white">15% Computed Compliance</span>
+                <span className="text-zinc-400">Verification Not Available</span>
               </div>
               <div className="flex justify-between">
                 <span>Regional Data Isolation:</span>
-                <span className="text-[#D4AF37] font-bold">Active Shield Gate V2</span>
+                <span className="text-zinc-400 font-bold">Not Available</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>Compliance Level:</span>
-                <span className={`px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase ${
-                  complianceStatus === 'SUCCESS' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800' :
-                  complianceStatus === 'RUNNING' ? 'bg-amber-950/40 text-amber-400 border border-amber-800 animate-pulse' :
-                  'bg-zinc-900 text-zinc-400 border border-white/5'
-                }`}>
+                <span className="px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase bg-zinc-900 text-zinc-400 border border-white/5">
                   {complianceStatus}
                 </span>
               </div>
