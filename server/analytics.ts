@@ -9,7 +9,7 @@ export async function getRegionalAnalytics(req: Request, res: Response) {
     const start = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
     const end = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
 
-    const { data, error } = await supabase.rpc('zoal_business_insights_regional', {
+    const { data, error } = await supabase.rpc('zoal_business_insights_regional_v2', {
       p_start: start ?? null,
       p_end: end ?? null
     });
@@ -23,9 +23,12 @@ export async function getRegionalAnalytics(req: Request, res: Response) {
       region: row.region,
       revenue: Number(row.revenue || 0),
       orderCount: Number(row.order_count || 0),
+      customerCount: Number(row.customer_count || 0),
+      shippingCost: Number(row.shipping_cost || 0),
+      aov: Number(row.aov || 0),
+      growth: row.growth === null || row.growth === undefined ? null : Number(row.growth),
+      growthStatus: row.growth_status || 'not_available',
       status: 'Active',
-      growth: null,
-      growthStatus: 'not_available_without_comparison_period',
       capturedAt: new Date().toISOString()
     }));
 
