@@ -59,15 +59,18 @@ export async function getKpiData(req: Request, res: Response) {
     const aov = Number(core?.averageOrderValue || 0);
     const customerCount = Number(core?.activeCustomers || 0);
     const lowStockCount = Number(core?.lowStockCount || 0);
+    const grossProfit = core?.grossProfit == null ? null : Number(core.grossProfit);
+    const grossMargin = core?.grossMargin == null ? null : Number(core.grossMargin);
+    const netProfit = core?.netProfit == null ? null : Number(core.netProfit);
+    const netMargin = core?.netMargin == null ? null : Number(core.netMargin);
+    const totalCogs = core?.totalCogs == null ? null : Number(core.totalCogs);
+    const operatingExpenses = core?.operatingExpenses == null ? null : Number(core.operatingExpenses);
 
     const liveSnapshots = [
       { metric_name: 'Revenue', value: totalRevenue, period: range, captured_at: new Date().toISOString() },
       { metric_name: 'Orders', value: orderCount, period: range, captured_at: new Date().toISOString() },
       { metric_name: 'AOV', value: aov, period: range, captured_at: new Date().toISOString() },
-      { metric_name: 'Customers', value: customerCount, period: range, captured_at: new Date().toISOString() },
-      { metric_name: 'CAC', value: -1, period: range, captured_at: new Date().toISOString() },
-      { metric_name: 'DAU', value: -1, period: range, captured_at: new Date().toISOString() },
-      { metric_name: 'Latency', value: -1, period: range, captured_at: new Date().toISOString() }
+      { metric_name: 'Customers', value: customerCount, period: range, captured_at: new Date().toISOString() }
     ];
 
     const { data: historicalSnapshots } = await supabase
@@ -80,6 +83,14 @@ export async function getKpiData(req: Request, res: Response) {
     // Monthly trend is intentionally left empty here rather than performing an unbounded JS aggregation.
     // A dedicated SQL trend RPC can be added as a P2 optimization without compromising core KPI correctness.
 
+    const unavailableMetrics = [
+      ...(grossProfit == null ? ['Profit'] : []),
+      ...(grossMargin == null ? ['Margin'] : []),
+      ...(netProfit == null ? ['Net Profit'] : []),
+      ...(netMargin == null ? ['Net Margin'] : []),
+      'CAC', 'DAU', 'Latency'
+    ];
+
     res.json({
       snapshots: [...liveSnapshots, ...(historicalSnapshots || [])],
       targets,
@@ -89,15 +100,23 @@ export async function getKpiData(req: Request, res: Response) {
         aov,
         customerCount,
         lowStockCount,
+        totalCogs,
+        grossProfit,
+        grossMargin,
+        operatingExpenses,
+        netProfit,
+        netMargin,
         monthlyRevenue,
         regional: (regional || []).map((row: any) => ({
           region: row.region,
           revenue: Number(row.revenue || 0),
           orderCount: Number(row.order_count || 0)
         })),
-        unavailable_metrics: ['CAC', 'DAU', 'Latency', 'Profit', 'Margin'],
+        unavailable_metrics: unavailableMetrics,
         revenueStatusBasis: core?.revenueStatusBasis,
-        profitStatus: core?.profitStatus
+        profitStatus: core?.profitStatus,
+        cogsStatus: core?.cogsStatus,
+        uncostedItemCount: Number(core?.uncostedItemCount || 0)
       }
     });
   } catch (err) {
