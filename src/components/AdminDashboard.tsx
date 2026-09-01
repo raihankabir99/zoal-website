@@ -63,6 +63,7 @@ const EnterpriseDecisionSimulation = lazyWithRetry(() => import('./EnterpriseDec
 const EnterpriseGrowthAnalytics = lazyWithRetry(() => import('./EnterpriseGrowthAnalytics').then(m => ({ default: m.EnterpriseGrowthAnalytics })));
 const AnalyticsOverview = lazyWithRetry(() => import('./dashboard/AnalyticsOverview'));
 const OwnerExecutiveDashboard = lazyWithRetry(() => import('./OwnerExecutiveDashboard'));
+const StrategicReport = lazyWithRetry(() => import('./StrategicReport').then(m => ({ default: m.StrategicReport || m.default })));
 
 import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
 import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
@@ -8616,34 +8617,7 @@ export default function AdminDashboard({
           )}
 
           {activeTab === 'strategic' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4 flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">BOARDROOM DECREES</span>
-                  <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">STRATEGIC BOARDROOM BRIEFINGS</h2>
-                </div>
-                <button
-                  onClick={() => alert('Strategic briefs compiled and saved to local secure cache.')}
-                  className="bg-gold-pure text-black font-bold uppercase font-mono text-[9px] tracking-wider py-1.5 px-3 rounded-xs hover:bg-gold-light transition-all cursor-pointer"
-                >
-                  Compile Board Briefing
-                </button>
-              </div>
-
-              <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
-                <h3 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-2">Corporate Decrees & Directives (YTD)</h3>
-                <div className="space-y-3 font-sans text-xs">
-                  <div className="p-4 bg-black border border-white/5 rounded-xs space-y-1">
-                    <h4 className="text-gold-pure font-bold text-xs">Directive #2026-004: Sudanese Hospitality Scale-up</h4>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">Mandated the acquisition of micro-batches of premium single-origin Arabica varieties sourced directly from Yemen highlands to diversify coffee hospitality. Confirmed allocation of 15,000 SAR capital expenditure.</p>
-                  </div>
-                  <div className="p-4 bg-black border border-white/5 rounded-xs space-y-1">
-                    <h4 className="text-gold-pure font-bold text-xs">Directive #2026-003: Premium Sudanese Toob Intellectual Registry</h4>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">Authorized filing copyright and design protection trademarks for custom golden embroidery drapes to avoid copycat market distributions in neighboring GCC states.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <StrategicReport />
           )}
 
           {activeTab === 'kpi' && (
