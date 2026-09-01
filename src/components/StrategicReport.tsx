@@ -143,41 +143,68 @@ export const StrategicReport: React.FC = () => {
         fetch(`/api/kpi?range=${timeRange}`, { headers }),
         fetch(`/api/analytics/growth?mode=live&startDate=${encodeURIComponent(startIso)}&endDate=${encodeURIComponent(endIso)}`, { headers }),
         fetch('/api/forecasting', { headers }),
-        fetch('/api/ai/briefings', { headers })
+        fetch(`/api/ai/briefings?startDate=${encodeURIComponent(startIso)}&endDate=${encodeURIComponent(endIso)}`, { headers })
       ]);
 
-      // Parse KPI Data
+      // Parse KPI Data (Core Authoritative SOT)
       if (kpiRes.status === 'fulfilled' && kpiRes.value.ok) {
         const kJson = await kpiRes.value.json();
         setKpiData(kJson);
       } else if (kpiRes.status === 'fulfilled' && !kpiRes.value.ok) {
         throw new Error(`Authoritative KPI Engine returned status ${kpiRes.value.status}`);
+      } else if (kpiRes.status === 'rejected') {
+        throw new Error(`Network failure connecting to Authoritative KPI Engine: ${kpiRes.reason?.message || 'Unknown error'}`);
       }
 
-      // Parse Growth Data
+      // Parse Growth Data (Graceful Partial Degradation)
       if (growthRes.status === 'fulfilled' && growthRes.value.ok) {
         const gJson = await growthRes.value.json();
         setGrowthData(gJson);
+      } else {
+        console.warn('Growth Analytics API returned non-OK or was rejected; operating with partial metrics.');
+        setGrowthData(null);
       }
 
-      // Parse Forecast Data
-      if (forecastRes.status === 'fulfilled' && forecastRes.value.ok) {
-        const fJson = await forecastRes.value.json();
-        setForecastData({
-          status: fJson.status === 'verified' ? 'verified' : 'insufficient_history',
-          model_version: fJson.model_version || fJson.forecast_method,
-          wape: fJson.accuracy?.wape,
-          history_days: fJson.history_days,
-          observed_days: fJson.observed_days,
-          forecasts: fJson.forecasts,
-          note: fJson.financial?.status === 'insufficient_authoritative_cost_data'
-            ? 'Profit forecast unavailable — authoritative cost data is not populated.'
-            : undefined
-        });
+      // Parse Forecast Data (Explicit Status Mapping)
+      if (forecastRes.status === 'fulfilled') {
+        if (forecastRes.value.ok) {
+          const fJson = await forecastRes.value.json();
+          let resolvedStatus: 'verified' | 'insufficient_history' | 'error' | 'unavailable' = 'unavailable';
+          
+          if (fJson.status === 'verified') {
+            resolvedStatus = 'verified';
+          } else if (fJson.status === 'insufficient_history') {
+            resolvedStatus = 'insufficient_history';
+          } else if (fJson.status === 'error') {
+            resolvedStatus = 'error';
+          } else {
+            resolvedStatus = 'unavailable';
+          }
+
+          setForecastData({
+            status: resolvedStatus,
+            model_version: fJson.model_version || fJson.forecast_method,
+            wape: fJson.accuracy?.wape ?? null,
+            history_days: fJson.history_days,
+            observed_days: fJson.observed_days,
+            forecasts: Array.isArray(fJson.forecasts) ? fJson.forecasts : [],
+            note: fJson.financial?.status === 'insufficient_authoritative_cost_data'
+              ? 'Profit forecast unavailable — authoritative cost data is not populated.'
+              : (fJson.error || fJson.message || undefined)
+          });
+        } else {
+          const status = forecastRes.value.status;
+          setForecastData({
+            status: status === 403 ? 'unavailable' : 'error',
+            note: status === 403 
+              ? 'Forecast intelligence requires executive authorization (Owner/Admin).'
+              : `Forecast engine returned HTTP ${status}.`
+          });
+        }
       } else {
         setForecastData({
           status: 'unavailable',
-          note: 'Forecast service did not respond with valid projections.'
+          note: 'Forecast service network connection failed.'
         });
       }
 
@@ -185,6 +212,8 @@ export const StrategicReport: React.FC = () => {
       if (briefingRes.status === 'fulfilled' && briefingRes.value.ok) {
         const bJson = await briefingRes.value.json();
         setBriefingData(Array.isArray(bJson) ? bJson : []);
+      } else {
+        setBriefingData([]);
       }
 
     } catch (err: any) {
@@ -746,13 +775,24 @@ export const StrategicReport: React.FC = () => {
             <h3 className="text-white text-xs font-display uppercase tracking-widest font-bold">Predictive Forecast Model</h3>
           </div>
           <div className="flex items-center space-x-2 font-mono text-[10px]">
-            {forecastData?.status === 'verified' ? (
+            {forecastData?.status === 'verified' && (
               <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase">
                 Model: {forecastData.model_version || 'WMA Baseline'} (WAPE: {forecastData.wape ?? 'N/A'}%)
               </span>
-            ) : (
+            )}
+            {forecastData?.status === 'insufficient_history' && (
               <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase">
-                Forecast Status: Insufficient History
+                Forecast Status: Insufficient History ({forecastData.observed_days || 0}/14 Days)
+              </span>
+            )}
+            {forecastData?.status === 'error' && (
+              <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase">
+                Forecast Status: Service Error
+              </span>
+            )}
+            {forecastData?.status === 'unavailable' && (
+              <span className="bg-zinc-800 text-zinc-400 border border-white/10 px-2.5 py-0.5 rounded-full font-bold uppercase">
+                Forecast Status: Unavailable
               </span>
             )}
           </div>
@@ -776,13 +816,13 @@ export const StrategicReport: React.FC = () => {
               </div>
             ))}
           </div>
-        ) : (
+        ) : forecastData?.status === 'insufficient_history' ? (
           <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xs space-y-2 font-mono text-xs">
             <div className="flex items-center space-x-2 text-amber-400 font-bold">
               <Info className="w-4 h-4" />
               <span>Forecast Unavailable — Insufficient Authoritative Historical Data</span>
             </div>
-            <p className="text-zinc-400 text-xs leading-relaxed">
+            <p className="text-zinc-400 text-xs leading-relaxed font-sans">
               Automated weighted moving average (WMA) forecasting requires a minimum of 14 operating days of transactional order history. 
               {forecastData?.observed_days !== undefined && (
                 <span> Currently observed: <strong>{forecastData.observed_days} active order days</strong>.</span>
@@ -791,6 +831,26 @@ export const StrategicReport: React.FC = () => {
             <div className="text-[10px] text-zinc-500 pt-1">
               Arbitrary projection multipliers (e.g. static +15% additions) are strictly forbidden by enterprise analytics rules.
             </div>
+          </div>
+        ) : forecastData?.status === 'error' ? (
+          <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-xs space-y-2 font-mono text-xs">
+            <div className="flex items-center space-x-2 text-red-400 font-bold">
+              <AlertTriangle className="w-4 h-4" />
+              <span>Forecast Engine Communication Error</span>
+            </div>
+            <p className="text-zinc-400 text-xs leading-relaxed font-sans">
+              {forecastData?.note || 'The forecasting service was unable to calculate statistical projections for the active store database.'}
+            </p>
+          </div>
+        ) : (
+          <div className="p-4 bg-zinc-900/50 border border-white/5 rounded-xs space-y-2 font-mono text-xs">
+            <div className="flex items-center space-x-2 text-zinc-400 font-bold">
+              <Info className="w-4 h-4" />
+              <span>Predictive Forecast Model Unavailable</span>
+            </div>
+            <p className="text-zinc-400 text-xs leading-relaxed font-sans">
+              {forecastData?.note || 'Forecasting service is currently unavailable or requires elevated executive credentials.'}
+            </p>
           </div>
         )}
       </div>
