@@ -54,9 +54,8 @@ ON public.zoal_health_monitor_incidents
 FOR SELECT TO authenticated
 USING (get_auth_user_role() IN ('owner','admin'));
 
--- Atomic observation recording. Only the server's service_role may call this RPC.
--- It returns whether a new/escalated alert should be emitted, preventing repeated
--- alerts from a polling loop and reducing duplicate notifications in multi-instance deployments.
+-- Atomically records a snapshot and incident state.
+-- The application calls this with the server-side service role.
 CREATE OR REPLACE FUNCTION public.record_health_observation(
   p_checked_at TIMESTAMPTZ,
   p_overall_status TEXT,
@@ -75,7 +74,7 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 DECLARE
-  v_incident public.zoal_health_monitor_incidents;
+  v_existing public.zoal_health_monitor_incidents;
   v_should_alert BOOLEAN := FALSE;
 BEGIN
   INSERT INTO public.zoal_health_monitor_snapshots (
@@ -89,41 +88,49 @@ BEGIN
   );
 
   IF p_overall_status IN ('DEGRADED','UNHEALTHY') THEN
-    INSERT INTO public.zoal_health_monitor_incidents (
-      fingerprint, severity, status, first_seen, last_seen,
-      last_alerted_at, occurrence_count, last_message
-    ) VALUES (
-      'system-health', p_overall_status, 'open', p_checked_at, p_checked_at,
-      p_checked_at, 1, COALESCE(p_error_message, 'System health degraded')
-    )
-    ON CONFLICT (fingerprint) DO UPDATE SET
-      severity = EXCLUDED.severity,
-      status = 'open',
-      last_seen = EXCLUDED.last_seen,
-      occurrence_count = public.zoal_health_monitor_incidents.occurrence_count + 1,
-      last_message = EXCLUDED.last_message,
-      resolved_at = NULL
-    RETURNING * INTO v_incident;
+    SELECT * INTO v_existing
+    FROM public.zoal_health_monitor_incidents
+    WHERE fingerprint = 'system-health'
+    FOR UPDATE;
 
-    -- Alert on a new incident or severity escalation. Repeated polling does not spam alerts.
-    IF v_incident.last_alerted_at IS NULL
-       OR v_incident.last_alerted_at < v_incident.first_seen
-       OR (v_incident.severity = 'UNHEALTHY' AND v_incident.last_alerted_at < p_checked_at - INTERVAL '15 minutes') THEN
+    IF NOT FOUND THEN
+      INSERT INTO public.zoal_health_monitor_incidents (
+        fingerprint, severity, status, first_seen, last_seen,
+        last_alerted_at, occurrence_count, last_message
+      ) VALUES (
+        'system-health', p_overall_status, 'open', p_checked_at, p_checked_at,
+        p_checked_at, 1, COALESCE(p_error_message, 'System health degraded')
+      );
       v_should_alert := TRUE;
+    ELSE
+      -- Alert immediately on escalation to UNHEALTHY; otherwise rate-limit
+      -- repeated critical alerts to once per 15 minutes.
+      IF p_overall_status = 'UNHEALTHY' AND v_existing.severity <> 'UNHEALTHY' THEN
+        v_should_alert := TRUE;
+      ELSIF v_existing.last_alerted_at IS NULL
+         OR (p_overall_status = 'UNHEALTHY' AND v_existing.last_alerted_at < p_checked_at - INTERVAL '15 minutes') THEN
+        v_should_alert := TRUE;
+      END IF;
+
       UPDATE public.zoal_health_monitor_incidents
-      SET last_alerted_at = p_checked_at
-      WHERE id = v_incident.id;
+      SET severity = p_overall_status,
+          status = 'open',
+          last_seen = p_checked_at,
+          occurrence_count = v_existing.occurrence_count + 1,
+          last_message = COALESCE(p_error_message, 'System health degraded'),
+          resolved_at = NULL,
+          last_alerted_at = CASE WHEN v_should_alert THEN p_checked_at ELSE v_existing.last_alerted_at END
+      WHERE id = v_existing.id;
     END IF;
   ELSE
     UPDATE public.zoal_health_monitor_incidents
-    SET status = 'resolved', resolved_at = COALESCE(resolved_at, p_checked_at), last_seen = p_checked_at
+    SET status = 'resolved',
+        resolved_at = COALESCE(resolved_at, p_checked_at),
+        last_seen = p_checked_at
     WHERE fingerprint = 'system-health' AND status = 'open';
   END IF;
 
-  RETURN jsonb_build_object(
-    'should_alert', v_should_alert,
-    'status', p_overall_status
-  );
+  RETURN jsonb_build_object('should_alert', v_should_alert, 'status', p_overall_status);
 END;
 $$;
 
