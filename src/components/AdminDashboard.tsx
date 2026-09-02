@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import EnterpriseHealthMonitor from './EnterpriseHealthMonitor';
 import {
   User, Shield, Landmark, BarChart3, Package, Truck, Compass, Languages,
   MapPin, CheckCircle, Users, RefreshCw, Star, ArrowUpRight, TrendingUp, Sparkles, Bell,
@@ -8655,25 +8656,12 @@ export default function AdminDashboard({
           )}
 
           {activeTab === 'health' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4">
-                <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">TELEMETRY MATRIX</span>
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">LIVE TELEMETRY</span>
                 <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">ENTERPRISE SYSTEM HEALTH MONITOR</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center font-mono">
-                {[
-                  { metric: 'API Gateway Response Time', val: '24ms', state: 'Exceptional' },
-                  { metric: 'Database Sync Success', val: '100.00%', state: 'Protected' },
-                  { metric: 'Supabase Storage Capacity', val: '0.8% used', state: 'Nominal' },
-                  { metric: 'Cloud Run Ingress Latency', val: '8ms', state: 'Exceptional' }
-                ].map((item, idx) => (
-                  <div key={idx} className="p-5 bg-zinc-950 border border-white/5 rounded-xs space-y-2">
-                    <span className="text-zinc-500 text-[9px] block uppercase font-mono leading-none">{item.metric}</span>
-                    <span className="text-2xl text-white font-bold block">{item.val}</span>
-                    <span className="text-[9px] text-emerald-400 font-bold uppercase block bg-emerald-500/10 px-2 py-0.5 rounded-full w-max mx-auto">{item.state}</span>
-                  </div>
-                ))}
-              </div>
+              <EnterpriseHealthMonitor />
             </div>
           )}
 
