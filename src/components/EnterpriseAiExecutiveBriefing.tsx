@@ -103,41 +103,25 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
     };
   }, []);
 
-  // AI Generation trigger (Smarter simulation that compiles real stats!)
+  // AI Generation trigger calling protected server API endpoint
   const handleTriggerAiGeneration = async () => {
     try {
       setActionLoading(true);
       setError(null);
 
-      // Simulating a fresh dynamic AI compilation
-      const dynamicBriefing = {
-        briefing_type: 'Daily',
-        risks: `- **Logistics gateway latency**: Saudi ZATCA portal experiencing minor API lags during VAT calculations.\n- **High-demand stock warning**: Sudanese Ghoriba cookies are moving 40% faster than restocked levels.`,
-        recommendations: `- **Activate Riyadh express gates**: Route backup local couriers directly to bypass central hub bottlenecks.\n- **Sourcing allocation shift**: Shift 15% bakery ingredients allocation to Hofuf local stone-ovens.`,
-        revenue_summary: {
-          title: 'Daily Synthesis Model',
-          highlight: 'Revenue optimized at 24.5%',
-          text: 'Consolidated Saudia boutique sales projected to touch 145,000 SAR.'
-        },
-        inventory_summary: {
-          title: 'Depot Stock Allocation',
-          highlight: 'Nominal threshold at 84%',
-          text: 'Fulfillment queue stands at exceptional 14.2 hours dispatch lag.'
-        },
-        customer_summary: {
-          title: 'Client Segment Analysis',
-          highlight: 'Net Promoter Index 9.2',
-          text: 'Custom silk gown inquiries reached peak density among Khobar VIPs.'
-        }
-      };
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 
-      const { data, error: err } = await supabaseClient
-        .from('zoal_ai_briefings')
-        .insert(dynamicBriefing)
-        .select()
-        .single();
+      const res = await fetch('/api/ai/briefings/generate', {
+        method: 'POST',
+        headers
+      });
 
-      if (err) throw err;
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to generate verified AI briefing.');
+      }
+
       await fetchBriefings();
     } catch (err: any) {
       console.error(err);
@@ -176,26 +160,36 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
       setActionLoading(true);
       setError(null);
 
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+
       const payload = {
         briefing_type: formType,
         risks: formRisks,
         recommendations: formRecommendations,
-        revenue_summary: { title: 'Boutique Performance', highlight: 'Updated Summary', text: formRevenueSummary },
-        inventory_summary: { title: 'Boutique Inventory', highlight: 'Updated Summary', text: formInventorySummary },
-        customer_summary: { title: 'Boutique Clientele', highlight: 'Updated Summary', text: formCustomerSummary }
+        revenue_summary: { title: 'Boutique Performance', highlight: 'Manual Summary', text: formRevenueSummary },
+        inventory_summary: { title: 'Boutique Inventory', highlight: 'Manual Summary', text: formInventorySummary },
+        customer_summary: { title: 'Boutique Clientele', highlight: 'Manual Summary', text: formCustomerSummary }
       };
 
+      let res;
       if (editingBriefing) {
-        const { error: err } = await supabaseClient
-          .from('zoal_ai_briefings')
-          .update(payload)
-          .eq('id', editingBriefing.id);
-        if (err) throw err;
+        res = await fetch(`/api/ai/briefings/${editingBriefing.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload)
+        });
       } else {
-        const { error: err } = await supabaseClient
-          .from('zoal_ai_briefings')
-          .insert(payload);
-        if (err) throw err;
+        res = await fetch('/api/ai/briefings', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failure saving executive briefing.');
       }
 
       setIsFormOpen(false);
@@ -212,8 +206,19 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
     if (!confirm('Are you sure you want to permanently archive this strategic summary briefing?')) return;
     try {
       setActionLoading(true);
-      const { error: err } = await supabaseClient.from('zoal_ai_briefings').delete().eq('id', id);
-      if (err) throw err;
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+
+      const res = await fetch(`/api/ai/briefings/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Deletion error.');
+      }
+
       await fetchBriefings();
     } catch (err: any) {
       console.error(err);

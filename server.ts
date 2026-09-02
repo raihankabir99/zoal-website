@@ -617,6 +617,10 @@ app.get('/api/forecasting', authenticateRequest, requireRole(['admin', 'owner'])
 
 // AI Briefing Routes
 app.get('/api/ai/briefings', authenticateRequest, requireRole(['admin', 'owner']), userRateLimiterMiddleware(15), briefingModule.getAiBriefings);
+app.post('/api/ai/briefings/generate', authenticateRequest, requireRole(['owner', 'admin']), userRateLimiterMiddleware(10), briefingModule.generateAiBriefing);
+app.post('/api/ai/briefings', authenticateRequest, requireRole(['owner', 'admin']), briefingModule.createManualBriefing);
+app.put('/api/ai/briefings/:id', authenticateRequest, requireRole(['owner', 'admin']), briefingModule.updateManualBriefing);
+app.delete('/api/ai/briefings/:id', authenticateRequest, requireRole(['owner', 'admin']), briefingModule.deleteBriefing);
 
 // Simulation Routes
 app.get('/api/simulation/models', authenticateRequest, requireRole(['admin', 'owner']), simulationModule.getDecisionModels);
