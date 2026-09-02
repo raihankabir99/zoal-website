@@ -26,7 +26,11 @@ export async function GET(req: NextRequest) {
   } catch (err: any) { return apiError(err.message || 'Server error', 500); }
 }
 
-/** Creates an order and snapshots authoritative product cost for future COGS. */
+/**
+ * Creates an order from authoritative server-side pricing.
+ * Coupon redemption is reserved through an atomic database RPC so concurrent
+ * requests cannot exceed usage limits.
+ */
 export async function POST(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
   try {
@@ -65,20 +69,40 @@ export async function POST(req: NextRequest) {
     } else shippingCost = subtotal >= 500 ? 0 : 35;
 
     let discountAmount = 0;
-    if (body.couponCode) {
-      const { data: coupon } = await supabase.from('zoal_coupons').select('*').ilike('code', String(body.couponCode).trim()).eq('is_active', true).maybeSingle();
-      if (coupon) {
-        const now = new Date();
-        const start = coupon.start_date ? new Date(coupon.start_date) : null;
-        const end = coupon.expiration_date ? new Date(coupon.expiration_date) : null;
-        if ((!start || now >= start) && (!end || now <= end) && subtotal >= Number(coupon.min_order_amount || 0)) {
-          if (coupon.discount_type === 'percentage') {
-            discountAmount = subtotal * Number(coupon.discount_value) / 100;
-            if (coupon.max_discount_amount) discountAmount = Math.min(discountAmount, Number(coupon.max_discount_amount));
-          } else discountAmount = Number(coupon.discount_value);
-          discountAmount = Math.min(discountAmount, subtotal);
-        }
+    let appliedCoupon: { id: string; code: string } | null = null;
+    const requestedCouponCode = typeof body.couponCode === 'string' ? body.couponCode.trim().toUpperCase() : '';
+
+    if (requestedCouponCode) {
+      const { data: coupon, error: couponErr } = await supabase
+        .from('zoal_coupons')
+        .select('*')
+        .ilike('code', requestedCouponCode)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (couponErr) return apiError(couponErr.message, 500);
+      if (!coupon) return apiError('Coupon is invalid or inactive', 400);
+
+      const now = new Date();
+      const start = coupon.start_date ? new Date(coupon.start_date) : null;
+      const end = coupon.expiration_date ? new Date(coupon.expiration_date) : null;
+      const usageAvailable = coupon.usage_limit === null || coupon.usage_limit === undefined
+        || Number(coupon.usage_count || 0) < Number(coupon.usage_limit);
+
+      if (start && now < start) return apiError('Coupon is not active yet', 400);
+      if (end && now > end) return apiError('Coupon has expired', 400);
+      if (!usageAvailable) return apiError('Coupon usage limit has been reached', 400);
+      if (subtotal < Number(coupon.min_order_amount || 0)) return apiError('Minimum order amount for this coupon has not been reached', 400);
+
+      if (coupon.discount_type === 'percentage') {
+        discountAmount = subtotal * Number(coupon.discount_value) / 100;
+        if (coupon.max_discount_amount) discountAmount = Math.min(discountAmount, Number(coupon.max_discount_amount));
+      } else {
+        discountAmount = Number(coupon.discount_value);
       }
+
+      discountAmount = Math.min(Math.max(0, discountAmount), subtotal);
+      appliedCoupon = { id: coupon.id, code: coupon.code };
     }
 
     const taxableAmount = Math.max(0, subtotal - discountAmount);
@@ -87,21 +111,64 @@ export async function POST(req: NextRequest) {
     const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
     const { data: order, error: orderErr } = await supabase.from('zoal_orders').insert({
-      id: orderId, customer_id: user.id, status: 'pending', subtotal, discount_amount: discountAmount,
-      shipping_cost: shippingCost, tax_amount: taxAmount, total_amount: totalAmount,
-      payment_status: 'unpaid', payment_method: body.payment_method || 'card', notes: body.notes || ''
+      id: orderId,
+      customer_id: user.id,
+      status: 'pending',
+      coupon_id: appliedCoupon?.id || null,
+      subtotal,
+      discount_amount: discountAmount,
+      shipping_cost: shippingCost,
+      tax_amount: taxAmount,
+      total_amount: totalAmount,
+      payment_status: 'unpaid',
+      payment_method: body.payment_method || 'card',
+      notes: body.notes || ''
     }).select().single();
+
     if (orderErr) return apiError(orderErr.message, 500);
 
+    if (appliedCoupon) {
+      const { error: redemptionErr } = await supabase.rpc('redeem_coupon_for_order', {
+        p_coupon_id: appliedCoupon.id,
+        p_order_id: orderId,
+        p_customer_id: user.id,
+        p_discount_amount: discountAmount
+      });
+
+      if (redemptionErr) {
+        await supabase.from('zoal_orders').delete().eq('id', orderId);
+        return apiError(
+          redemptionErr.message?.includes('COUPON_REDEMPTION_NOT_AVAILABLE')
+            ? 'Coupon usage limit has been reached'
+            : `Failed to redeem coupon: ${redemptionErr.message}`,
+          400
+        );
+      }
+    }
+
     const orderItems = validatedItems.map(item => ({
-      order_id: orderId, product_id: item.product_id, quantity: item.quantity,
-      unit_price: item.unit_price, unit_cost: item.unit_cost, total_price: item.total_price
+      order_id: orderId,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      unit_cost: item.unit_cost,
+      total_price: item.total_price
     }));
+
     const { error: itemsErr } = await supabase.from('zoal_order_items').insert(orderItems);
     if (itemsErr) {
+      // Cascading redemption deletion triggers usage_count rollback.
       await supabase.from('zoal_orders').delete().eq('id', orderId);
       return apiError(`Failed to save order detail components: ${itemsErr.message}`, 500);
     }
-    return apiResponse({ order, items: orderItems, totals: { subtotal, discountAmount, shippingCost, taxAmount, totalAmount } }, 201);
-  } catch (err: any) { return apiError(err.message || 'Server error', 500); }
+
+    return apiResponse({
+      order,
+      items: orderItems,
+      coupon: appliedCoupon ? { id: appliedCoupon.id, code: appliedCoupon.code, discountAmount } : null,
+      totals: { subtotal, discountAmount, shippingCost, taxAmount, totalAmount }
+    }, 201);
+  } catch (err: any) {
+    return apiError(err.message || 'Server error', 500);
+  }
 }
