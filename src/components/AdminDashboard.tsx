@@ -1080,18 +1080,43 @@ export default function AdminDashboard({
   const [editingRole, setEditingRole] = useState<any | null>(null);
   const [isAddRoleOpen, setIsAddRoleOpen] = useState<boolean>(false);
 
-  // System Logs list
-  const [systemLogs, setSystemLogs] = useState<any[]>(() => {
+  // System Logs list - Server Authoritative backed by Supabase zoal_activity_logs
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [loadingSystemLogs, setLoadingSystemLogs] = useState<boolean>(false);
+
+  const fetchSystemLogs = useCallback(async () => {
     try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'log-101', user: currentUser?.name || 'Administrator', action: 'Admin Login', target: 'Management Secure Panel', ip: '192.168.1.1', time: new Date().toLocaleString() },
-      { id: 'log-102', user: currentUser?.name || 'Administrator', action: 'Settings Updated', target: 'Synchronized Supabase Database', ip: '192.168.1.1', time: new Date(Date.now() - 300000).toLocaleString() },
-      { id: 'log-103', user: 'Khalid Al-Mansoori', action: 'Order Updated', target: 'Shipped Order ZL-9543', ip: '192.168.1.25', time: new Date(Date.now() - 7200000).toLocaleString() }
-    ];
-  });
+      setLoadingSystemLogs(true);
+      const token = (currentUser as any)?.token || localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const formatted = logsArray.map((l: any) => ({
+          id: l.id,
+          user: l.email || l.user_id || 'Administrator',
+          action: l.action,
+          target: l.resource_id ? `${l.resource_type || ''}: ${l.resource_id}` : (l.resource_type || 'System'),
+          ip: l.ip || '127.0.0.1',
+          time: l.timestamp ? new Date(l.timestamp).toLocaleString() : new Date().toLocaleString(),
+          severity: l.severity || 'INFO',
+          metadata: l.metadata,
+          before_state: l.before_state,
+          after_state: l.after_state
+        }));
+        setSystemLogs(formatted);
+      }
+    } catch (err) {
+      console.error('Failed to fetch audit logs:', err);
+    } finally {
+      setLoadingSystemLogs(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    fetchSystemLogs();
+  }, [fetchSystemLogs]);
 
   // Save categories/brands back to localStorage
   useEffect(() => {
@@ -1102,10 +1127,6 @@ export default function AdminDashboard({
     localStorage.setItem('zoal_admin_brands', JSON.stringify(brands));
   }, [brands]);
 
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_logs', JSON.stringify(systemLogs));
-  }, [systemLogs]);
-
   // Log function helper
   const addLog = (action: string, target?: string) => {
     const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
@@ -1114,7 +1135,7 @@ export default function AdminDashboard({
       user: currentUser?.name || 'Admin',
       action,
       target: target || 'System Interface',
-      ip: '192.168.1.16',
+      ip: '127.0.0.1',
       time: new Date().toLocaleString()
     };
     setSystemLogs(prev => [newLog, ...prev]);
@@ -7318,31 +7339,47 @@ export default function AdminDashboard({
 
               <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
                 <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                  <span className="text-zinc-500 font-mono text-[9.5px]">Track all admin activities, system settings updates, and security events in real-time.</span>
-                  <button 
-                    onClick={() => {
-                      setSystemLogs([
-                        { id: `log-${Date.now()}`, user: currentUser?.name || 'Administrator', action: 'Cleared system log files', ip: '192.168.1.1', time: new Date().toLocaleString() }
-                      ]);
-                      alert("Audit logs database cleared except current terminal session master log.");
-                    }}
-                    className="text-rose-500 hover:underline font-mono text-[9px] font-bold"
-                  >
-                    Clear Logs
-                  </button>
+                  <span className="text-zinc-500 font-mono text-[9.5px]">Authoritative immutable audit log stream backed by PostgreSQL/Supabase ledger.</span>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => fetchSystemLogs()}
+                      className="text-gold-pure hover:underline font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Refresh Logs
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const csvText = `id,user,action,target,ip,time\n` + systemLogs.map(l => `"${l.id}","${l.user}","${l.action}","${l.target}","${l.ip}","${l.time}"`).join('\n');
+                        const blob = new Blob([csvText], { type: 'text/csv' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `zoal_security_audit_logs_${new Date().toISOString().slice(0,10)}.csv`;
+                        link.click();
+                      }}
+                      className="text-zinc-400 hover:text-white font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3 h-3 text-emerald-500" /> Export CSV
+                    </button>
+                  </div>
                 </div>
                 
-                <div className="divide-y divide-white/5 font-mono text-[9.5px]">
-                  {systemLogs.map((log, idx) => (
-                    <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
-                      <div>
-                        <span className="text-white block font-sans">{log.action}</span>
-                        <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip}</span>
+                {loadingSystemLogs ? (
+                  <div className="py-8 text-center text-zinc-500 font-mono text-[10px]">Loading audit ledger...</div>
+                ) : systemLogs.length === 0 ? (
+                  <div className="py-8 text-center text-zinc-600 font-mono text-[10px]">No audit logs recorded yet in authoritative database.</div>
+                ) : (
+                  <div className="divide-y divide-white/5 font-mono text-[9.5px]">
+                    {systemLogs.map((log, idx) => (
+                      <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
+                        <div>
+                          <span className="text-white block font-sans">{log.action}</span>
+                          <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip} {log.target ? `• Target: ${log.target}` : ''}</span>
+                        </div>
+                        <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
                       </div>
-                      <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

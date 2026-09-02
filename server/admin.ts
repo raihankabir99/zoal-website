@@ -2,6 +2,7 @@ import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { ROLE_HIERARCHY, ROLE_PERMISSIONS } from '../backend/security';
+import { logAuditEvent } from './audit';
 
 function getClient() {
   return getServiceSupabaseClient() || getSupabaseClient();
@@ -40,22 +41,17 @@ export async function getRbacMatrix(req: Request, res: Response) {
 }
 
 /** Audit Logging Helper */
-async function logAdminAction(actor: any, action: string, ip: string, userAgent: string, targetId?: string) {
-  const supabase = getClient();
-  if (!supabase) return;
-  try {
-    await supabase.from('zoal_activity_logs').insert({
-      id: crypto.randomUUID(),
-      user_id: actor.id,
-      email: actor.email,
-      action: targetId ? `${action} (Target: ${targetId})` : action,
-      ip,
-      user_agent: userAgent,
-      timestamp: new Date().toISOString()
-    });
-  } catch (err) {
-    console.error('Error logging admin action:', err);
-  }
+async function logAdminAction(actor: any, action: string, ip: string, userAgent: string, targetId?: string, metadata?: any) {
+  await logAuditEvent({
+    actor,
+    action: targetId ? `${action} (Target: ${targetId})` : action,
+    resourceType: 'admin_roster',
+    resourceId: targetId,
+    ip,
+    userAgent,
+    metadata,
+    source: 'security_admin'
+  });
 }
 
 /** GET /api/admin/roster */
@@ -184,12 +180,59 @@ export async function getAuditLogs(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Database unavailable' });
 
   try {
-    const { data: logs, error } = await supabase
+    const page = req.query.page ? Math.max(1, parseInt(req.query.page as string, 10)) : null;
+    const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(req.query.limit as string, 10))) : 50;
+    const resourceType = req.query.resourceType || req.query.resource_type;
+    const severity = req.query.severity;
+    const source = req.query.source;
+    const search = req.query.search ? String(req.query.search).trim() : '';
+
+    let query = supabase
       .from('zoal_activity_logs')
-      .select('*')
-      .order('timestamp', { ascending: false })
-      .limit(200);
+      .select('*', { count: 'exact' })
+      .order('timestamp', { ascending: false });
+
+    if (resourceType) {
+      const types = String(resourceType).split(',').map(s => s.trim()).filter(Boolean);
+      if (types.length === 1) {
+        query = query.eq('resource_type', types[0]);
+      } else if (types.length > 1) {
+        query = query.in('resource_type', types);
+      }
+    }
+
+    if (severity) {
+      query = query.eq('severity', severity);
+    }
+
+    if (source) {
+      query = query.eq('source', source);
+    }
+
+    if (search) {
+      query = query.or(`action.ilike.%${search}%,email.ilike.%${search}%,resource_id.ilike.%${search}%`);
+    }
+
+    if (page) {
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+    } else {
+      query = query.limit(req.query.limit ? limit : 200);
+    }
+
+    const { data: logs, count, error } = await query;
     if (error) throw error;
+
+    if (page || req.query.paginated === 'true') {
+      return res.json({
+        logs: logs || [],
+        total: count ?? (logs ? logs.length : 0),
+        page: page || 1,
+        limit
+      });
+    }
+
     return res.json(logs || []);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

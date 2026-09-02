@@ -52,6 +52,17 @@ export interface ActivityLog {
   timestamp: string;
   ip: string;
   userAgent: string;
+  resourceType?: string | null;
+  resourceId?: string | null;
+  beforeState?: Record<string, any> | null;
+  afterState?: Record<string, any> | null;
+  changedFields?: string[] | null;
+  metadata?: Record<string, any> | null;
+  result?: 'SUCCESS' | 'FAILED' | 'DENIED' | string;
+  severity?: 'INFO' | 'WARN' | 'CRITICAL' | string;
+  requestId?: string | null;
+  correlationId?: string | null;
+  source?: string;
 }
 
 // Password cryptography helpers using Node.js pbkdf2
@@ -138,7 +149,18 @@ export function toSupabaseLog(l: ActivityLog) {
     action: l.action,
     timestamp: l.timestamp,
     ip: l.ip,
-    user_agent: l.userAgent
+    user_agent: l.userAgent,
+    resource_type: l.resourceType || null,
+    resource_id: l.resourceId || null,
+    before_state: l.beforeState || null,
+    after_state: l.afterState || null,
+    changed_fields: l.changedFields || null,
+    metadata: l.metadata || {},
+    result: l.result || 'SUCCESS',
+    severity: l.severity || 'INFO',
+    request_id: l.requestId || null,
+    correlation_id: l.correlationId || null,
+    source: l.source || 'server'
   };
 }
 
@@ -150,7 +172,18 @@ export function fromSupabaseLog(sl: any): ActivityLog {
     action: sl.action,
     timestamp: sl.timestamp,
     ip: sl.ip,
-    userAgent: sl.user_agent
+    userAgent: sl.user_agent,
+    resourceType: sl.resource_type || null,
+    resourceId: sl.resource_id || null,
+    beforeState: sl.before_state || null,
+    afterState: sl.after_state || null,
+    changedFields: sl.changed_fields || null,
+    metadata: sl.metadata || null,
+    result: sl.result || 'SUCCESS',
+    severity: sl.severity || 'INFO',
+    requestId: sl.request_id || null,
+    correlationId: sl.correlation_id || null,
+    source: sl.source || 'server'
   };
 }
 

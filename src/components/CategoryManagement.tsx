@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Plus, Search, Filter, ArrowUpDown, ChevronRight, ChevronDown, FolderTree, 
   Trash2, Edit, Copy, Move, Merge, RotateCcw, Archive, Check, X, Globe, 
@@ -433,40 +433,44 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [testRunnerLogs, setTestRunnerLogs] = useState<{ name: string; status: 'pending' | 'success' | 'failed'; details?: string }[]>([]);
 
-  // --- ACTIVE LOGS list loaded from localStorage ---
-  const [auditLogs, setAuditLogs] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Filter to keep relevant Category/Brand events
-        return parsed.filter((l: any) => 
-          (l.action || '').toLowerCase().includes('category') || 
-          (l.action || '').toLowerCase().includes('brand') ||
-          (l.action || '').toLowerCase().includes('sorting') ||
-          (l.action || '').toLowerCase().includes('seo') ||
-          (l.action || '').toLowerCase().includes('homepage')
-        );
-      }
-    } catch (e) {}
-    return [];
-  });
+  // --- ACTIVE LOGS list loaded from Server Authoritative Audit Ledger ---
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  const refreshAuditLogs = () => {
+  const refreshAuditLogs = useCallback(async () => {
     try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setAuditLogs(parsed.filter((l: any) => 
-          l.action.toLowerCase().includes('category') || 
-          l.action.toLowerCase().includes('brand') ||
-          l.action.toLowerCase().includes('sorting') ||
-          l.action.toLowerCase().includes('seo') ||
-          l.action.toLowerCase().includes('homepage')
-        ));
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const filtered = logsArray
+          .filter((l: any) => 
+            (l.resource_type || '').toLowerCase().includes('category') || 
+            (l.resource_type || '').toLowerCase().includes('brand') ||
+            (l.action || '').toLowerCase().includes('category') || 
+            (l.action || '').toLowerCase().includes('brand') ||
+            (l.action || '').toLowerCase().includes('sorting') ||
+            (l.action || '').toLowerCase().includes('seo') ||
+            (l.action || '').toLowerCase().includes('homepage')
+          )
+          .map((l: any) => ({
+            id: l.id,
+            user: l.email || l.user_id || 'Admin',
+            time: l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString(),
+            action: l.action,
+            target: l.resource_id ? `${l.resource_type || ''}: ${l.resource_id}` : (l.resource_type || 'Taxonomy')
+          }));
+        setAuditLogs(filtered);
       }
-    } catch (e) {}
-  };
+    } catch (e) {
+      console.error('Error fetching taxonomy audit logs:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAuditLogs();
+  }, [refreshAuditLogs]);
 
   const handleRealCategoryImageUpload = async (file: File, fieldName: 'thumbnail' | 'banner' | 'mobileBanner' | 'homepageImage') => {
     if (!file) return;

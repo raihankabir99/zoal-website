@@ -1,5 +1,6 @@
 import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
+import { logAuditEvent } from './audit';
 
 function getClient() {
   return getServiceSupabaseClient() || getSupabaseClient();
@@ -163,6 +164,16 @@ export async function createCampaign(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+  
+  logAuditEvent({
+    req,
+    action: 'CREATE_MARKETING_CAMPAIGN',
+    resourceType: 'campaign',
+    resourceId: data.id,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.status(201).json(mapCampaign(data));
 }
 
@@ -172,6 +183,12 @@ export async function updateCampaign(req: Request, res: Response) {
 
   const { id } = req.params;
   const body = req.body;
+
+  const { data: existing } = await supabase
+    .from('zoal_campaigns')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
   if (body.name !== undefined) payload.name = body.name;
@@ -188,6 +205,17 @@ export async function updateCampaign(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'UPDATE_MARKETING_CAMPAIGN',
+    resourceType: 'campaign',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.json(mapCampaign(data));
 }
 
@@ -196,12 +224,30 @@ export async function deleteCampaign(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
   const { id } = req.params;
+  const { data: existing } = await supabase
+    .from('zoal_campaigns')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('zoal_campaigns')
     .delete()
     .eq('id', id);
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'DELETE_MARKETING_CAMPAIGN',
+    resourceType: 'campaign',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: null,
+    severity: 'WARN',
+    source: 'marketing'
+  });
+
   res.json({ success: true, id });
 }
 
@@ -252,6 +298,16 @@ export async function createCoupon(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'CREATE_COUPON',
+    resourceType: 'coupon',
+    resourceId: data.id,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.status(201).json(mapCoupon(data));
 }
 
@@ -261,6 +317,12 @@ export async function updateCoupon(req: Request, res: Response) {
 
   const { id } = req.params;
   const body = req.body;
+
+  const { data: existing } = await supabase
+    .from('zoal_coupons')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const payload: Record<string, any> = {};
   if (body.code !== undefined) payload.code = body.code.toUpperCase().trim();
@@ -276,6 +338,17 @@ export async function updateCoupon(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'UPDATE_COUPON',
+    resourceType: 'coupon',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.json(mapCoupon(data));
 }
 
@@ -284,12 +357,30 @@ export async function deleteCoupon(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
   const { id } = req.params;
+  const { data: existing } = await supabase
+    .from('zoal_coupons')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('zoal_coupons')
     .delete()
     .eq('id', id);
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'DELETE_COUPON',
+    resourceType: 'coupon',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: null,
+    severity: 'WARN',
+    source: 'marketing'
+  });
+
   res.json({ success: true, id });
 }
 

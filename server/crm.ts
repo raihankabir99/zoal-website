@@ -2,6 +2,7 @@ import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import pg from 'pg';
+import { logAuditEvent } from './audit';
 const { Client: PgClient } = pg;
 
 function getClient() {
@@ -21,50 +22,18 @@ export function hashPassword(password: string): string {
  * Helper to record administrative activity logs in zoal_activity_logs.
  * Raw invitation tokens or sensitive secrets are NEVER logged.
  */
-async function logCrmActivity(actorUser: any, action: string, ip?: string, userAgent?: string, targetCustomerId?: string) {
-  try {
-    const supabase = getClient();
-    if (!supabase) return;
-    const logId = `act-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    const nowIso = new Date().toISOString();
-
-    if (process.env.DATABASE_URL) {
-      const pgClient = new PgClient({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-      try {
-        await pgClient.connect();
-        await pgClient.query(
-          `INSERT INTO zoal_activity_logs (id, user_id, email, action, timestamp, ip, user_agent)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            logId,
-            actorUser?.id || 'admin',
-            actorUser?.email || 'admin@alzoal.com',
-            targetCustomerId ? `${action} (Target: ${targetCustomerId})` : action,
-            nowIso,
-            ip || '127.0.0.1',
-            userAgent || 'ZOAL-Enterprise-CRM'
-          ]
-        );
-        return;
-      } catch (e) {
-        // Fall back to Supabase client
-      } finally {
-        await pgClient.end().catch(() => {});
-      }
-    }
-
-    await supabase.from('zoal_activity_logs').insert({
-      id: logId,
-      user_id: actorUser?.id || 'admin',
-      email: actorUser?.email || 'admin@alzoal.com',
-      action: targetCustomerId ? `${action} (Target: ${targetCustomerId})` : action,
-      timestamp: nowIso,
-      ip: ip || '127.0.0.1',
-      user_agent: userAgent || 'ZOAL-Enterprise-CRM'
-    });
-  } catch (err) {
-    console.error('Failed to log CRM activity:', err);
-  }
+async function logCrmActivity(actorUser: any, action: string, ip?: string, userAgent?: string, targetCustomerId?: string, beforeState?: any, afterState?: any) {
+  await logAuditEvent({
+    actor: actorUser,
+    action: targetCustomerId ? `${action} (Target: ${targetCustomerId})` : action,
+    resourceType: 'customer_crm',
+    resourceId: targetCustomerId,
+    beforeState,
+    afterState,
+    ip,
+    userAgent,
+    source: 'crm'
+  });
 }
 
 /**

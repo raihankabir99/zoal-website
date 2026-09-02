@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Globe, LayoutGrid, Layers, FileText, Compass, PanelBottom, Megaphone,
   Bell, Check, X, Plus, Edit, Trash2, ArrowUp, ArrowDown, ExternalLink,
@@ -931,14 +931,34 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
   const [folders, setFolders] = useState<string[]>(['Apparel Images', 'Coffee Heritage', 'Media Streams', 'Documents']);
 
-  const [activityLogs, setActivityLogs] = useState(() => {
-    const raw = localStorage.getItem('cms_activity_logs');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'log-1', user: 'Amjad Suliman (Owner)', action: 'Initialized CMS Sentry Environment', timestamp: '2026-07-16 04:30', affectedContent: 'System Settings', severity: 'info' },
-      { id: 'log-2', user: 'Sumaya Bashir (Admin)', action: 'Updated About Sanctuary SEO title', timestamp: '2026-07-16 04:45', affectedContent: 'SEO / About', severity: 'info' }
-    ];
-  });
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+
+  const fetchCmsActivityLogs = useCallback(async () => {
+    try {
+      const token = (currentUser as any)?.token || localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const formatted = logsArray.map((l: any) => ({
+          id: l.id,
+          user: l.email || l.user_id || `${currentUser?.name || 'Support Office'} (${userRole.toUpperCase()})`,
+          action: l.action,
+          timestamp: l.timestamp ? new Date(l.timestamp).toISOString().replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16),
+          affectedContent: l.resource_type || l.source || 'CMS / System',
+          severity: (l.severity || 'info').toLowerCase()
+        }));
+        setActivityLogs(formatted);
+      }
+    } catch (e) {
+      console.error('Failed to load CMS activity logs:', e);
+    }
+  }, [currentUser, userRole]);
+
+  useEffect(() => {
+    fetchCmsActivityLogs();
+  }, [fetchCmsActivityLogs]);
 
   const [revisions, setRevisions] = useState(() => {
     const raw = localStorage.getItem('cms_revisions');
@@ -1002,7 +1022,6 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     localStorage.setItem('cms_promotions', JSON.stringify(promotions));
     localStorage.setItem('cms_seo_settings', JSON.stringify(seoSettings));
     localStorage.setItem('cms_media_assets', JSON.stringify(mediaAssets));
-    localStorage.setItem('cms_activity_logs', JSON.stringify(activityLogs));
     localStorage.setItem('cms_revisions', JSON.stringify(revisions));
 
     if (onSave) {

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { getSupabaseClient, getServiceSupabaseClient } from '../backend/supabase.ts';
 import { friendlyToUUID } from '../src/lib/uuidMapper.ts';
+import { logAuditEvent } from './audit.ts';
 
 function getSupabase() {
   return getServiceSupabaseClient() || getSupabaseClient();
@@ -168,6 +169,16 @@ export async function createProduct(req: Request, res: Response) {
       return res.status(500).json({ error: 'Transaction failed', message: error.message || String(error) });
     }
 
+    logAuditEvent({
+      req,
+      action: 'CREATE_PRODUCT',
+      resourceType: 'product',
+      resourceId: productId,
+      afterState: completeProductJson,
+      severity: 'INFO',
+      metadata: { name: body.name, price, category: body.category }
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Product created successfully with complete synchronization.',
@@ -240,6 +251,12 @@ export async function updateProduct(req: Request, res: Response) {
   };
 
   try {
+    const { data: existingRecord } = await supabase
+      .from('zoal_supabase_products')
+      .select('data')
+      .eq('id', uuid)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('zoal_supabase_products')
       .upsert({
@@ -257,6 +274,17 @@ export async function updateProduct(req: Request, res: Response) {
       console.error('[Update Product] Supabase error:', error.message || error);
       return res.status(500).json({ error: 'Transaction failed', message: error.message || String(error) });
     }
+
+    logAuditEvent({
+      req,
+      action: 'UPDATE_PRODUCT',
+      resourceType: 'product',
+      resourceId: id,
+      beforeState: existingRecord?.data || null,
+      afterState: completeProductJson,
+      severity: 'INFO',
+      metadata: { name: body.name, price, category: body.category }
+    });
 
     return res.status(200).json({
       success: true,
@@ -335,6 +363,12 @@ export async function deleteProduct(req: Request, res: Response) {
   const uuid = friendlyToUUID(id);
 
   try {
+    const { data: existingRecord } = await supabase
+      .from('zoal_supabase_products')
+      .select('data')
+      .eq('id', uuid)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('zoal_supabase_products')
       .delete()
@@ -344,6 +378,17 @@ export async function deleteProduct(req: Request, res: Response) {
       console.error('[Delete Product] Supabase error:', error.message || error);
       return res.status(500).json({ error: 'Transaction failed', message: error.message || String(error) });
     }
+
+    logAuditEvent({
+      req,
+      action: 'DELETE_PRODUCT',
+      resourceType: 'product',
+      resourceId: id,
+      beforeState: existingRecord?.data || null,
+      afterState: null,
+      severity: 'WARN',
+      metadata: { deletedAt: new Date().toISOString() }
+    });
 
     return res.status(200).json({
       success: true,
