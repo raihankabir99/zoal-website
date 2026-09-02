@@ -48,12 +48,13 @@ export async function POST(req: NextRequest) {
     let discountAmount = 0;
     let couponId = null;
     if (body.couponCode) {
+      const normalizedCouponCode = String(body.couponCode).trim().toUpperCase();
       const { data: coupon } = await supabase
         .from('zoal_coupons')
         .select('*')
-        .eq('code', body.couponCode)
+        .ilike('code', normalizedCouponCode)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (coupon) {
         const now = new Date();
@@ -61,9 +62,11 @@ export async function POST(req: NextRequest) {
         const end = coupon.expiration_date ? new Date(coupon.expiration_date) : null;
 
         const isDateValid = (!start || now >= start) && (!end || now <= end);
-        const isAmountValid = subtotal >= Number(coupon.min_order_amount);
+        const isAmountValid = subtotal >= Number(coupon.min_order_amount || 0);
+        const isUsageAvailable = coupon.usage_limit === null || coupon.usage_limit === undefined
+          || Number(coupon.usage_count || 0) < Number(coupon.usage_limit);
 
-        if (isDateValid && isAmountValid) {
+        if (isDateValid && isAmountValid && isUsageAvailable) {
           couponId = coupon.id;
           if (coupon.discount_type === 'percentage') {
             discountAmount = (subtotal * Number(coupon.discount_value)) / 100;
@@ -74,7 +77,15 @@ export async function POST(req: NextRequest) {
             discountAmount = Number(coupon.discount_value);
           }
           discountAmount = Math.min(discountAmount, subtotal); // can't exceed subtotal
+        } else if (!isUsageAvailable) {
+          return apiError('Coupon usage limit has been reached', 400);
+        } else if (!isDateValid) {
+          return apiError('Coupon is invalid or expired', 400);
+        } else {
+          return apiError('Minimum order amount for this coupon has not been reached', 400);
         }
+      } else {
+        return apiError('Coupon is invalid or inactive', 400);
       }
     }
 
