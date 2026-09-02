@@ -29,6 +29,8 @@ interface SystemHealthResponse {
     authentication: ServiceHealth;
   };
   metrics: HealthMetrics;
+  history?: Array<Record<string, unknown>>;
+  activeIncident?: Record<string, unknown> | null;
 }
 
 const DB_DEGRADED_LATENCY_MS = 500;
@@ -120,19 +122,48 @@ export async function collectSystemHealth(): Promise<SystemHealthResponse> {
   };
 }
 
-export async function getHealthMetrics(_req: Request, res: Response) {
-  const health = await collectSystemHealth();
-  res.json({
-    status: health.overallStatus,
-    checkedAt: health.checkedAt,
-    runtime: health.metrics
-  });
+async function attachObservabilityState(health: SystemHealthResponse, limit: number) {
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) return health;
+
+  const [{ data: history }, { data: activeIncident }] = await Promise.all([
+    supabase
+      .from('zoal_health_monitor_snapshots')
+      .select('checked_at,overall_status,database_status,database_latency_ms,backend_status,backend_processing_ms,runtime_status,rss_mb,heap_used_mb,heap_total_mb,error_message')
+      .order('checked_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('zoal_health_monitor_incidents')
+      .select('id,fingerprint,severity,status,first_seen,last_seen,resolved_at,occurrence_count,last_message')
+      .eq('fingerprint', 'system-health')
+      .eq('status', 'open')
+      .maybeSingle()
+  ]);
+
+  return {
+    ...health,
+    history: history ?? [],
+    activeIncident: activeIncident ?? null
+  };
 }
 
-export async function getSystemHealth(_req: Request, res: Response) {
+export async function getHealthMetrics(_req: Request, res: Response) {
   try {
     const health = await collectSystemHealth();
-    res.json(health);
+    res.json({ status: health.overallStatus, checkedAt: health.checkedAt, runtime: health.metrics });
+  } catch {
+    res.status(503).json({ error: 'Health monitoring unavailable' });
+  }
+}
+
+export async function getSystemHealth(req: Request, res: Response) {
+  try {
+    const health = await collectSystemHealth();
+    const requested = Number.parseInt(String(req.query.limit ?? HISTORY_DEFAULT_LIMIT), 10);
+    const limit = Number.isFinite(requested)
+      ? Math.min(Math.max(requested, 1), HISTORY_MAX_LIMIT)
+      : HISTORY_DEFAULT_LIMIT;
+    res.json(await attachObservabilityState(health, limit));
   } catch {
     res.status(503).json({ error: 'Health monitoring unavailable' });
   }
@@ -174,9 +205,7 @@ async function emitHealthAlert(health: SystemHealthResponse) {
     (health.services.backend.status !== 'HEALTHY' ? `Backend ${health.services.backend.status.toLowerCase()}` : null) ||
     'System health degraded';
 
-  const title = health.overallStatus === 'UNHEALTHY'
-    ? 'ZOAL System Health Critical'
-    : 'ZOAL System Health Degraded';
+  const title = health.overallStatus === 'UNHEALTHY' ? 'ZOAL System Health Critical' : 'ZOAL System Health Degraded';
   const message = `${primaryFailure}. Detected ${health.checkedAt}. DB ${health.services.database.latencyMs ?? 'n/a'}ms, backend ${health.metrics.backendProcessingMs}ms.`;
 
   const rows = recipients.map((recipient: { id: string; role: string }) => ({
@@ -196,7 +225,8 @@ async function emitHealthAlert(health: SystemHealthResponse) {
     }
   }));
 
-  await supabase.from('zoal_notifications').insert(rows);
+  const { error } = await supabase.from('zoal_notifications').insert(rows);
+  if (error) console.error('[Health Monitor] Alert notification insert failed:', error.message);
 }
 
 let monitorRunning = false;
@@ -228,9 +258,7 @@ export async function runAutonomousHealthCheck() {
       return;
     }
 
-    if (result?.should_alert) {
-      await emitHealthAlert(health);
-    }
+    if (result?.should_alert) await emitHealthAlert(health);
   } catch (error) {
     console.error('[Health Monitor] Autonomous check failed:', error);
   } finally {
@@ -238,7 +266,6 @@ export async function runAutonomousHealthCheck() {
   }
 }
 
-// Start only once per Node.js process. The UI polling remains independent of this worker.
 const globalMonitor = globalThis as typeof globalThis & { __zoalHealthMonitorStarted?: boolean };
 if (!globalMonitor.__zoalHealthMonitorStarted) {
   globalMonitor.__zoalHealthMonitorStarted = true;
