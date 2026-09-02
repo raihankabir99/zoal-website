@@ -157,7 +157,11 @@ export async function POST(req: NextRequest) {
 
     const { error: itemsErr } = await supabase.from('zoal_order_items').insert(orderItems);
     if (itemsErr) {
-      // Cascading redemption deletion triggers usage_count rollback.
+      // Redemption is removed explicitly so the database rollback trigger can
+      // restore usage_count before the partially-created order is removed.
+      if (appliedCoupon) {
+        await supabase.from('zoal_coupon_redemptions').delete().eq('order_id', orderId);
+      }
       await supabase.from('zoal_orders').delete().eq('id', orderId);
       return apiError(`Failed to save order detail components: ${itemsErr.message}`, 500);
     }
