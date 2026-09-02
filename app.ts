@@ -62,6 +62,7 @@ import {
 } from './server/blog.ts';
 
 import * as cmsModule from './server/cms.ts';
+import * as textsModule from './server/texts.ts';
 import * as marketingModule from './server/marketing.ts';
 import * as legalModule from './server/legal.ts';
 import * as taxModule from './server/taxes.ts';
@@ -4531,6 +4532,12 @@ app.get('/api/support/teams', requirePermission('can_manage_support'), async (re
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
 app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
+
+// Global Texts & Translations Routes
+app.get('/api/texts', optionalAuthenticate, textsModule.getTexts);
+app.post('/api/texts', authenticateRequest, requireRole(['owner', 'admin']), textsModule.createText);
+app.put('/api/texts/:id', authenticateRequest, requireRole(['owner', 'admin']), textsModule.updateText);
+app.delete('/api/texts/:id', authenticateRequest, requireRole(['owner', 'admin']), textsModule.deleteText);
 
 // Regional Operations & Security Center Endpoints
 app.get('/api/operations/health', operationsModule.getHealthData);

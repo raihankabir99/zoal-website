@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useBranding } from './BrandingContext';
 import { SafeImage } from '../imageRegistry';
+import CmsTextsPanel from './CmsTextsPanel';
 
 // Interfaces for our full CMS state
 export interface CmsDashboardStats {
@@ -1472,6 +1473,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
           { id: 'dashboard', label: lang === 'ar' ? '📊 لوحة القيادة والمؤشرات' : '📊 Overview' },
           { id: 'heroes', label: lang === 'ar' ? '✨ إدارة البانر الرئيسي (Hero)' : '✨ Hero Sliders' },
           { id: 'editorial-lookbook', label: lang === 'ar' ? '📖 لوك بوك التحريري' : '📖 Editorial Lookbook' },
+          { id: 'texts', label: lang === 'ar' ? '🔤 النصوص والترجمات العالمية' : '🔤 Texts & Translations' },
           { id: 'homepage', label: lang === 'ar' ? '🏠 أقسام الصفحة الرئيسية' : '🏠 Homepage' },
           { id: 'banners', label: lang === 'ar' ? '🎏 لافتات العرض' : '🎏 Banners' },
           { id: 'pages', label: lang === 'ar' ? '📄 الصفحات التحريرية' : '📄 Pages' },
@@ -5906,6 +5908,11 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
               ))}
             </div>
           </div>
+        )}
+
+        {/* GLOBAL TEXTS & TRANSLATIONS CMS TAB */}
+        {cmsTab === 'texts' && (
+          <CmsTextsPanel currentUser={currentUser} addLog={addLog} />
         )}
 
         {/* 12. VERSION HISTORY & SNAPSHOT ROLLBACK CMS TAB */}
