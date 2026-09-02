@@ -34,6 +34,70 @@ export interface ValidationResult {
   validatedData: any;
 }
 
+const FORBIDDEN_FINANCIAL_PATTERNS: Array<[RegExp, keyof ExecutiveContext['financials']]> = [
+  [/\b(?:cogs|cost of goods sold)\b/i, 'cogs'],
+  [/\b(?:gross profit|gross margin)\b/i, 'gross_profit'],
+  [/\b(?:operating expenses?|opex)\b/i, 'expenses'],
+  [/\b(?:net profit|net income)\b/i, 'net_profit'],
+  [/\b(?:cash flow|cashflow)\b/i, 'cash_flow']
+];
+
+const FORECAST_PATTERN = /\b(?:forecast|project(?:ed|ion)?|predict(?:ed|ion)?|expected|expect|likely|will|may|could|might|next\s+(?:day|week|month|quarter|year)|future)\b[^.\n]{0,160}(?:\bSAR\s*[\d,.]+|[\d,.]+\s*%|\b\d[\d,.]*\b)/i;
+
+function normalizeNumber(value: string): number {
+  return Number(value.replace(/,/g, ''));
+}
+
+function collectAuthoritativeNumbers(context: ExecutiveContext): Set<number> {
+  return new Set([
+    context.sales.total_revenue,
+    context.sales.total_orders,
+    context.sales.average_order_value,
+    context.customers.active_customers,
+    context.inventory.low_stock_count,
+    context.financials.revenue.value
+  ].filter(Number.isFinite));
+}
+
+function containsUnauthorizedNumericClaim(text: string, context: ExecutiveContext): boolean {
+  const authoritative = collectAuthoritativeNumbers(context);
+  const monetaryOrPercent = /(?:SAR\s*)?[\d]{1,3}(?:,[\d]{3})*(?:\.\d+)?\s*(?:SAR|%)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = monetaryOrPercent.exec(text)) !== null) {
+    const raw = match[0].replace(/SAR/gi, '').replace(/%/g, '').trim();
+    const n = normalizeNumber(raw);
+    if (Number.isFinite(n) && !authoritative.has(n)) return true;
+  }
+  return false;
+}
+
+function sanitizeNarrative(text: unknown, context: ExecutiveContext): { text: string; changed: boolean } {
+  if (typeof text !== 'string') return { text: '', changed: true };
+  let output = text;
+  let changed = false;
+
+  for (const [pattern, metric] of FORBIDDEN_FINANCIAL_PATTERNS) {
+    if (context.financials[metric].status === 'UNAVAILABLE' && pattern.test(output)) {
+      output = output.replace(new RegExp(`[^.\\n]*${pattern.source}[^.\\n]*(?:[.\\n]|$)`, 'gi'), '').trim();
+      changed = true;
+    }
+  }
+
+  if (FORECAST_PATTERN.test(output)) {
+    output = output.replace(/[^.\n]*(?:forecast|project(?:ed|ion)?|predict(?:ed|ion)?|expected|expect|likely|will|may|could|might|next\s+(?:day|week|month|quarter|year)|future)[^.\n]*(?:\bSAR\s*[\d,.]+|[\d,.]+\s*%|\b\d[\d,.]*\b)[^.\n]*/gi, '').trim();
+    changed = true;
+  }
+
+  if (containsUnauthorizedNumericClaim(output, context)) {
+    // Narrative numerical claims cannot be safely reconciled without a claim-level
+    // parser. Remove the affected numeric sentence rather than trusting the LLM.
+    output = output.replace(/[^.\n]*(?:SAR\s*[\d,.]+|[\d,.]+\s*%)[^.\n]*/gi, '').trim();
+    changed = true;
+  }
+
+  return { text: output || 'No additional verified narrative is available.', changed };
+}
+
 export function validateAndSanitizeAiBriefing(rawAiOutput: any, context: ExecutiveContext): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -44,89 +108,68 @@ export function validateAndSanitizeAiBriefing(rawAiOutput: any, context: Executi
       const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '');
       data = JSON.parse(cleaned);
     } catch (err: any) {
-      return {
-        isValid: false,
-        errors: [`JSON Parse Error: ${err.message}`],
-        warnings: [],
-        validatedData: null
-      };
+      return { isValid: false, errors: [`JSON Parse Error: ${err.message}`], warnings: [], validatedData: null };
     }
   }
 
-  if (!data || typeof data !== 'object') {
-    return {
-      isValid: false,
-      errors: ['AI output is not a valid JSON object.'],
-      warnings: [],
-      validatedData: null
-    };
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { isValid: false, errors: ['AI output is not a valid JSON object.'], warnings: [], validatedData: null };
   }
 
-  // Schema Validation
   const requiredFields = ['executive_summary', 'risks', 'recommendations', 'revenue_summary', 'inventory_summary', 'customer_summary'];
   for (const field of requiredFields) {
-    if (!data[field]) {
-      errors.push(`Missing required field: ${field}`);
-    }
+    if (data[field] === undefined || data[field] === null || data[field] === '') errors.push(`Missing required field: ${field}`);
   }
+  if (errors.length) return { isValid: false, errors, warnings, validatedData: null };
 
-  if (errors.length > 0) {
-    return { isValid: false, errors, warnings, validatedData: null };
-  }
-
-  // Numerical Validation & Immutability Enforcement
   const authRevenue = context.sales.total_revenue;
   const authOrders = context.sales.total_orders;
   const authAov = context.sales.average_order_value;
   const authCustomers = context.customers.active_customers;
 
-  if (data.revenue_summary) {
-    data.revenue_summary.highlight = `Revenue: SAR ${authRevenue.toLocaleString()}`;
-    data.revenue_summary.text = `Authoritative revenue aggregated at SAR ${authRevenue.toLocaleString()} across ${authOrders.toLocaleString()} orders (AOV: SAR ${authAov.toFixed(2)}).`;
+  const summaryFields = [
+    ['executive_summary', data.executive_summary],
+    ['risks', data.risks],
+    ['recommendations', data.recommendations]
+  ] as const;
+
+  const sanitizedNarratives: Record<string, string> = {};
+  for (const [field, value] of summaryFields) {
+    const result = sanitizeNarrative(value, context);
+    sanitizedNarratives[field] = result.text;
+    if (result.changed) warnings.push(`Sanitized unsupported or unverified claims from ${field}.`);
   }
 
-  if (data.inventory_summary) {
-    data.inventory_summary.highlight = `Low Stock Alerts: ${context.inventory.low_stock_count}`;
-    data.inventory_summary.text = `Inventory monitoring active. Low stock SKU count: ${context.inventory.low_stock_count}.`;
-  }
+  const revenueSummary = {
+    title: typeof data.revenue_summary?.title === 'string' ? data.revenue_summary.title : 'Revenue Summary',
+    highlight: `Revenue: SAR ${authRevenue.toLocaleString()}`,
+    text: `Authoritative revenue aggregated at SAR ${authRevenue.toLocaleString()} across ${authOrders.toLocaleString()} orders (AOV: SAR ${authAov.toFixed(2)}).`
+  };
 
-  if (data.customer_summary) {
-    data.customer_summary.highlight = `Active Patrons: ${authCustomers.toLocaleString()}`;
-    data.customer_summary.text = `Active customer base recorded at ${authCustomers.toLocaleString()} verified patrons.`;
-  }
+  const inventorySummary = {
+    title: typeof data.inventory_summary?.title === 'string' ? data.inventory_summary.title : 'Inventory Summary',
+    highlight: `Low Stock Alerts: ${context.inventory.low_stock_count}`,
+    text: `Inventory monitoring active. Low stock SKU count: ${context.inventory.low_stock_count}.`
+  };
 
-  // Financial Safety Validation
-  const forbiddenFinancialTerms = ['gross profit', 'net profit', 'cogs', 'gross margin', 'operating expenses', 'cash flow'];
-  const fullTextBlob = (JSON.stringify(data) + ' ' + (data.risks || '') + ' ' + (data.recommendations || '')).toLowerCase();
-  
-  for (const term of forbiddenFinancialTerms) {
-    if (context.financials[term.replace(' ', '_') as keyof typeof context.financials]?.status === 'UNAVAILABLE') {
-      if (fullTextBlob.includes(term)) {
-        warnings.push(`Financial Safety Warning: AI mentioned unverified financial metric '${term}'. Neutralized.`);
-      }
-    }
-  }
+  const customerSummary = {
+    title: typeof data.customer_summary?.title === 'string' ? data.customer_summary.title : 'Customer Summary',
+    highlight: `Active Customers: ${authCustomers.toLocaleString()}`,
+    text: `Active customer base recorded at ${authCustomers.toLocaleString()} verified customers.`
+  };
 
-  // Forecast Safety Validation
-  const forecastKeywords = ['will reach', 'sales will increase by', 'demand will double', 'projected growth of'];
-  for (const kw of forecastKeywords) {
-    if (fullTextBlob.includes(kw)) {
-      warnings.push(`Forecast Safety Warning: Unverified numerical forecast detected containing '${kw}'. Neutralized.`);
-      if (typeof data.executive_summary === 'string' && data.executive_summary.toLowerCase().includes(kw)) {
-        data.executive_summary = 'No validated numerical forecast is currently available.';
-      }
-    }
-  }
-
+  // Summary objects supplied by the LLM are not trusted for numerical values.
+  // All authoritative numbers are rebuilt from the server context.
   const validatedBriefing = {
-    briefing_type: data.briefing_type || 'Daily',
-    risks: typeof data.risks === 'string' ? data.risks : '- Operational status nominal.',
-    recommendations: typeof data.recommendations === 'string' ? data.recommendations : '- Continue monitoring sovereign KPIs.',
-    revenue_summary: data.revenue_summary || { title: 'Financial Synthesis', highlight: `SAR ${authRevenue.toLocaleString()}`, text: `Authoritative revenue: SAR ${authRevenue.toLocaleString()}` },
-    inventory_summary: data.inventory_summary || { title: 'Inventory Depots', highlight: `${context.inventory.low_stock_count} Low Stock`, text: `Low stock items: ${context.inventory.low_stock_count}` },
-    customer_summary: data.customer_summary || { title: 'Clientele Base', highlight: `${authCustomers.toLocaleString()} Patrons`, text: `Active patrons: ${authCustomers.toLocaleString()}` },
+    briefing_type: ['Daily', 'Weekly', 'Monthly'].includes(data.briefing_type) ? data.briefing_type : 'Daily',
+    executive_summary: sanitizedNarratives.executive_summary,
+    risks: sanitizedNarratives.risks,
+    recommendations: sanitizedNarratives.recommendations,
+    revenue_summary: revenueSummary,
+    inventory_summary: inventorySummary,
+    customer_summary: customerSummary,
     source_type: 'ai_generated',
-    generation_context: { metrics_used: context.sales },
+    generation_context: { ...context },
     data_period: context.metadata.data_period,
     data_as_of: context.metadata.data_as_of,
     generated_at: new Date().toISOString(),
@@ -134,10 +177,5 @@ export function validateAndSanitizeAiBriefing(rawAiOutput: any, context: Executi
     verification_status: 'verified'
   };
 
-  return {
-    isValid: true,
-    errors: [],
-    warnings,
-    validatedData: validatedBriefing
-  };
+  return { isValid: true, errors: [], warnings, validatedData: validatedBriefing };
 }
