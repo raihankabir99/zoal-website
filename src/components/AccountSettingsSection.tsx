@@ -142,7 +142,7 @@ export function AccountSettingsSection({ currentUser, onUpdateCurrentUser }: Acc
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in text-left">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in text-start">
       
       {/* Profile Details Panel */}
       <form onSubmit={handleUpdateProfile} className="bg-zinc-950/40 border border-white/5 rounded-xs p-5 sm:p-6 space-y-4">
@@ -220,13 +220,13 @@ export function AccountSettingsSection({ currentUser, onUpdateCurrentUser }: Acc
             {isAr ? 'رقم الجوال:' : 'Phone Number:'}
           </label>
           <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-zinc-500" />
+            <Phone className="absolute start-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-zinc-500" />
             <input
               type="tel"
               required
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full bg-black border border-white/10 rounded-xs py-2.5 pl-10 pr-4 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
+              className="w-full bg-black border border-white/10 rounded-xs py-2.5 ps-10 pe-4 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
             />
           </div>
         </div>
@@ -290,12 +290,12 @@ export function AccountSettingsSection({ currentUser, onUpdateCurrentUser }: Acc
               value={currentPassword}
               placeholder="••••••••"
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full bg-black border border-white/10 rounded-xs p-2.5 pr-11 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
+              className="w-full bg-black border border-white/10 rounded-xs p-2.5 pe-11 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
             />
             <button
               type="button"
               onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              className="absolute right-0 top-0 h-full w-11 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
+              className="absolute end-0 top-0 h-full w-11 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
               aria-label={showCurrentPassword ? 'Hide password' : 'Show password'}
             >
               {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -314,12 +314,12 @@ export function AccountSettingsSection({ currentUser, onUpdateCurrentUser }: Acc
               value={newPassword}
               placeholder="••••••••"
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full bg-black border border-white/10 rounded-xs p-2.5 pr-11 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
+              className="w-full bg-black border border-white/10 rounded-xs p-2.5 pe-11 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
             />
             <button
               type="button"
               onClick={() => setShowNewPassword(!showNewPassword)}
-              className="absolute right-0 top-0 h-full w-11 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
+              className="absolute end-0 top-0 h-full w-11 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
               aria-label={showNewPassword ? 'Hide password' : 'Show password'}
             >
               {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -339,12 +339,12 @@ export function AccountSettingsSection({ currentUser, onUpdateCurrentUser }: Acc
               value={confirmPassword}
               placeholder="••••••••"
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full bg-black border border-white/10 rounded-xs p-2.5 pr-11 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
+              className="w-full bg-black border border-white/10 rounded-xs p-2.5 pe-11 text-xs text-white focus:outline-none focus:border-[#D4AF37]/35"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-0 top-0 h-full w-11 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
+              className="absolute end-0 top-0 h-full w-11 flex items-center justify-center text-[#D4AF37]/80 hover:text-[#D4AF37] focus:text-[#D4AF37] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#D4AF37]/40 rounded-xs"
               aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
             >
               {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
