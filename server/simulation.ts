@@ -60,8 +60,6 @@ export async function getDecisionModels(req: Request, res: Response) {
 
     if (error) throw error;
 
-    // Keep the existing UI usable on a fresh installation without inventing metrics.
-    // Templates contain only scenario metadata; all numerical baselines come from live data at run time.
     if (!data || data.length === 0) {
       const { data: seeded, error: seedError } = await supabase
         .from('zoal_decision_models')
@@ -136,7 +134,6 @@ export async function createSimulationRun(req: Request, res: Response) {
 
     if (modelError || !model) return res.status(404).json({ error: 'Decision model not found.' });
 
-    // Authoritative baseline: live transactional revenue from the existing KPI aggregation RPC.
     const end = new Date();
     const start = new Date(end);
     start.setDate(start.getDate() - 30);
@@ -183,8 +180,6 @@ export async function createSimulationRun(req: Request, res: Response) {
     const revenueDelta = Number((projectedRevenue - baseRevenue).toFixed(2));
     const revenueDeltaPct = baseRevenue > 0 ? Number(((revenueDelta / baseRevenue) * 100).toFixed(2)) : null;
 
-    // Profit is deliberately unavailable unless the authoritative KPI RPC provides verified COGS/margin.
-    // The legacy table requires a numeric column, so 0 is stored with explicit status in scenario_data.
     const verifiedGrossProfit = core?.grossProfit == null ? null : Number(core.grossProfit);
     const projectedProfit = verifiedGrossProfit == null
       ? 0
@@ -208,6 +203,30 @@ export async function createSimulationRun(req: Request, res: Response) {
             : revenueDeltaPct < 0
               ? 'unfavorable_revenue_signal'
               : 'review_required';
+
+    const recommendation = decisionSignal === 'favorable_with_verified_profit'
+      ? {
+          action: 'Proceed to controlled review',
+          rationale: 'Scenario revenue signal is favorable, verified gross profit is available, and configured parameter bounds show no elevated parameter risk.',
+          confidence: 'deterministic_signal_only'
+        }
+      : decisionSignal === 'favorable_revenue_signal_profit_unverified'
+        ? {
+            action: 'Review revenue upside; do not approve on profit grounds',
+            rationale: 'Projected revenue is non-negative relative to the live baseline, but authoritative profit evidence is unavailable.',
+            confidence: 'deterministic_signal_only'
+          }
+        : decisionSignal === 'unfavorable_revenue_signal'
+          ? {
+              action: 'Do not proceed without further analysis',
+              rationale: 'The scenario produces a negative revenue variance against the live baseline.',
+              confidence: 'deterministic_signal_only'
+            }
+          : {
+              action: 'Hold for additional evidence',
+              rationale: 'The current scenario does not contain enough authoritative evidence for an executive recommendation.',
+              confidence: 'deterministic_signal_only'
+            };
 
     const scenarioData = {
       scenario_name: scenario_name.trim(),
@@ -238,6 +257,7 @@ export async function createSimulationRun(req: Request, res: Response) {
         recommendationStatus: 'deterministic_scenario_signal_only',
         forecast: false
       },
+      recommendation,
       data_lineage: {
         baseline: 'zoal_business_insights_core_stats',
         actuals: 'transactional_revenue_aggregation',
@@ -276,7 +296,8 @@ export async function createSimulationRun(req: Request, res: Response) {
       profitStatus: inserted.scenario_data?.resultStatus?.profit,
       decisionSignal: inserted.scenario_data?.decision?.signal,
       riskBasis: inserted.scenario_data?.risk?.basis,
-      baselineRevenue: baseRevenue
+      baselineRevenue: baseRevenue,
+      recommendation: inserted.scenario_data?.recommendation || null
     });
   } catch (err: any) {
     console.error('Decision simulation execution error:', err);
@@ -310,7 +331,7 @@ export async function updateDecisionModel(req: Request, res: Response) {
       if (!Number.isFinite(safeRisk)) return res.status(400).json({ error:'risk_weight must be a finite number.' });
       patch.configuration = { description:String(configuration.description||'').slice(0,2000), risk_weight:Math.min(10,Math.max(1,safeRisk)), variables:configuration.variables&&typeof configuration.variables==='object'?configuration.variables:{} };
     }
-    const { data,error }=await supabase.from('zoal_decision_models').update(patch).eq('id',req.params.id).select('id,name,type,configuration,created_at').single();
+    const { data,error}=await supabase.from('zoal_decision_models').update(patch).eq('id',req.params.id).select('id,name,type,configuration,created_at').single();
     if(error) throw error; return res.json(mapModel(data));
   } catch(err:any){ console.error('Decision model update error:',err); return res.status(500).json({error:'Failed to update decision model.'}); }
 }
