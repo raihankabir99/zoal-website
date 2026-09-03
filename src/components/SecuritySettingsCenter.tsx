@@ -168,7 +168,6 @@ export default function SecuritySettingsCenter({
     smtpHost: globalSettings.smtpHost || 'smtp.zoal.com',
     smtpPort: globalSettings.smtpPort || '587',
     smtpUser: globalSettings.smtpUser || 'relay@zoal.com',
-    smtpPass: '•••••••••••••••• (Configured via Server Environment)',
     ipWhitelist: globalSettings.ipWhitelist || '192.168.1.*, 127.0.0.1',
     sessionExpirationMinutes: String(globalSettings.sessionExpirationMinutes || 60),
     fileUploadLimitMb: '10 MB',
@@ -180,7 +179,6 @@ export default function SecuritySettingsCenter({
 
   // Password visibility states
   const [showProdKeys, setShowProdKeys] = useState<{ [key: string]: boolean }>({});
-  const [showSmtpPass, setShowSmtpPass] = useState<boolean>(false);
 
   // Invitation action
   const handleInviteAdmin = async (e: React.FormEvent) => {

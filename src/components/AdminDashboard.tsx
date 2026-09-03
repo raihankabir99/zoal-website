@@ -7108,8 +7108,8 @@ export default function AdminDashboard({
                           <input 
                             type={showAdminSmtpPass ? 'text' : 'password'} 
                             id="settings-smtp-pass"
-                            defaultValue={globalSettings.smtpPass}
-                            className="bg-black w-full border border-white/10 text-white p-2 pr-11 text-[10px] rounded-xs outline-none focus:border-gold-pure"
+                            placeholder="•••••••••••• (Leave blank to keep existing secret)"
+                            className="bg-black w-full border border-white/10 text-white p-2 pr-11 text-[10px] rounded-xs outline-none focus:border-gold-pure placeholder:text-zinc-600"
                           />
                           <button
                             type="button"
@@ -7303,7 +7303,11 @@ export default function AdminDashboard({
                       if (smtpHostEl) updated.smtpHost = smtpHostEl.value;
                       if (smtpPortEl) updated.smtpPort = smtpPortEl.value;
                       if (smtpUserEl) updated.smtpUser = smtpUserEl.value;
-                      if (smtpPassEl) updated.smtpPass = smtpPassEl.value;
+                      if (smtpPassEl && smtpPassEl.value && smtpPassEl.value.trim() !== '' && smtpPassEl.value !== '**********' && !smtpPassEl.value.includes('••••')) {
+                        updated.smtpPass = smtpPassEl.value.trim();
+                      } else {
+                        delete updated.smtpPass;
+                      }
 
                       if (ipEl) updated.ipWhitelist = ipEl.value;
                       if (expEl) updated.sessionExpirationMinutes = Number(expEl.value);

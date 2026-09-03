@@ -20,11 +20,12 @@ export interface GlobalSettings {
   smtpHost: string;
   smtpPort: string;
   smtpUser: string;
-  smtpPass: string;
   ipWhitelist: string;
   sessionExpirationMinutes: number;
   autoBackupFrequency: string;
   accentColor: string;
+  companyDescription?: string;
+  theme?: string;
   doubleAuthEnabled?: boolean;
   maintenanceMode?: boolean;
 }
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   phone: '+966 56 769 9315',
   instagram: 'https://instagram.com/alzoal',
   twitter: 'https://twitter.com/alzoal',
+  website: 'https://alzoal.sa',
   language: 'en',
   currency: 'SAR',
   shippingFeeDefault: 35,
@@ -47,11 +49,55 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   smtpHost: 'smtp.zoal-cloud.sa',
   smtpPort: '587',
   smtpUser: 'relays@zoal.sa',
-  smtpPass: '**********',
   ipWhitelist: '0.0.0.0/0',
   sessionExpirationMinutes: 120,
   autoBackupFrequency: 'daily',
   accentColor: '#D4AF37',
+  companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
+  theme: 'dark'
+};
+
+/**
+ * Sanitizes settings before storage or client consumption to ensure no sensitive credentials
+ * (SMTP passwords, private keys, API secrets) ever persist in browser storage or component state.
+ */
+export const sanitizeSettingsForClient = (raw: any): GlobalSettings => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  const validLogo = getValidLogo(raw.businessLogo);
+
+  const sanitized: GlobalSettings = {
+    businessName: typeof raw.businessName === 'string' && raw.businessName.trim() ? raw.businessName : DEFAULT_SETTINGS.businessName,
+    businessLogo: validLogo,
+    favicon: BRANDING.FAVICON,
+    address: typeof raw.address === 'string' ? raw.address : DEFAULT_SETTINGS.address,
+    email: typeof raw.email === 'string' ? raw.email : DEFAULT_SETTINGS.email,
+    phone: typeof raw.phone === 'string' ? raw.phone : DEFAULT_SETTINGS.phone,
+    instagram: typeof raw.instagram === 'string' ? raw.instagram : DEFAULT_SETTINGS.instagram,
+    twitter: typeof raw.twitter === 'string' ? raw.twitter : DEFAULT_SETTINGS.twitter,
+    website: typeof raw.website === 'string' ? raw.website : DEFAULT_SETTINGS.website,
+    language: typeof raw.language === 'string' ? raw.language : DEFAULT_SETTINGS.language,
+    currency: typeof raw.currency === 'string' ? raw.currency : DEFAULT_SETTINGS.currency,
+    shippingFeeDefault: typeof raw.shippingFeeDefault === 'number' && !isNaN(raw.shippingFeeDefault) ? raw.shippingFeeDefault : DEFAULT_SETTINGS.shippingFeeDefault,
+    shippingFreeThreshold: typeof raw.shippingFreeThreshold === 'number' && !isNaN(raw.shippingFreeThreshold) ? raw.shippingFreeThreshold : DEFAULT_SETTINGS.shippingFreeThreshold,
+    taxRate: typeof raw.taxRate === 'number' && !isNaN(raw.taxRate) ? raw.taxRate : DEFAULT_SETTINGS.taxRate,
+    taxId: typeof raw.taxId === 'string' ? raw.taxId : DEFAULT_SETTINGS.taxId,
+    smtpHost: typeof raw.smtpHost === 'string' ? raw.smtpHost : DEFAULT_SETTINGS.smtpHost,
+    smtpPort: typeof raw.smtpPort === 'string' || typeof raw.smtpPort === 'number' ? String(raw.smtpPort) : DEFAULT_SETTINGS.smtpPort,
+    smtpUser: typeof raw.smtpUser === 'string' ? raw.smtpUser : DEFAULT_SETTINGS.smtpUser,
+    ipWhitelist: typeof raw.ipWhitelist === 'string' ? raw.ipWhitelist : DEFAULT_SETTINGS.ipWhitelist,
+    sessionExpirationMinutes: typeof raw.sessionExpirationMinutes === 'number' && !isNaN(raw.sessionExpirationMinutes) ? raw.sessionExpirationMinutes : DEFAULT_SETTINGS.sessionExpirationMinutes,
+    autoBackupFrequency: typeof raw.autoBackupFrequency === 'string' ? raw.autoBackupFrequency : DEFAULT_SETTINGS.autoBackupFrequency,
+    accentColor: typeof raw.accentColor === 'string' ? raw.accentColor : DEFAULT_SETTINGS.accentColor,
+    companyDescription: typeof raw.companyDescription === 'string' ? raw.companyDescription : DEFAULT_SETTINGS.companyDescription,
+    theme: typeof raw.theme === 'string' ? raw.theme : DEFAULT_SETTINGS.theme,
+    doubleAuthEnabled: typeof raw.doubleAuthEnabled === 'boolean' ? raw.doubleAuthEnabled : false,
+    maintenanceMode: typeof raw.maintenanceMode === 'boolean' ? raw.maintenanceMode : false
+  };
+
+  return sanitized;
 };
 
 interface BrandingContextType {
@@ -77,14 +123,12 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Hybrid architecture: Static default with valid CMS override support
-        const validLogo = getValidLogo(parsed.businessLogo);
-        return { 
-          ...DEFAULT_SETTINGS, 
-          ...parsed, 
-          businessLogo: validLogo,
-          favicon: BRANDING.FAVICON 
-        };
+        const sanitized = sanitizeSettingsForClient(parsed);
+        // Clean out legacy secret fields from localStorage immediately if present
+        if ('smtpPass' in parsed || 'smtp_pass' in parsed || 'password' in parsed || 'secret' in parsed) {
+          localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitized));
+        }
+        return sanitized;
       } catch (e) {
         console.error('Failed to parse branding settings:', e);
       }
@@ -103,17 +147,9 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         throw new Error(`Failed to load branding: ${res.statusText}`);
       }
       const data = await res.json();
-      setSettings((prev) => {
-        const validLogo = getValidLogo(data.businessLogo);
-        const next = { 
-          ...DEFAULT_SETTINGS, 
-          ...data,
-          businessLogo: validLogo,
-          favicon: BRANDING.FAVICON 
-        };
-        localStorage.setItem('zoal_admin_global_settings', JSON.stringify(next));
-        return next;
-      });
+      const sanitized = sanitizeSettingsForClient(data);
+      setSettings(sanitized);
+      localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitized));
     } catch (err: any) {
       console.warn('⚠️ Supabase/Backend branding unavailable, using offline cache:', err.message || err);
       setError(err.message || String(err));
@@ -131,17 +167,11 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       nextSettings = newSettingsOrFn;
     }
 
-    const validLogo = getValidLogo(nextSettings.businessLogo);
+    const sanitizedLocal = sanitizeSettingsForClient(nextSettings);
 
-    nextSettings = {
-      ...nextSettings,
-      businessLogo: validLogo,
-      favicon: BRANDING.FAVICON
-    };
-
-    // 1. Optimistically update local state & offline cache
-    setSettings(nextSettings);
-    localStorage.setItem('zoal_admin_global_settings', JSON.stringify(nextSettings));
+    // 1. Optimistically update local state & offline sanitized cache
+    setSettings(sanitizedLocal);
+    localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitizedLocal));
 
     // 2. Persist to Supabase via REST API
     const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
@@ -167,8 +197,9 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const data = await response.json();
       if (data.success && data.settings) {
-        setSettings(data.settings);
-        localStorage.setItem('zoal_admin_global_settings', JSON.stringify(data.settings));
+        const sanitizedServer = sanitizeSettingsForClient(data.settings);
+        setSettings(sanitizedServer);
+        localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitizedServer));
         return true;
       }
       return false;

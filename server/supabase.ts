@@ -707,11 +707,19 @@ CREATE TABLE IF NOT EXISTS branding_settings (
 -- Enable RLS
 ALTER TABLE branding_settings ENABLE ROW LEVEL SECURITY;
 
--- Allow read access to anyone
-CREATE POLICY "Allow public read access to branding settings" ON branding_settings
-  FOR SELECT USING (true);
+-- Restrict direct read access to authenticated staff/admins only (Public storefront accesses through safe /api/branding projection)
+DROP POLICY IF EXISTS "Allow public read access to branding settings" ON branding_settings;
+DROP POLICY IF EXISTS "Allow staff and admins to read branding settings" ON branding_settings;
+CREATE POLICY "Allow staff and admins to read branding settings" ON branding_settings
+  FOR SELECT TO authenticated
+  USING (
+    (auth.jwt() ->> 'role') IN ('admin', 'manager', 'owner', 'staff') OR 
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'manager', 'owner', 'staff') OR
+    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'manager', 'owner', 'staff')
+  );
 
--- Allow full access to admins only
+-- Allow full management access to admins only
+DROP POLICY IF EXISTS "Allow admins to manage branding settings" ON branding_settings;
 CREATE POLICY "Allow admins to manage branding settings" ON branding_settings
   FOR ALL USING (storage.is_zoal_admin());
 `;

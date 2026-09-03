@@ -3338,34 +3338,55 @@ app.post('/api/supabase/sync', async (req, res) => {
 // =========================================================================
 //             AL ZOAL LUXURY BOUTIQUE - BRANDING PERSISTENCE API
 // =========================================================================
+// ENTERPRISE BRANDING & GLOBAL SETTINGS (SAFE PROJECTION & AUDIT LOGGED)
+// =========================================================================
 
-const MAP_DB_TO_SETTINGS = (row: any) => ({
-  businessName: row.business_name || 'AL ZOAL Enterprise',
-  businessLogo: row.business_logo || '/assets/branding/zoal-main-logo.jpg',
-  favicon: row.favicon || '/assets/branding/zoal-main-logo.jpg',
-  address: row.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-  email: row.email || 'alzoal3003@gmail.com',
-  phone: row.phone || '+966 56 769 9315',
-  instagram: row.social_links?.instagram || 'https://instagram.com/alzoal',
-  twitter: row.social_links?.twitter || 'https://twitter.com/alzoal',
-  language: row.language || 'en',
-  currency: row.currency || 'SAR',
-  shippingFeeDefault: row.shipping_fee_default !== null ? Number(row.shipping_fee_default) : 35,
-  shippingFreeThreshold: row.shipping_free_threshold !== null ? Number(row.shipping_free_threshold) : 500,
-  taxRate: row.tax_rate !== null ? Number(row.tax_rate) : 15,
-  taxId: row.tax_id || 'VAT-789-ZOAL-99',
-  smtpHost: row.smtp_host || 'smtp.zoal-cloud.sa',
-  smtpPort: row.smtp_port || '587',
-  smtpUser: row.smtp_user || 'relays@zoal.sa',
-  smtpPass: row.smtp_pass || '**********',
-  ipWhitelist: row.ip_whitelist || '0.0.0.0/0',
-  sessionExpirationMinutes: row.session_expiration_minutes !== null ? Number(row.session_expiration_minutes) : 120,
-  autoBackupFrequency: row.auto_backup_frequency || 'daily',
-  accentColor: row.accent_color || '#D4AF37',
-  companyDescription: row.company_description || '',
-  website: row.website || '',
-  theme: row.theme || 'dark'
-});
+/**
+ * Maps database row to a strictly safe client-facing settings projection.
+ * Under ZERO circumstances will this projection contain raw secrets,
+ * database credentials, private keys, or smtp_pass.
+ */
+const mapBrandingToSafeClientSettings = (row: any) => {
+  let socialLinks: any = {};
+  if (row.social_links) {
+    if (typeof row.social_links === 'string') {
+      try {
+        socialLinks = JSON.parse(row.social_links);
+      } catch (e) {
+        socialLinks = {};
+      }
+    } else if (typeof row.social_links === 'object') {
+      socialLinks = row.social_links;
+    }
+  }
+
+  return {
+    businessName: row.business_name || 'AL ZOAL Enterprise',
+    businessLogo: row.business_logo || '/assets/branding/zoal-main-logo.jpg',
+    favicon: row.favicon || '/assets/branding/zoal-main-logo.jpg',
+    address: row.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+    email: row.email || 'alzoal3003@gmail.com',
+    phone: row.phone || '+966 56 769 9315',
+    instagram: socialLinks?.instagram || row.instagram || 'https://instagram.com/alzoal',
+    twitter: socialLinks?.twitter || row.twitter || 'https://twitter.com/alzoal',
+    website: row.website || 'https://alzoal.sa',
+    language: row.language || 'en',
+    currency: row.currency || 'SAR',
+    shippingFeeDefault: row.shipping_fee_default !== null && row.shipping_fee_default !== undefined ? Number(row.shipping_fee_default) : 35,
+    shippingFreeThreshold: row.shipping_free_threshold !== null && row.shipping_free_threshold !== undefined ? Number(row.shipping_free_threshold) : 500,
+    taxRate: row.tax_rate !== null && row.tax_rate !== undefined ? Number(row.tax_rate) : 15,
+    taxId: row.tax_id || 'VAT-789-ZOAL-99',
+    smtpHost: row.smtp_host || 'smtp.zoal-cloud.sa',
+    smtpPort: row.smtp_port ? String(row.smtp_port) : '587',
+    smtpUser: row.smtp_user || 'relays@zoal.sa',
+    ipWhitelist: row.ip_whitelist || '0.0.0.0/0',
+    sessionExpirationMinutes: row.session_expiration_minutes !== null && row.session_expiration_minutes !== undefined ? Number(row.session_expiration_minutes) : 120,
+    autoBackupFrequency: row.auto_backup_frequency || 'daily',
+    accentColor: row.accent_color || '#D4AF37',
+    companyDescription: row.company_description || 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
+    theme: row.theme || 'dark'
+  };
+};
 
 /**
  * Checks for required branding row. 
@@ -3599,14 +3620,22 @@ app.get('/api/branding', async (req, res) => {
     phone: '+966 56 769 9315',
     instagram: 'https://instagram.com/alzoal',
     twitter: 'https://twitter.com/alzoal',
-    language: 'en', currency: 'SAR', shippingFeeDefault: 35,
-    shippingFreeThreshold: 500, taxRate: 15, taxId: 'VAT-789-ZOAL-99',
-    smtpHost: 'smtp.zoal-cloud.sa', smtpPort: '587', smtpUser: 'relays@zoal.sa',
-    smtpPass: '**********', ipWhitelist: '0.0.0.0/0',
-    sessionExpirationMinutes: 120, autoBackupFrequency: 'daily',
+    language: 'en',
+    currency: 'SAR',
+    shippingFeeDefault: 35,
+    shippingFreeThreshold: 500,
+    taxRate: 15,
+    taxId: 'VAT-789-ZOAL-99',
+    smtpHost: 'smtp.zoal-cloud.sa',
+    smtpPort: '587',
+    smtpUser: 'relays@zoal.sa',
+    ipWhitelist: '0.0.0.0/0',
+    sessionExpirationMinutes: 120,
+    autoBackupFrequency: 'daily',
     accentColor: '#D4AF37',
     companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-    website: 'https://alzoal.sa', theme: 'dark'
+    website: 'https://alzoal.sa',
+    theme: 'dark'
   };
   try {
     const supabase = getServiceSupabaseClient() || getSupabaseClient();
@@ -3622,7 +3651,7 @@ app.get('/api/branding', async (req, res) => {
       console.error('❌ Error fetching branding settings via Supabase API:', error.message);
       return res.json(defaults);
     }
-    return res.json(data ? MAP_DB_TO_SETTINGS(data) : defaults);
+    return res.json(data ? mapBrandingToSafeClientSettings(data) : defaults);
   } catch (err: any) {
     console.error('❌ Branding API unavailable:', err.message || err);
     return res.json(defaults);
@@ -3641,17 +3670,60 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
       return res.status(500).json({ error: 'Database is not configured.' });
     }
 
+    // Backend Validation with safe fallbacks
+    const businessName = String(config.businessName || 'AL ZOAL Enterprise').trim().slice(0, 255);
+    const businessLogo = config.businessLogo || '/assets/branding/zoal-main-logo.jpg';
+    const favicon = config.favicon || '/assets/branding/zoal-main-logo.jpg';
+    const companyDescription = config.companyDescription || 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform';
+    const phone = config.phone || '+966 56 769 9315';
+    const email = config.email || 'alzoal3003@gmail.com';
+    const website = config.website || 'https://alzoal.sa';
+    const address = config.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia';
+    const accentColor = config.accentColor || '#D4AF37';
+    const theme = config.theme || 'dark';
+    const language = config.language || 'en';
+    const currency = config.currency || 'SAR';
+    const taxId = config.taxId || 'VAT-789-ZOAL-99';
+    const smtpHost = config.smtpHost || 'smtp.zoal-cloud.sa';
+    const smtpPort = config.smtpPort ? String(config.smtpPort).slice(0, 10) : '587';
+    const smtpUser = config.smtpUser || 'relays@zoal.sa';
+    const ipWhitelist = config.ipWhitelist || '0.0.0.0/0';
+    const autoBackupFrequency = config.autoBackupFrequency || 'daily';
+
+    const shippingFeeDefault = Number.isFinite(Number(config.shippingFeeDefault)) && Number(config.shippingFeeDefault) >= 0
+      ? Number(config.shippingFeeDefault)
+      : 35;
+    const shippingFreeThreshold = Number.isFinite(Number(config.shippingFreeThreshold)) && Number(config.shippingFreeThreshold) >= 0
+      ? Number(config.shippingFreeThreshold)
+      : 500;
+    const taxRate = Number.isFinite(Number(config.taxRate)) && Number(config.taxRate) >= 0 && Number(config.taxRate) <= 100
+      ? Number(config.taxRate)
+      : 15;
+    const sessionExpirationMinutes = Number.isFinite(Number(config.sessionExpirationMinutes)) && Number(config.sessionExpirationMinutes) >= 5 && Number(config.sessionExpirationMinutes) <= 1440
+      ? Number(config.sessionExpirationMinutes)
+      : 120;
+
+    // Secret preservation check: only update DB password column if an explicit non-masked new password is provided
+    const rawPass = typeof config.smtpPass === 'string' ? config.smtpPass.trim() : null;
+    const isNewPasswordProvided = Boolean(
+      rawPass &&
+      rawPass !== '**********' &&
+      !rawPass.includes('••••') &&
+      !rawPass.startsWith('***')
+    );
+    const newSmtpPass = isNewPasswordProvided ? rawPass : null;
+
+    const socialLinks = JSON.stringify({
+      instagram: config.instagram || '',
+      twitter: config.twitter || ''
+    });
+
     const client = new Client({
       connectionString,
       ssl: { rejectUnauthorized: false }
     });
 
     await client.connect();
-
-    const socialLinks = JSON.stringify({
-      instagram: config.instagram || '',
-      twitter: config.twitter || ''
-    });
 
     const query = `
       INSERT INTO branding_settings (
@@ -3679,7 +3751,11 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
         smtp_host = EXCLUDED.smtp_host,
         smtp_port = EXCLUDED.smtp_port,
         smtp_user = EXCLUDED.smtp_user,
-        smtp_pass = EXCLUDED.smtp_pass,
+        smtp_pass = CASE 
+          WHEN $21::TEXT IS NOT NULL AND $21::TEXT <> '' AND $21::TEXT <> '**********'
+          THEN $21::TEXT 
+          ELSE branding_settings.smtp_pass 
+        END,
         ip_whitelist = EXCLUDED.ip_whitelist,
         session_expiration_minutes = EXCLUDED.session_expiration_minutes,
         auto_backup_frequency = EXCLUDED.auto_backup_frequency,
@@ -3689,38 +3765,52 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
     `;
 
     const values = [
-      config.businessName || 'AL ZOAL Enterprise',
-      config.businessLogo || '/assets/branding/zoal-main-logo.jpg',
-      config.favicon || '/assets/branding/zoal-main-logo.jpg',
-      config.companyDescription || 'Al Zoal Luxury Boutique',
-      config.phone || '+966 56 769 9315',
-      config.email || 'alzoal3003@gmail.com',
-      config.website || 'https://alzoal.sa',
-      config.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+      businessName,
+      businessLogo,
+      favicon,
+      companyDescription,
+      phone,
+      email,
+      website,
+      address,
       socialLinks,
-      config.accentColor || '#D4AF37',
-      config.theme || 'dark',
-      config.language || 'en',
-      config.currency || 'SAR',
-      config.shippingFeeDefault !== undefined ? Number(config.shippingFeeDefault) : 35,
-      config.shippingFreeThreshold !== undefined ? Number(config.shippingFreeThreshold) : 500,
-      config.taxRate !== undefined ? Number(config.taxRate) : 15,
-      config.taxId || 'VAT-789-ZOAL-99',
-      config.smtpHost || 'smtp.zoal-cloud.sa',
-      config.smtpPort || '587',
-      config.smtpUser || 'relays@zoal.sa',
-      config.smtpPass || '**********',
-      config.ipWhitelist || '0.0.0.0/0',
-      config.sessionExpirationMinutes !== undefined ? Number(config.sessionExpirationMinutes) : 120,
-      config.autoBackupFrequency || 'daily',
-      req.user.email || 'Admin'
+      accentColor,
+      theme,
+      language,
+      currency,
+      shippingFeeDefault,
+      shippingFreeThreshold,
+      taxRate,
+      taxId,
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      newSmtpPass,
+      ipWhitelist,
+      sessionExpirationMinutes,
+      autoBackupFrequency,
+      req.user?.email || 'Admin'
     ];
 
     const result = await client.query(query, values);
     await client.end();
 
     const updatedRow = result.rows[0];
-    return res.json({ success: true, settings: MAP_DB_TO_SETTINGS(updatedRow) });
+
+    // Enterprise Audit Logging (without storing sensitive payload)
+    try {
+      await logActivityAsync(
+        req.user?.id || req.user?.userId || null,
+        req.user?.email || 'admin@zoal.sa',
+        'UPDATED_BRANDING_SETTINGS',
+        req.ip || req.connection?.remoteAddress || '127.0.0.1',
+        req.headers['user-agent'] || 'Admin Dashboard'
+      );
+    } catch (auditErr: any) {
+      console.warn('⚠️ Non-blocking audit log error:', auditErr.message || auditErr);
+    }
+
+    return res.json({ success: true, settings: mapBrandingToSafeClientSettings(updatedRow) });
   } catch (err: any) {
     console.error('❌ Error updating branding settings:', err);
     return res.status(500).json({ error: err.message || String(err) });
