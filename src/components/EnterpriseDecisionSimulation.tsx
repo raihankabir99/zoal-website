@@ -23,6 +23,7 @@ interface SimulationRun {
   scenario_name: string;
   revenue_projection: number;
   profit_projection: number;
+  profitStatus?: 'unavailable' | 'derived_from_verified_gross_profit' | string;
   risk_score: number;
   parameters: any;
   captured_at: string;
@@ -184,12 +185,12 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
     return runs.length ? Math.max(...runs.map(r => r.revenue_projection)) : null;
   }, [runs]);
 
-  // Chart dataset
+  // Chart dataset. Profit is intentionally omitted when the backend marks it unavailable.
   const chartData = useMemo(() => {
     return runs.map(r => ({
       scenario: r.scenario_name.substring(0, 15),
       Revenue: r.revenue_projection,
-      Profit: r.profit_projection,
+      Profit: r.profitStatus === 'unavailable' ? undefined : r.profit_projection,
       Risk: r.risk_score * 10000, // scaled for single axis visual comparison
     }));
   }, [runs]);
@@ -209,8 +210,8 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
   // CSV Export
   const handleExportCSV = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
-      + ["Scenario,Projected Revenue (SAR),Projected Profit (SAR),Risk Score"].concat(
-        runs.map(r => `"${r.scenario_name}",${r.revenue_projection},${r.profit_projection},${r.risk_score}`)
+      + ["Scenario,Projected Revenue (SAR),Projected Profit (SAR) - Verified Only,Model Risk Signal"].concat(
+        runs.map(r => `"${r.scenario_name}",${r.revenue_projection},${r.profitStatus === 'unavailable' ? 'Not Available' : r.profit_projection},${r.risk_score}`)
       ).join("\n");
     
     const encodedUri = encodeURI(csvContent);
@@ -304,7 +305,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                 </div>
 
                 <div className="bg-zinc-950 border border-white/5 p-4 rounded-xs">
-                  <span className="text-zinc-500 text-[8px] font-mono uppercase tracking-widest block">Average Aggregated Threat Risk</span>
+                  <span className="text-zinc-500 text-[8px] font-mono uppercase tracking-widest block">Average Model Risk Signal</span>
                   <div className="flex justify-between items-baseline pt-1">
                     <span className="text-white text-md font-bold font-mono">{averageRisk == null ? 'Not Available' : `${averageRisk} / 10`}</span>
                     <ShieldAlert className="w-4 h-4 text-red-400" />
@@ -353,7 +354,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                           </div>
                         </div>
                         <p className="text-zinc-500 text-[10px] leading-relaxed mb-2">{m.description}</p>
-                        <span className="text-[8px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-1.5 py-0.5 border border-white/5 rounded-xs">Risk: {m.risk_weight}</span>
+                        <span className="text-[8px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-1.5 py-0.5 border border-white/5 rounded-xs">Model Risk Signal: {m.risk_weight}</span>
                       </div>
                     ))}
                   </div>
@@ -361,7 +362,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
 
                 {/* Runs Chart comparison */}
                 <div className="lg:col-span-2 bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4 flex flex-col justify-between">
-                  <h3 className="text-white text-xs font-bold font-display uppercase tracking-wider border-b border-white/5 pb-2">Revenue vs Profit Projections (SAR)</h3>
+                  <h3 className="text-white text-xs font-bold font-display uppercase tracking-wider border-b border-white/5 pb-2">Revenue vs Verified Profit Projections (SAR)</h3>
                   <div className="h-64 text-xs font-mono">
                     {runs.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-zinc-500">Run a simulation on an active template template above to graph results.</div>
@@ -373,7 +374,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                           <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#222' }} />
                           <Legend />
                           <Bar dataKey="Revenue" fill="#D4AF37" name="Projected Sales" />
-                          <Bar dataKey="Profit" fill="#10b981" name="Projected Margin" />
+                          <Bar dataKey="Profit" fill="#10b981" name="Verified Profit" />
                         </BarChart>
                       </ResponsiveContainer>
                     )}
@@ -399,7 +400,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                         <th className="py-3 px-4">Scenario</th>
                         <th className="py-3 px-4">Projected Revenue</th>
                         <th className="py-3 px-4">Projected Profit</th>
-                        <th className="py-3 px-4">Calculated Risk Score</th>
+                        <th className="py-3 px-4">Model Risk Signal</th>
                         <th className="py-3 px-4">Captured At</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
@@ -409,7 +410,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                         <tr key={r.id} className="border-b border-white/5 hover:bg-white/1 font-sans">
                           <td className="py-3 px-4 text-white font-bold">{r.scenario_name}</td>
                           <td className="py-3 px-4 font-mono text-zinc-300">{r.revenue_projection.toLocaleString()} SAR</td>
-                          <td className="py-3 px-4 font-mono text-gold-pure font-bold">{r.profit_projection.toLocaleString()} SAR</td>
+                          <td className="py-3 px-4 font-mono text-gold-pure font-bold">{r.profitStatus === 'unavailable' ? 'Not Available' : `${r.profit_projection.toLocaleString()} SAR`}</td>
                           <td className="py-3 px-4 font-mono text-red-400 font-bold">{r.risk_score} / 10</td>
                           <td className="py-3 px-4 font-mono text-zinc-500">{new Date(r.captured_at).toLocaleDateString()}</td>
                           <td className="py-3 px-4 text-right">
@@ -564,7 +565,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-zinc-500 text-[9px] uppercase tracking-wider block mb-1">Threat Risk Weight (1.0 - 10.0)</label>
+                  <label className="text-zinc-500 text-[9px] uppercase tracking-wider block mb-1">Model Risk Signal (1.0 - 10.0)</label>
                   <input 
                     type="number" 
                     step="0.1"
