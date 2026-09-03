@@ -114,8 +114,8 @@ export default function OwnerExecutiveDashboard({
   }, []);
 
   const activeBranchRevenue = selectedBranch === 'all' 
-    ? (kpiData.totalRevenue ?? 0)
-    : (regionalRecords.find(r => r.region?.toLowerCase()?.includes(selectedBranch))?.revenue || 0);
+    ? kpiData.totalRevenue
+    : (regionalRecords.find(r => r.region?.toLowerCase()?.includes(selectedBranch))?.revenue ?? null);
   
   const activeBranchProfit = null; // Requires authoritative COGS
 
@@ -292,7 +292,9 @@ export default function OwnerExecutiveDashboard({
           </div>
           <div className="flex justify-between items-baseline pt-1">
             <strong className="text-white text-md font-sans tracking-tight">
-              {activeBranchRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR
+              {activeBranchRevenue !== null && activeBranchRevenue !== undefined
+                ? `${activeBranchRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`
+                : 'Not Available'}
             </strong>
             <span className="text-zinc-500 text-[8px] font-mono font-bold">
               Growth: Not Available
@@ -380,16 +382,22 @@ export default function OwnerExecutiveDashboard({
             </div>
           </div>
           <div className="h-64 font-mono text-[8.5px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={[
-                { name: 'Total', revenue: kpiData.totalRevenue ?? 0 }
-              ]}>
-                <XAxis dataKey="name" stroke="#555" fontSize={8} />
-                <YAxis stroke="#555" fontSize={8} />
-                <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
-                <Line type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} dot={{ r: 3, fill: '#D4AF37' }} />
-              </LineChart>
-            </ResponsiveContainer>
+            {kpiData.totalRevenue !== null ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={[
+                  { name: 'Current Period', revenue: kpiData.totalRevenue }
+                ]}>
+                  <XAxis dataKey="name" stroke="#555" fontSize={8} />
+                  <YAxis stroke="#555" fontSize={8} />
+                  <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
+                  <Line type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} dot={{ r: 3, fill: '#D4AF37' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-zinc-500 text-center px-4">
+                <span>Revenue Growth Trajectory: Not Available — Requires authoritative trend data</span>
+              </div>
+            )}
           </div>
         </div>
 
