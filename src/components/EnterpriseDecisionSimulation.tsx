@@ -77,9 +77,11 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      const sessionToken = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const headers = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
       const [resModels, resRuns] = await Promise.all([
-        fetch('/api/simulation/models'),
-        fetch('/api/simulation/runs')
+        fetch('/api/simulation/models', { headers }),
+        fetch('/api/simulation/runs', { headers })
       ]);
 
       if (!resModels.ok || !resRuns.ok) throw new Error('Secure handshake with Simulation Center failed.');
