@@ -4667,6 +4667,10 @@ app.get('/api/ai/briefings', authenticateRequest, requireRole(['owner', 'admin']
 app.get('/api/simulation/models', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.getDecisionModels);
 app.get('/api/simulation/runs', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.getSimulationRuns);
 app.post('/api/simulation/runs', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.createSimulationRun);
+app.post('/api/simulation/models', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.createDecisionModel);
+app.put('/api/simulation/models/:id', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.updateDecisionModel);
+app.delete('/api/simulation/models/:id', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.deleteDecisionModel);
+app.delete('/api/simulation/runs/:id', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.deleteSimulationRun);
 
 // Enterprise System Health Monitor Routes
 app.get('/api/admin/health', authenticateRequest, requireRole(['owner', 'admin']), healthMonitorModule.getSystemHealth);
