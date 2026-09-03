@@ -3703,15 +3703,8 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
       ? Number(config.sessionExpirationMinutes)
       : 120;
 
-    // Secret preservation check: only update DB password column if an explicit non-masked new password is provided
-    const rawPass = typeof config.smtpPass === 'string' ? config.smtpPass.trim() : null;
-    const isNewPasswordProvided = Boolean(
-      rawPass &&
-      rawPass !== '**********' &&
-      !rawPass.includes('••••') &&
-      !rawPass.startsWith('***')
-    );
-    const newSmtpPass = isNewPasswordProvided ? rawPass : null;
+    // SMTP credentials are server-only. Normal CMS settings updates never accept or rotate smtp_pass.
+    // Existing credentials remain untouched during every branding update.
 
     const socialLinks = JSON.stringify({
       instagram: config.instagram || '',
@@ -3751,11 +3744,7 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
         smtp_host = EXCLUDED.smtp_host,
         smtp_port = EXCLUDED.smtp_port,
         smtp_user = EXCLUDED.smtp_user,
-        smtp_pass = CASE 
-          WHEN $21::TEXT IS NOT NULL AND $21::TEXT <> '' AND $21::TEXT <> '**********'
-          THEN $21::TEXT 
-          ELSE branding_settings.smtp_pass 
-        END,
+        smtp_pass = branding_settings.smtp_pass,
         ip_whitelist = EXCLUDED.ip_whitelist,
         session_expiration_minutes = EXCLUDED.session_expiration_minutes,
         auto_backup_frequency = EXCLUDED.auto_backup_frequency,
@@ -3785,7 +3774,7 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
       smtpHost,
       smtpPort,
       smtpUser,
-      newSmtpPass,
+      existing?.smtp_pass ?? null,
       ipWhitelist,
       sessionExpirationMinutes,
       autoBackupFrequency,
