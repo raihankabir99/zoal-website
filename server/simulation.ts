@@ -104,7 +104,8 @@ export async function getSimulationRuns(req: Request, res: Response) {
       profit_projection: Number(row.profit_projection || 0),
       risk_score: Number(row.risk_score || 0),
       parameters: row.scenario_data?.parameters || {},
-      captured_at: row.captured_at
+      captured_at: row.captured_at,
+      profitStatus: row.scenario_data?.resultStatus?.profit || 'unavailable'
     })));
   } catch (err: any) {
     console.error('Simulation run registry error:', err);
