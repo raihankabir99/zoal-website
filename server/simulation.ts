@@ -230,3 +230,33 @@ export async function createSimulationRun(req: Request, res: Response) {
     return res.status(500).json({ error: 'Failed to execute authoritative scenario simulation.' });
   }
 }
+
+
+export async function createDecisionModel(req: Request, res: Response) {
+  const supabase = getServiceSupabaseClient(); if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
+  try {
+    const { name, type, configuration } = req.body || {};
+    if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name is required.' });
+    const allowed = ['Pricing','Warehouse','Discount','Inventory'];
+    if (!allowed.includes(type)) return res.status(400).json({ error: 'Unsupported model type.' });
+    const safeConfig = { description: String(configuration?.description || '').slice(0, 2000), risk_weight: Math.min(10, Math.max(1, Number(configuration?.risk_weight ?? 5))), variables: configuration?.variables && typeof configuration.variables === 'object' ? configuration.variables : {} };
+    const { data, error } = await supabase.from('zoal_decision_models').insert({ name: name.trim(), type, configuration: safeConfig }).select('id,name,type,configuration,created_at').single();
+    if (error) throw error; return res.status(201).json(mapModel(data));
+  } catch (err:any) { console.error('Decision model create error:',err); return res.status(500).json({ error:'Failed to create decision model.' }); }
+}
+
+export async function updateDecisionModel(req: Request, res: Response) {
+  const supabase = getServiceSupabaseClient(); if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
+  try {
+    const { name, type, configuration } = req.body || {}; const patch:any = {};
+    if (typeof name === 'string' && name.trim()) patch.name = name.trim();
+    if (type) { if (!['Pricing','Warehouse','Discount','Inventory'].includes(type)) return res.status(400).json({ error:'Unsupported model type.' }); patch.type = type; }
+    if (configuration && typeof configuration === 'object') patch.configuration = { description:String(configuration.description||'').slice(0,2000), risk_weight:Math.min(10,Math.max(1,Number(configuration.risk_weight??5))), variables:configuration.variables&&typeof configuration.variables==='object'?configuration.variables:{} };
+    const { data,error }=await supabase.from('zoal_decision_models').update(patch).eq('id',req.params.id).select('id,name,type,configuration,created_at').single();
+    if(error) throw error; return res.json(mapModel(data));
+  } catch(err:any){ console.error('Decision model update error:',err); return res.status(500).json({error:'Failed to update decision model.'}); }
+}
+
+export async function deleteDecisionModel(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{ const {count,error:countError}=await supabase.from('zoal_simulation_runs').select('id',{count:'exact',head:true}).eq('model_id',req.params.id); if(countError)throw countError; if((count||0)>0)return res.status(409).json({error:'Cannot delete a model with existing simulation history.'}); const {error}=await supabase.from('zoal_decision_models').delete().eq('id',req.params.id); if(error)throw error; return res.json({success:true}); }catch(err:any){console.error('Decision model delete error:',err);return res.status(500).json({error:'Failed to delete decision model.'});}}
+
+export async function deleteSimulationRun(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{const {error}=await supabase.from('zoal_simulation_runs').delete().eq('id',req.params.id);if(error)throw error;return res.json({success:true});}catch(err:any){console.error('Simulation run delete error:',err);return res.status(500).json({error:'Failed to delete simulation run.'});}}
