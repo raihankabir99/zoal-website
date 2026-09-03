@@ -105,7 +105,9 @@ export async function getSimulationRuns(req: Request, res: Response) {
       risk_score: Number(row.risk_score || 0),
       parameters: row.scenario_data?.parameters || {},
       captured_at: row.captured_at,
-      profitStatus: row.scenario_data?.resultStatus?.profit || 'unavailable'
+      profitStatus: row.scenario_data?.resultStatus?.profit || 'unavailable',
+      decisionSignal: row.scenario_data?.decision?.signal || 'insufficient_evidence',
+      riskBasis: row.scenario_data?.risk?.basis || 'model_configuration'
     })));
   } catch (err: any) {
     console.error('Simulation run registry error:', err);
@@ -153,25 +155,33 @@ export async function createSimulationRun(req: Request, res: Response) {
       return res.status(400).json({ error: 'Simulation parameters must be finite numbers.' });
     }
 
-    let projectedRevenue = baseRevenue;
     const type = model.type;
+    let projectedRevenue = baseRevenue;
+    let assumptions: Record<string, number> = {};
 
     if (type === 'Pricing') {
-      const multiplier = Math.max(0, p1);
+      const multiplier = Math.max(0, Math.min(10, p1));
       const discountRate = Math.min(100, Math.max(0, p2));
+      assumptions = { multiplier, discountRate };
       projectedRevenue = baseRevenue * multiplier * (1 - discountRate / 100);
     } else if (type === 'Warehouse' || type === 'Inventory') {
-      const capacity = Math.max(0, p1);
-      const monthlyCost = Math.max(0, p2);
+      const capacity = Math.max(0, Math.min(1000000, p1));
+      const monthlyCost = Math.max(0, Math.min(100000000, p2));
+      assumptions = { capacity, monthlyCost };
       const capacityFactor = Math.min(1.5, 1 + capacity / 10000);
       projectedRevenue = Math.max(0, baseRevenue * capacityFactor - monthlyCost);
     } else if (type === 'Discount') {
       const discountRate = Math.min(100, Math.max(0, p2));
-      const sensitivity = Math.max(0, p1);
+      const sensitivity = Math.max(0, Math.min(10, p1));
+      assumptions = { discountRate, sensitivity };
       projectedRevenue = baseRevenue * (1 + (discountRate / 100) * sensitivity);
+    } else {
+      return res.status(400).json({ error: 'Unsupported decision model type.' });
     }
 
     projectedRevenue = Number(projectedRevenue.toFixed(2));
+    const revenueDelta = Number((projectedRevenue - baseRevenue).toFixed(2));
+    const revenueDeltaPct = baseRevenue > 0 ? Number(((revenueDelta / baseRevenue) * 100).toFixed(2)) : null;
 
     // Profit is deliberately unavailable unless the authoritative KPI RPC provides verified COGS/margin.
     // The legacy table requires a numeric column, so 0 is stored with explicit status in scenario_data.
@@ -182,18 +192,58 @@ export async function createSimulationRun(req: Request, res: Response) {
 
     const configuredRisk = Number(model.configuration?.risk_weight ?? 5);
     const riskScore = Math.min(10, Math.max(1, Number.isFinite(configuredRisk) ? configuredRisk : 5));
+    const parameterRisk = (type === 'Pricing' && (p2 > 30 || p1 < 0.8 || p1 > 1.5)) ||
+      ((type === 'Warehouse' || type === 'Inventory') && p2 > Math.max(1, baseRevenue * 0.1)) ||
+      (type === 'Discount' && p2 > 25);
+    const riskSignal = Math.min(10, Math.max(1, Math.round(riskScore + (parameterRisk ? 1 : 0))));
+
+    const decisionSignal = baseRevenue <= 0
+      ? 'insufficient_baseline'
+      : revenueDeltaPct === null
+        ? 'insufficient_evidence'
+        : revenueDeltaPct >= 10 && verifiedGrossProfit !== null && !parameterRisk
+          ? 'favorable_with_verified_profit'
+          : revenueDeltaPct >= 0 && !parameterRisk
+            ? 'favorable_revenue_signal_profit_unverified'
+            : revenueDeltaPct < 0
+              ? 'unfavorable_revenue_signal'
+              : 'review_required';
 
     const scenarioData = {
       scenario_name: scenario_name.trim(),
       parameters: { param1: p1, param2: p2 },
+      assumptions,
       baseline: {
         revenue: baseRevenue,
         windowDays: 30,
+        periodStart: start.toISOString(),
+        periodEnd: end.toISOString(),
         source: 'zoal_business_insights_core_stats'
+      },
+      variance: {
+        revenueDelta,
+        revenueDeltaPct
       },
       resultStatus: {
         revenue: 'authoritative_scenario',
         profit: verifiedGrossProfit == null ? 'unavailable' : 'derived_from_verified_gross_profit'
+      },
+      risk: {
+        score: riskSignal,
+        basis: 'model_configuration_plus_parameter_bounds',
+        liveOperationalRisk: false
+      },
+      decision: {
+        signal: decisionSignal,
+        recommendationStatus: 'deterministic_scenario_signal_only',
+        forecast: false
+      },
+      data_lineage: {
+        baseline: 'zoal_business_insights_core_stats',
+        actuals: 'transactional_revenue_aggregation',
+        cogs: core?.cogsStatus || 'unavailable',
+        profit: core?.profitStatus || 'unavailable',
+        generated_at: new Date().toISOString()
       },
       model_type: type,
       generated_at: new Date().toISOString()
@@ -205,7 +255,7 @@ export async function createSimulationRun(req: Request, res: Response) {
         model_id,
         revenue_projection: projectedRevenue,
         profit_projection: projectedProfit,
-        risk_score: Math.round(riskScore),
+        risk_score: riskSignal,
         scenario_data: scenarioData,
         captured_at: new Date().toISOString()
       })
@@ -224,6 +274,8 @@ export async function createSimulationRun(req: Request, res: Response) {
       parameters: inserted.scenario_data?.parameters || {},
       captured_at: inserted.captured_at,
       profitStatus: inserted.scenario_data?.resultStatus?.profit,
+      decisionSignal: inserted.scenario_data?.decision?.signal,
+      riskBasis: inserted.scenario_data?.risk?.basis,
       baselineRevenue: baseRevenue
     });
   } catch (err: any) {
@@ -232,7 +284,6 @@ export async function createSimulationRun(req: Request, res: Response) {
   }
 }
 
-
 export async function createDecisionModel(req: Request, res: Response) {
   const supabase = getServiceSupabaseClient(); if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
   try {
@@ -240,7 +291,9 @@ export async function createDecisionModel(req: Request, res: Response) {
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name is required.' });
     const allowed = ['Pricing','Warehouse','Discount','Inventory'];
     if (!allowed.includes(type)) return res.status(400).json({ error: 'Unsupported model type.' });
-    const safeConfig = { description: String(configuration?.description || '').slice(0, 2000), risk_weight: Math.min(10, Math.max(1, Number(configuration?.risk_weight ?? 5))), variables: configuration?.variables && typeof configuration.variables === 'object' ? configuration.variables : {} };
+    const safeRisk = Number(configuration?.risk_weight ?? 5);
+    if (!Number.isFinite(safeRisk)) return res.status(400).json({ error: 'risk_weight must be a finite number.' });
+    const safeConfig = { description: String(configuration?.description || '').slice(0, 2000), risk_weight: Math.min(10, Math.max(1, safeRisk)), variables: configuration?.variables && typeof configuration.variables === 'object' ? configuration.variables : {} };
     const { data, error } = await supabase.from('zoal_decision_models').insert({ name: name.trim(), type, configuration: safeConfig }).select('id,name,type,configuration,created_at').single();
     if (error) throw error; return res.status(201).json(mapModel(data));
   } catch (err:any) { console.error('Decision model create error:',err); return res.status(500).json({ error:'Failed to create decision model.' }); }
@@ -252,7 +305,11 @@ export async function updateDecisionModel(req: Request, res: Response) {
     const { name, type, configuration } = req.body || {}; const patch:any = {};
     if (typeof name === 'string' && name.trim()) patch.name = name.trim();
     if (type) { if (!['Pricing','Warehouse','Discount','Inventory'].includes(type)) return res.status(400).json({ error:'Unsupported model type.' }); patch.type = type; }
-    if (configuration && typeof configuration === 'object') patch.configuration = { description:String(configuration.description||'').slice(0,2000), risk_weight:Math.min(10,Math.max(1,Number(configuration.risk_weight??5))), variables:configuration.variables&&typeof configuration.variables==='object'?configuration.variables:{} };
+    if (configuration && typeof configuration === 'object') {
+      const safeRisk = Number(configuration.risk_weight ?? 5);
+      if (!Number.isFinite(safeRisk)) return res.status(400).json({ error:'risk_weight must be a finite number.' });
+      patch.configuration = { description:String(configuration.description||'').slice(0,2000), risk_weight:Math.min(10,Math.max(1,safeRisk)), variables:configuration.variables&&typeof configuration.variables==='object'?configuration.variables:{} };
+    }
     const { data,error }=await supabase.from('zoal_decision_models').update(patch).eq('id',req.params.id).select('id,name,type,configuration,created_at').single();
     if(error) throw error; return res.json(mapModel(data));
   } catch(err:any){ console.error('Decision model update error:',err); return res.status(500).json({error:'Failed to update decision model.'}); }
@@ -260,4 +317,4 @@ export async function updateDecisionModel(req: Request, res: Response) {
 
 export async function deleteDecisionModel(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{ const {count,error:countError}=await supabase.from('zoal_simulation_runs').select('id',{count:'exact',head:true}).eq('model_id',req.params.id); if(countError)throw countError; if((count||0)>0)return res.status(409).json({error:'Cannot delete a model with existing simulation history.'}); const {error}=await supabase.from('zoal_decision_models').delete().eq('id',req.params.id); if(error)throw error; return res.json({success:true}); }catch(err:any){console.error('Decision model delete error:',err);return res.status(500).json({error:'Failed to delete decision model.'});}}
 
-export async function deleteSimulationRun(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{const {error}=await supabase.from('zoal_simulation_runs').delete().eq('id',req.params.id);if(error)throw error;return res.json({success:true});}catch(err:any){console.error('Simulation run delete error:',err);return res.status(500).json({error:'Failed to delete simulation run.'});}}
+export async function deleteSimulationRun(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{const {error}=await supabase.from('zoal_simulation_runs').delete().eq('id',req.params.id);if(error)throw error;return res.json({success:true});}catch(err:any){console.error('Simulation run deletion error:',err);return res.status(500).json({error:'Failed to delete simulation run.'});}}
