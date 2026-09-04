@@ -20,9 +20,8 @@ AS $$
       AND (p_end IS NULL OR o.created_at < p_end)
   ),
   revenue AS (
-    SELECT
-      COUNT(*)::bigint AS order_count,
-      COALESCE(SUM(total_amount), 0)::numeric AS gross_revenue
+    SELECT COUNT(*)::bigint AS order_count,
+           COALESCE(SUM(total_amount), 0)::numeric AS gross_revenue
     FROM eligible_orders
   ),
   refunds AS (
@@ -32,12 +31,16 @@ AS $$
     WHERE pt.refund_amount IS NOT NULL AND pt.refund_amount > 0
   ),
   item_costs AS (
-    SELECT
-      COUNT(oi.id)::bigint AS item_count,
-      COUNT(oi.id) FILTER (WHERE oi.unit_cost IS NOT NULL)::bigint AS costed_item_count,
-      COALESCE(SUM(oi.quantity * oi.unit_cost) FILTER (WHERE oi.unit_cost IS NOT NULL), 0)::numeric AS cogs
+    SELECT COUNT(oi.id)::bigint AS item_count,
+           COUNT(oi.id) FILTER (WHERE oi.unit_cost IS NOT NULL)::bigint AS costed_item_count,
+           COALESCE(SUM(oi.quantity * oi.unit_cost) FILTER (WHERE oi.unit_cost IS NOT NULL), 0)::numeric AS cogs
     FROM public.zoal_order_items oi
     INNER JOIN eligible_orders eo ON eo.id = oi.order_id
+  ),
+  inventory AS (
+    SELECT COUNT(*)::bigint AS low_stock_count
+    FROM public.zoal_inventory i
+    WHERE i.quantity <= i.low_stock_threshold
   ),
   net_revenue AS (
     SELECT GREATEST(0, r.gross_revenue - f.refund_total)::numeric AS value
@@ -53,6 +56,8 @@ AS $$
     'cogs', CASE WHEN ic.item_count > 0 AND ic.costed_item_count = ic.item_count THEN ic.cogs ELSE NULL END,
     'grossProfit', CASE WHEN ic.item_count > 0 AND ic.costed_item_count = ic.item_count THEN nr.value - ic.cogs ELSE NULL END,
     'grossMargin', CASE WHEN nr.value > 0 AND ic.item_count > 0 AND ic.costed_item_count = ic.item_count THEN ((nr.value - ic.cogs) / nr.value) * 100 ELSE NULL END,
+    'lowStockCount', i.low_stock_count,
+    'refundRatePct', CASE WHEN r.gross_revenue > 0 THEN (f.refund_total / r.gross_revenue) * 100 ELSE 0 END,
     'cogsStatus', CASE
       WHEN ic.item_count = 0 THEN 'no_eligible_order_items'
       WHEN ic.costed_item_count = ic.item_count THEN 'verified_order_time_unit_cost_complete'
@@ -67,7 +72,8 @@ AS $$
   FROM revenue r
   CROSS JOIN refunds f
   CROSS JOIN net_revenue nr
-  CROSS JOIN item_costs ic;
+  CROSS JOIN item_costs ic
+  CROSS JOIN inventory i;
 $$;
 
 REVOKE ALL ON FUNCTION public.zoal_executive_financial_core_stats(timestamptz, timestamptz) FROM PUBLIC;
