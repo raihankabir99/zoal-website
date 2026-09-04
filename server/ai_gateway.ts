@@ -23,9 +23,6 @@ const PROVIDER_TIMEOUT_MS = Number(process.env.AI_PROVIDER_TIMEOUT_MS || 90000);
 const AI_RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_MAX || 20);
 const AI_RATE_LIMIT_WINDOW_SECONDS = Number(process.env.AI_RATE_LIMIT_WINDOW_SECONDS || 900); // 15 minutes = 900s
 
-// In-memory fallback map for when database is temporarily unavailable (fails safely)
-const fallbackRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-
 function getPgClient() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('DATABASE_URL is not configured');
@@ -45,63 +42,45 @@ function getUserId(req: Request): string {
 }
 
 async function enforceAIRateLimit(userId: string, reqCount: number = 1): Promise<{ remaining: number; resetAt: number }> {
+  let client: pg.Client | null = null;
   try {
-    const client = getPgClient();
+    client = getPgClient();
     await client.connect();
-    try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS public.zoal_ai_rate_limits (
-          user_id text NOT NULL,
-          window_start timestamptz NOT NULL,
-          request_count int NOT NULL DEFAULT 1,
-          PRIMARY KEY (user_id, window_start)
-        );
-      `);
 
-      // Prune old windows asynchronously
-      client.query(`DELETE FROM public.zoal_ai_rate_limits WHERE window_start < now() - interval '2 hours'`).catch(() => undefined);
+    const result = await client.query(
+      `INSERT INTO public.zoal_ai_rate_limits (user_id, window_start, request_count)
+       VALUES ($1, to_timestamp(floor(extract(epoch from now()) / $2) * $2), $3)
+       ON CONFLICT (user_id, window_start)
+       DO UPDATE SET request_count = public.zoal_ai_rate_limits.request_count + EXCLUDED.request_count
+       RETURNING request_count, extract(epoch from window_start) + $2 AS reset_epoch`,
+      [userId, AI_RATE_LIMIT_WINDOW_SECONDS, reqCount]
+    );
 
-      const result = await client.query(`
-        INSERT INTO public.zoal_ai_rate_limits (user_id, window_start, request_count)
-        VALUES ($1, to_timestamp(floor(extract(epoch from now()) / $2) * $2), $3)
-        ON CONFLICT (user_id, window_start)
-        DO UPDATE SET request_count = public.zoal_ai_rate_limits.request_count + $3
-        RETURNING request_count, extract(epoch from window_start) + $2 AS reset_epoch
-      `, [userId, AI_RATE_LIMIT_WINDOW_SECONDS, reqCount]);
+    const count = Number(result.rows[0]?.request_count || 0);
+    const resetEpoch = Number(result.rows[0]?.reset_epoch || 0);
 
-      const count = Number(result.rows[0]?.request_count || 1);
-      const resetEpoch = Number(result.rows[0]?.reset_epoch || Math.ceil(Date.now() / 1000) + AI_RATE_LIMIT_WINDOW_SECONDS);
-
-      if (count > AI_RATE_LIMIT_MAX) {
-        const err: any = new Error(`AI rate limit exceeded (${AI_RATE_LIMIT_MAX} requests per ${Math.round(AI_RATE_LIMIT_WINDOW_SECONDS / 60)} minutes)`);
-        err.statusCode = 429;
-        err.rateLimit = { count, limit: AI_RATE_LIMIT_MAX, resetAt: resetEpoch };
-        throw err;
-      }
-
-      return {
-        remaining: Math.max(0, AI_RATE_LIMIT_MAX - count),
-        resetAt: resetEpoch
-      };
-    } finally {
-      await client.end().catch(() => undefined);
+    if (count > AI_RATE_LIMIT_MAX) {
+      const err: any = new Error(`AI rate limit exceeded (${AI_RATE_LIMIT_MAX} requests per ${Math.round(AI_RATE_LIMIT_WINDOW_SECONDS / 60)} minutes)`);
+      err.statusCode = 429;
+      err.rateLimit = { count, limit: AI_RATE_LIMIT_MAX, resetAt: resetEpoch };
+      throw err;
     }
+
+    return {
+      remaining: Math.max(0, AI_RATE_LIMIT_MAX - count),
+      resetAt: resetEpoch
+    };
   } catch (err: any) {
     if (err?.statusCode === 429) throw err;
-    // Fail safely using in-memory tracker if Postgres connection fails
-    const now = Date.now();
-    const entry = fallbackRateLimitMap.get(userId);
-    if (!entry || now > entry.resetAt) {
-      fallbackRateLimitMap.set(userId, { count: reqCount, resetAt: now + (AI_RATE_LIMIT_WINDOW_SECONDS * 1000) });
-      return { remaining: AI_RATE_LIMIT_MAX - reqCount, resetAt: Math.ceil((now + (AI_RATE_LIMIT_WINDOW_SECONDS * 1000)) / 1000) };
-    }
-    entry.count += reqCount;
-    if (entry.count > AI_RATE_LIMIT_MAX) {
-      const error: any = new Error(`AI rate limit exceeded (${AI_RATE_LIMIT_MAX} requests per ${Math.round(AI_RATE_LIMIT_WINDOW_SECONDS / 60)} minutes)`);
-      error.statusCode = 429;
-      throw error;
-    }
-    return { remaining: Math.max(0, AI_RATE_LIMIT_MAX - entry.count), resetAt: Math.ceil(entry.resetAt / 1000) };
+
+    // Fail closed: distributed enforcement is authoritative. Never degrade to
+    // process-local counters during database outages in a multi-instance deployment.
+    const unavailable: any = new Error('AI rate-limit service is temporarily unavailable');
+    unavailable.statusCode = 503;
+    unavailable.code = 'AI_RATE_LIMIT_UNAVAILABLE';
+    throw unavailable;
+  } finally {
+    await client?.end().catch(() => undefined);
   }
 }
 
