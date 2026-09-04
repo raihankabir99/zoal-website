@@ -3774,7 +3774,7 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
       smtpHost,
       smtpPort,
       smtpUser,
-      existing?.smtp_pass ?? null,
+      process.env.SMTP_PASS || null,
       ipWhitelist,
       sessionExpirationMinutes,
       autoBackupFrequency,

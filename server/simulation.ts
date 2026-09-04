@@ -124,7 +124,8 @@ export async function createSimulationRun(req: Request, res: Response) {
     if (insertError) throw insertError;
 
     try {
-      if (req.user?.id) await logActivityAsync(req.user.id, req.user.email || null, `[Decision Center] Scenario executed: ${scenario_name.trim()} (${type}) — signal=${decisionSignal}, risk=${risk.score}, profit=${scenarioData.resultStatus.profit}, forecast=${forecast.status}`, req.ip || '', req.headers['user-agent'] || '');
+      const authUser = (req as any).user;
+      if (authUser?.id) await logActivityAsync(authUser.id, authUser.email || null, `[Decision Center] Scenario executed: ${scenario_name.trim()} (${type}) — signal=${decisionSignal}, risk=${risk.score}, profit=${scenarioData.resultStatus.profit}, forecast=${forecast.status}`, req.ip || '', req.headers['user-agent'] || '');
     } catch (auditError) { console.error('Decision simulation audit logging error:', auditError); }
 
     return res.status(201).json({ id: inserted.id, model_id: inserted.model_id, scenario_name: inserted.scenario_data?.scenario_name, revenue_projection: Number(inserted.revenue_projection || 0), profit_projection: Number(inserted.profit_projection || 0), risk_score: Number(inserted.risk_score || 0), parameters: inserted.scenario_data?.parameters || {}, captured_at: inserted.captured_at, profitStatus: inserted.scenario_data?.resultStatus?.profit, decisionSignal: inserted.scenario_data?.decision?.signal, riskBasis: inserted.scenario_data?.risk?.basis, baselineRevenue: baseRevenue, recommendation: inserted.scenario_data?.recommendation || null, forecast: inserted.scenario_data?.forecast || null });
