@@ -69,36 +69,41 @@ async function loadOrders(supabase: any, historyStart: Date, cutoff: Date): Prom
   return rows;
 }
 
+export async function buildExecutiveForecast(supabase: any) {
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  cutoff.setUTCHours(23, 59, 59, 999);
+  const historyStart = new Date(cutoff);
+  historyStart.setUTCDate(historyStart.getUTCDate() - 365);
+  historyStart.setUTCHours(0, 0, 0, 0);
+  const orders = await loadOrders(supabase, historyStart, cutoff);
+  const history = fillMissingDays(buildDailySeries(orders), cutoff);
+  const historyDays = history.length;
+  const observedDays = history.filter(p => p.orders > 0).length;
+  const actualRevenue = history.reduce((sum, p) => sum + p.revenue, 0);
+  const actualOrders = history.reduce((sum, p) => sum + p.orders, 0);
+  const actualCustomerDays = history.reduce((sum, p) => sum + p.customers, 0);
+  if (historyDays < MIN_HISTORY_DAYS || observedDays < MIN_OBSERVED_DAYS) return { status: 'insufficient_history', data_cutoff: cutoff.toISOString(), generated_at: new Date().toISOString(), forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, history_days: historyDays, observed_days: observedDays, minimum_history_days: MIN_HISTORY_DAYS, minimum_observed_days: MIN_OBSERVED_DAYS, historical: history, forecasts: [], accuracy: { status: 'unavailable', wape: null, sample_size: 0 }, financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' } };
+  const forecasts = FORECAST_HORIZONS.map(horizon => { const daily = project(history, horizon); return { horizon_days: horizon, forecast_revenue: Number((daily.revenue * horizon).toFixed(2)), forecast_orders: Number((daily.orders * horizon).toFixed(2)), forecast_customers: Number((daily.customers * horizon).toFixed(2)), forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, data_cutoff: cutoff.toISOString() }; });
+  const holdoutSize = Math.min(7, Math.floor(history.length / 4));
+  const train = history.slice(0, -holdoutSize);
+  const holdout = history.slice(-holdoutSize);
+  const backtestPrediction = weightedAverage(train.slice(-7).map(p => p.revenue));
+  const accuracyWape = wape(holdout.map(p => p.revenue), holdout.map(() => backtestPrediction));
+  return { status: 'verified', data_cutoff: cutoff.toISOString(), generated_at: new Date().toISOString(), forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, history_days: historyDays, observed_days: observedDays, minimum_history_days: MIN_HISTORY_DAYS, historical: history, summary: { actual_revenue: Number(actualRevenue.toFixed(2)), actual_orders: actualOrders, actual_customer_days: actualCustomerDays }, forecasts, accuracy: { status: accuracyWape === null ? 'unavailable' : 'backtested', wape: accuracyWape, sample_size: holdout.length }, financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' } };
+}
+
 export function getForecasts(req: Request, res: Response) {
   authenticateRequest(req as any, res, async () => {
     const user = (req as any).user;
-    if (!['owner', 'admin', 'manager'].includes(user?.role)) return res.status(403).json({ error: 'Forbidden', message: 'Executive Forecast requires owner, admin, or manager access.' });
+    if (!['owner', 'admin', 'manager'].includes(user?.role)) return res.status(403).json({ error: 'Executive Forecast requires owner, admin, or manager access.' });
     const supabase = getServiceSupabaseClient();
     if (!supabase) return res.status(503).json({ error: 'Forecast data service unavailable.' });
     try {
-      const cutoff = new Date();
-      cutoff.setUTCDate(cutoff.getUTCDate() - 1);
-      cutoff.setUTCHours(23, 59, 59, 999);
-      const historyStart = new Date(cutoff);
-      historyStart.setUTCDate(historyStart.getUTCDate() - 365);
-      historyStart.setUTCHours(0, 0, 0, 0);
-      const orders = await loadOrders(supabase, historyStart, cutoff);
-      const history = fillMissingDays(buildDailySeries(orders), cutoff);
-      const historyDays = history.length;
-      const observedDays = history.filter(p => p.orders > 0).length;
-      const actualRevenue = history.reduce((sum, p) => sum + p.revenue, 0);
-      const actualOrders = history.reduce((sum, p) => sum + p.orders, 0);
-      const actualCustomerDays = history.reduce((sum, p) => sum + p.customers, 0);
-      if (historyDays < MIN_HISTORY_DAYS || observedDays < MIN_OBSERVED_DAYS) return res.json({ status: 'insufficient_history', data_cutoff: cutoff.toISOString(), generated_at: new Date().toISOString(), forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, history_days: historyDays, observed_days: observedDays, minimum_history_days: MIN_HISTORY_DAYS, minimum_observed_days: MIN_OBSERVED_DAYS, historical: history, forecasts: [], accuracy: { status: 'unavailable', wape: null, sample_size: 0 }, financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' } });
-      const forecasts = FORECAST_HORIZONS.map(horizon => { const daily = project(history, horizon); return { horizon_days: horizon, forecast_revenue: Number((daily.revenue * horizon).toFixed(2)), forecast_orders: Number((daily.orders * horizon).toFixed(2)), forecast_customers: Number((daily.customers * horizon).toFixed(2)), forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, data_cutoff: cutoff.toISOString() }; });
-      const holdoutSize = Math.min(7, Math.floor(history.length / 4));
-      const train = history.slice(0, -holdoutSize);
-      const holdout = history.slice(-holdoutSize);
-      const backtestPrediction = weightedAverage(train.slice(-7).map(p => p.revenue));
-      const accuracyWape = wape(holdout.map(p => p.revenue), holdout.map(() => backtestPrediction));
-      const generatedAt = new Date().toISOString();
-      const response = { status: 'verified', data_cutoff: cutoff.toISOString(), generated_at: generatedAt, forecast_method: MODEL_VERSION, model_version: MODEL_VERSION, history_days: historyDays, observed_days: observedDays, minimum_history_days: MIN_HISTORY_DAYS, historical: history, summary: { actual_revenue: Number(actualRevenue.toFixed(2)), actual_orders: actualOrders, actual_customer_days: actualCustomerDays }, forecasts, accuracy: { status: accuracyWape === null ? 'unavailable' : 'backtested', wape: accuracyWape, sample_size: holdout.length }, financial: { profit_forecast: null, status: 'insufficient_authoritative_cost_data' } };
-      const snapshotRows = forecasts.map(f => ({ metric: 'revenue', period_start: cutoff.toISOString(), horizon_days: f.horizon_days, actual_value: response.summary.actual_revenue, forecast_value: f.forecast_revenue, forecast_method: f.forecast_method, cutoff_at: cutoff.toISOString(), generated_at: generatedAt, model_version: f.model_version, data_status: 'verified', sample_size: historyDays, accuracy_wape: accuracyWape, forecast_type: 'Revenue', predicted_value: f.forecast_revenue, history_data: { actual_revenue: response.summary.actual_revenue, history_days: historyDays, observed_days: observedDays, wape: accuracyWape }, scenario: `Automated ${f.horizon_days}-day revenue forecast` }));
+      const response = await buildExecutiveForecast(supabase);
+      if (response.status === 'insufficient_history') return res.json(response);
+      const generatedAt = response.generated_at;
+      const snapshotRows = response.forecasts.map((f: any) => ({ metric: 'revenue', period_start: response.data_cutoff, horizon_days: f.horizon_days, actual_value: response.summary.actual_revenue, forecast_value: f.forecast_revenue, forecast_method: f.forecast_method, cutoff_at: response.data_cutoff, generated_at: generatedAt, model_version: f.model_version, data_status: 'verified', sample_size: response.history_days, accuracy_wape: response.accuracy.wape, forecast_type: 'Revenue', predicted_value: f.forecast_revenue, history_data: { actual_revenue: response.summary.actual_revenue, history_days: response.history_days, observed_days: response.observed_days, wape: response.accuracy.wape }, scenario: `Automated ${f.horizon_days}-day revenue forecast` }));
       const { error: persistError } = await supabase.from('zoal_forecasts').insert(snapshotRows);
       if (persistError) { console.error('Forecast snapshot persistence failed:', persistError.message); return res.status(503).json({ error: 'Forecast persistence unavailable.' }); }
       return res.json(response);
