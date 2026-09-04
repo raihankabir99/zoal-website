@@ -1,4 +1,5 @@
 import { getServiceSupabaseClient } from './supabase';
+import { logActivityAsync } from './auth_db';
 import { Request, Response } from 'express';
 
 const DEFAULT_MODELS = [
@@ -63,11 +64,7 @@ export async function getDecisionModels(req: Request, res: Response) {
     if (!data || data.length === 0) {
       const { data: seeded, error: seedError } = await supabase
         .from('zoal_decision_models')
-        .insert(DEFAULT_MODELS.map(model => ({
-          name: model.name,
-          type: model.type,
-          configuration: model.configuration
-        })))
+        .insert(DEFAULT_MODELS.map(model => ({ name: model.name, type: model.type, configuration: model.configuration })))
         .select('id,name,type,configuration,created_at');
 
       if (seedError) throw seedError;
@@ -119,19 +116,14 @@ export async function createSimulationRun(req: Request, res: Response) {
 
   try {
     const { model_id, scenario_name, parameters } = req.body || {};
-    if (!model_id || typeof model_id !== 'string') {
-      return res.status(400).json({ error: 'model_id is required.' });
-    }
-    if (!scenario_name || typeof scenario_name !== 'string' || scenario_name.trim().length < 2) {
-      return res.status(400).json({ error: 'scenario_name is required.' });
-    }
+    if (!model_id || typeof model_id !== 'string') return res.status(400).json({ error: 'model_id is required.' });
+    if (!scenario_name || typeof scenario_name !== 'string' || scenario_name.trim().length < 2) return res.status(400).json({ error: 'scenario_name is required.' });
 
     const { data: model, error: modelError } = await supabase
       .from('zoal_decision_models')
       .select('id,name,type,configuration')
       .eq('id', model_id)
       .single();
-
     if (modelError || !model) return res.status(404).json({ error: 'Decision model not found.' });
 
     const end = new Date();
@@ -142,15 +134,12 @@ export async function createSimulationRun(req: Request, res: Response) {
       p_start: start.toISOString(),
       p_end: end.toISOString()
     });
-
     if (coreError) throw coreError;
 
     const baseRevenue = Number(core?.totalRevenue || 0);
     const p1 = Number(parameters?.param1 ?? 1);
     const p2 = Number(parameters?.param2 ?? 0);
-    if (!Number.isFinite(p1) || !Number.isFinite(p2)) {
-      return res.status(400).json({ error: 'Simulation parameters must be finite numbers.' });
-    }
+    if (!Number.isFinite(p1) || !Number.isFinite(p2)) return res.status(400).json({ error: 'Simulation parameters must be finite numbers.' });
 
     const type = model.type;
     let projectedRevenue = baseRevenue;
@@ -205,29 +194,14 @@ export async function createSimulationRun(req: Request, res: Response) {
               : 'review_required';
 
     const recommendation = decisionSignal === 'favorable_with_verified_profit'
-      ? {
-          action: 'Proceed to controlled review',
-          rationale: 'Scenario revenue signal is favorable, verified gross profit is available, and configured parameter bounds show no elevated parameter risk.',
-          confidence: 'deterministic_signal_only'
-        }
+      ? { action: 'Proceed to controlled review', rationale: 'Scenario revenue signal is favorable, verified gross profit is available, and configured parameter bounds show no elevated parameter risk.', confidence: 'deterministic_signal_only' }
       : decisionSignal === 'favorable_revenue_signal_profit_unverified'
-        ? {
-            action: 'Review revenue upside; do not approve on profit grounds',
-            rationale: 'Projected revenue is non-negative relative to the live baseline, but authoritative profit evidence is unavailable.',
-            confidence: 'deterministic_signal_only'
-          }
+        ? { action: 'Review revenue upside; do not approve on profit grounds', rationale: 'Projected revenue is non-negative relative to the live baseline, but authoritative profit evidence is unavailable.', confidence: 'deterministic_signal_only' }
         : decisionSignal === 'unfavorable_revenue_signal'
-          ? {
-              action: 'Do not proceed without further analysis',
-              rationale: 'The scenario produces a negative revenue variance against the live baseline.',
-              confidence: 'deterministic_signal_only'
-            }
-          : {
-              action: 'Hold for additional evidence',
-              rationale: 'The current scenario does not contain enough authoritative evidence for an executive recommendation.',
-              confidence: 'deterministic_signal_only'
-            };
+          ? { action: 'Do not proceed without further analysis', rationale: 'The scenario produces a negative revenue variance against the live baseline.', confidence: 'deterministic_signal_only' }
+          : { action: 'Hold for additional evidence', rationale: 'The current scenario does not contain enough authoritative evidence for an executive recommendation.', confidence: 'deterministic_signal_only' };
 
+    const generatedAt = new Date().toISOString();
     const scenarioData = {
       scenario_name: scenario_name.trim(),
       parameters: { param1: p1, param2: p2 },
@@ -245,55 +219,44 @@ export async function createSimulationRun(req: Request, res: Response) {
         grossMargin: core?.grossMargin ?? null,
         cogsStatus: core?.cogsStatus || 'unavailable',
         profitStatus: core?.profitStatus || 'unavailable',
-        costCoverage: {
-          itemCount: Number(core?.itemCount || 0),
-          costedItemCount: Number(core?.costedItemCount || 0)
-        }
+        costCoverage: { itemCount: Number(core?.itemCount || 0), costedItemCount: Number(core?.costedItemCount || 0) }
       },
-      variance: {
-        revenueDelta,
-        revenueDeltaPct
-      },
-      resultStatus: {
-        revenue: 'authoritative_scenario',
-        profit: verifiedGrossProfit == null ? 'unavailable' : 'derived_from_verified_gross_profit'
-      },
-      risk: {
-        score: riskSignal,
-        basis: 'model_configuration_plus_parameter_bounds',
-        liveOperationalRisk: false
-      },
-      decision: {
-        signal: decisionSignal,
-        recommendationStatus: 'deterministic_scenario_signal_only',
-        forecast: false
-      },
+      variance: { revenueDelta, revenueDeltaPct },
+      resultStatus: { revenue: 'authoritative_scenario', profit: verifiedGrossProfit == null ? 'unavailable' : 'derived_from_verified_gross_profit' },
+      risk: { score: riskSignal, basis: 'model_configuration_plus_parameter_bounds', liveOperationalRisk: false },
+      decision: { signal: decisionSignal, recommendationStatus: 'deterministic_scenario_signal_only', forecast: false },
       recommendation,
       data_lineage: {
         baseline: 'zoal_executive_financial_core_stats',
         actuals: 'paid_non_cancelled_non_refunded_orders_and_order_time_unit_cost',
         cogs: core?.cogsStatus || 'unavailable',
         profit: core?.profitStatus || 'unavailable',
-        generated_at: new Date().toISOString()
+        generated_at: generatedAt
       },
       model_type: type,
-      generated_at: new Date().toISOString()
+      generated_at: generatedAt
     };
 
     const { data: inserted, error: insertError } = await supabase
       .from('zoal_simulation_runs')
-      .insert({
-        model_id,
-        revenue_projection: projectedRevenue,
-        profit_projection: projectedProfit,
-        risk_score: riskSignal,
-        scenario_data: scenarioData,
-        captured_at: new Date().toISOString()
-      })
+      .insert({ model_id, revenue_projection: projectedRevenue, profit_projection: projectedProfit, risk_score: riskSignal, scenario_data: scenarioData, captured_at: generatedAt })
       .select('id,model_id,revenue_projection,profit_projection,risk_score,scenario_data,captured_at')
       .single();
-
     if (insertError) throw insertError;
+
+    try {
+      if (req.user?.id) {
+        await logActivityAsync(
+          req.user.id,
+          req.user.email || null,
+          `[Decision Center] Scenario executed: ${scenario_name.trim()} (${type}) — signal=${decisionSignal}, profit=${scenarioData.resultStatus.profit}`,
+          req.ip || '',
+          req.headers['user-agent'] || ''
+        );
+      }
+    } catch (auditError) {
+      console.error('Decision simulation audit logging error:', auditError);
+    }
 
     return res.status(201).json({
       id: inserted.id,
