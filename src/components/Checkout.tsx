@@ -941,9 +941,15 @@ export default function Checkout({
 
     if (paymentMethod === 'mada' || paymentMethod === 'applepay') {
       setIsSubmitting(true);
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       fetch('/api/payments/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           orderId: `ZL-${Math.floor(100000 + Math.random() * 900000)}`,
           items: cart.map(item => ({
@@ -960,7 +966,6 @@ export default function Checkout({
           customerEmail: email.trim() || settings.email,
           customerPhone: phone.trim(),
           address: `${address.trim()}, ${city}, Saudi Arabia`,
-          customerId: currentUser?.id || null,
           termsAccepted: true
         })
       })
@@ -984,7 +989,8 @@ export default function Checkout({
       return;
     }
 
-    const orderId = `ZL-${Math.floor(1000 + Math.random() * 9000)}`;
+    setIsSubmitting(true);
+    const orderId = `ZL-${Math.floor(100000 + Math.random() * 900000)}`;
     const newOrder: Order = {
       id: orderId,
       date: new Date().toISOString().substring(0, 10),
@@ -1019,7 +1025,9 @@ export default function Checkout({
       deliveryMethod: deliveryOption === 'local' ? 'Local Delivery' : 'Regional Delivery'
     } as any; // Cast as any to pass expanded fields comfortably
 
-    onOrderSuccess(newOrder);
+    Promise.resolve(onOrderSuccess(newOrder)).finally(() => {
+      setIsSubmitting(false);
+    });
   };
 
   return (

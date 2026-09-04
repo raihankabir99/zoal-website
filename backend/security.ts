@@ -500,15 +500,13 @@ export async function optionalAuthenticate(req: any, res: Response, next: NextFu
   try {
     const { data: { user }, error } = await authClient.auth.getUser(token);
     if (error || !user) {
-      req.user = null;
-      return next();
+      return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
     }
 
     req.user = await syncSupabaseUser(user);
     next();
-  } catch (err) {
-    req.user = null;
-    next();
+  } catch (err: any) {
+    return res.status(401).json({ error: 'Unauthorized', message: err?.message || 'Authentication failed.' });
   }
 }
 

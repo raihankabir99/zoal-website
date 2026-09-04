@@ -202,8 +202,12 @@ export default function Dashboards({
   const [wishlistSearch, setWishlistSearch] = useState('');
 
   const customerOrders = useMemo(() => {
-    if (!currentUser?.email) return [];
-    return orders.filter((o) => (o.email || '').toLowerCase() === (currentUser.email || '').toLowerCase());
+    if (!currentUser) return [];
+    return orders.filter((o) => {
+      if ((o as any).customerId && (o as any).customerId === currentUser.id) return true;
+      if (currentUser.email && (o.email || '').toLowerCase() === currentUser.email.toLowerCase()) return true;
+      return false;
+    });
   }, [orders, currentUser]);
   
 

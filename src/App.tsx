@@ -930,67 +930,103 @@ function AppContent() {
     }
   };
 
-  // Handle successful payments confirmation
-  const handleOrderSuccess = (newOrder: Order) => {
-    setOrders((prev) => [newOrder, ...prev]);
-    setCart([]); // Clear cart
-    setDiscountPercent(0);
-    setCouponCode('');
-    
-    // Set success modal states
-    setActiveSuccessOrder(newOrder);
-    setCheckoutSuccessModalOpen(true);
-    setCurrentPage('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    // Trigger System Notifications
-    // 1. Customer Notification
-    notificationEngine.addNotification({
-      title: 'Order Confirmed',
-      message: `Your order #${newOrder.id} has been placed successfully.`,
-      category: 'Order',
-      priority: 'high',
-      target_role: 'customer',
-      user_id: (currentUser as any)?.id || currentUser?.email,
-      user_email: currentUser?.email,
-      metadata: { orderId: newOrder.id }
-    });
-
-    // 2. Admin/Staff Notification
-    notificationEngine.addNotification({
-      title: 'New Enterprise Order',
-      message: `A new order #${newOrder.id} (${newOrder.total} SAR) has been received.`,
-      category: 'Order',
-      priority: 'high',
-      target_role: 'admin',
-      metadata: { orderId: newOrder.id }
-    });
-
-    // Persist order to Supabase via backend proxy
-    fetch('/api/orders/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: newOrder })
-    })
-    .then(res => res.json())
-    .then(data => console.log('Order persistence response:', data))
-    .catch(err => console.error('Order persistence error:', err));
-
-    // Trigger full-stack order email confirmation and DB logger
-    fetch('/api/orders/email', {
-      method: 'POST',
-      headers: {
+  // Handle successful payments confirmation (Strict Server-Authoritative Sequencing)
+  const handleOrderSuccess = async (newOrder: Order) => {
+    try {
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ order: newOrder })
-    })
-    .then((res) => res.json())
-    .then((data) => {
-      console.log('Automated order email system response:', data);
-    })
-    .catch((err) => {
-      console.error('Error triggering automated order email system:', err);
-    });
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // 1. Authoritative persistence to database via backend proxy FIRST
+      const res = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          order: newOrder,
+          termsAccepted: true 
+        })
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || (data && data.success === false)) {
+        const errorMsg = data?.error || data?.message || 'Failed to record order. Please try again.';
+        console.error('❌ Order persistence failed:', errorMsg);
+        dispatchNotification({
+          type: 'order',
+          variant: 'toast',
+          title: 'Order Processing Failed',
+          message: errorMsg
+        });
+        alert(`Order Submission Failed: ${errorMsg}`);
+        return false;
+      }
+
+      // 2. Only upon verified database save: update local state, clear cart, and reveal success modal
+      setOrders((prev) => [newOrder, ...prev]);
+      setCart([]); // Clear cart
+      setDiscountPercent(0);
+      setCouponCode('');
+      
+      // Set success modal states
+      setActiveSuccessOrder(newOrder);
+      setCheckoutSuccessModalOpen(true);
+      setCurrentPage('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Trigger System Notifications
+      // 1. Customer Notification
+      notificationEngine.addNotification({
+        title: 'Order Confirmed',
+        message: `Your order #${newOrder.id} has been placed successfully.`,
+        category: 'Order',
+        priority: 'high',
+        target_role: 'customer',
+        user_id: (currentUser as any)?.id || currentUser?.email,
+        user_email: currentUser?.email,
+        metadata: { orderId: newOrder.id }
+      });
+
+      // 2. Admin/Staff Notification
+      notificationEngine.addNotification({
+        title: 'New Enterprise Order',
+        message: `A new order #${newOrder.id} (${newOrder.total} SAR) has been received.`,
+        category: 'Order',
+        priority: 'high',
+        target_role: 'admin',
+        metadata: { orderId: newOrder.id }
+      });
+
+      // Trigger full-stack order email confirmation and DB logger
+      fetch('/api/orders/email', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ order: newOrder })
+      })
+      .then((res) => res.json())
+      .then((data) => {
+        console.log('Automated order email system response:', data);
+      })
+      .catch((err) => {
+        console.error('Error triggering automated order email system:', err);
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error('❌ Unexpected order submission error:', err);
+      dispatchNotification({
+        type: 'order',
+        variant: 'toast',
+        title: 'Order Submission Error',
+        message: err.message || 'An unexpected error occurred while placing your order.'
+      });
+      alert(`Order Submission Error: ${err.message || 'Please try again.'}`);
+      return false;
+    }
   };
 
   const triggerSuccessToast = () => {

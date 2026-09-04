@@ -1472,7 +1472,7 @@ app.get('/api/orders/email-history', async (req, res) => {
 });
 
 // Create a new order in Supabase
-app.post('/api/orders/create', async (req, res) => {
+app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) => {
   const { order, termsAccepted: directTermsAccepted } = req.body;
   if (!order || !order.id || !order.items) {
     return res.status(400).json({ error: 'Invalid order structure.' });
@@ -1490,6 +1490,12 @@ app.post('/api/orders/create', async (req, res) => {
     console.error('❌ Active published Terms & Conditions document version not found in database.');
     return res.status(400).json({ error: 'Active published Terms & Conditions document not found. Order creation cannot proceed.' });
   }
+
+  // Server-Authoritative Customer Identity Resolution (P0 Security)
+  // Authenticated orders MUST use verified session user ID.
+  // Unauthenticated (guest) orders MUST use NULL.
+  // Never trust client-supplied order.customerId or req.body.customerId.
+  const resolvedCustomerId = req.user?.id || null;
 
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -1510,7 +1516,7 @@ app.post('/api/orders/create', async (req, res) => {
 
     const orderData = {
       id: order.id,
-      customer_id: order.customerId || null,
+      customer_id: resolvedCustomerId,
       status: (order.status || 'pending').toLowerCase(),
       subtotal: calculatedTotals.subtotal,
       discount_amount: calculatedTotals.discountAmount,
@@ -1911,7 +1917,7 @@ setInterval(async () => {
 }, 60000); // Run check every minute
 
 // 1. Create Payment Session
-app.post('/api/payments/create', async (req, res) => {
+app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any) => {
   const { 
     orderId: requestedOrderId, 
     items, 
@@ -1922,7 +1928,6 @@ app.post('/api/payments/create', async (req, res) => {
     customerEmail, 
     customerPhone, 
     address,
-    customerId,
     termsAccepted
   } = req.body;
 
@@ -1942,6 +1947,12 @@ app.post('/api/payments/create', async (req, res) => {
     console.error('❌ Active published Terms & Conditions document version not found in database.');
     return res.status(400).json({ error: 'Active published Terms & Conditions document not found. Order creation cannot proceed.' });
   }
+
+  // Server-Authoritative Customer Identity Resolution (P0 Security)
+  // Authenticated sessions MUST use verified session user ID.
+  // Unauthenticated (guest) checkout MUST use NULL.
+  // Never trust client-supplied customerId from request body.
+  const resolvedCustomerId = req.user?.id || null;
 
   const supabase = getSupabaseClient();
   const dbConfigured = !!supabase;
@@ -2032,7 +2043,7 @@ app.post('/api/payments/create', async (req, res) => {
           `;
           await pgClient.query(orderSql, [
             orderId,
-            customerId || null,
+            resolvedCustomerId,
             'pending_payment',
             totals.subtotal,
             totals.discountAmount,
@@ -2118,7 +2129,7 @@ app.post('/api/payments/create', async (req, res) => {
         `;
         await pgClient.query(txSql, [
           orderId,
-          customerId || null,
+          resolvedCustomerId,
           totals.totalAmount,
           'SAR',
           paymentMethod || 'credit_card',
@@ -2140,7 +2151,7 @@ app.post('/api/payments/create', async (req, res) => {
       // Fallback Supabase path if connectionString is unavailable
       const orderData = {
         id: orderId,
-        customer_id: customerId || null,
+        customer_id: resolvedCustomerId,
         status: 'pending_payment',
         subtotal: totals.subtotal,
         discount_amount: totals.discountAmount,
@@ -2232,7 +2243,7 @@ app.post('/api/payments/create', async (req, res) => {
 
       const transactionData = {
         order_id: orderId,
-        user_id: customerId || null,
+        user_id: resolvedCustomerId,
         amount: totals.totalAmount,
         currency: 'SAR',
         payment_method: paymentMethod || 'credit_card',

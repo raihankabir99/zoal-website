@@ -1187,11 +1187,17 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Create a new order in Supabase
-app.post('/api/orders/create', authenticateRequest, async (req, res) => {
+app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) => {
   const { order } = req.body;
   if (!order || !order.id || !order.items) {
     return res.status(400).json({ error: 'Invalid order structure.' });
   }
+
+  // Server-Authoritative Customer Identity Resolution (P0 Security)
+  // Authenticated sessions MUST use verified session user ID.
+  // Unauthenticated (guest) checkout MUST use NULL.
+  // Never trust client-supplied order.customerId.
+  const resolvedCustomerId = req.user?.id || null;
 
   // Authoritatively validate shipping rules on the server before persisting
   const clientCity = order.city || order.region || '';
@@ -1265,7 +1271,7 @@ app.post('/api/orders/create', authenticateRequest, async (req, res) => {
     // 1. Insert into zoal_orders
     const orderData: any = {
       id: order.id,
-      customer_id: order.customerId || null,
+      customer_id: resolvedCustomerId,
       status: (order.status || 'pending').toLowerCase(),
       subtotal: order.subtotal,
       discount_amount: order.discount || 0,
