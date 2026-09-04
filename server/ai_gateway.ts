@@ -20,6 +20,11 @@ const MAX_OUTPUT_TOKENS = Number(process.env.AI_MAX_OUTPUT_TOKENS || 2048);
 const MAX_CONCURRENT_PER_USER = Number(process.env.AI_MAX_CONCURRENT_PER_USER || 2);
 const CONCURRENCY_LEASE_TTL_MS = Number(process.env.AI_CONCURRENCY_LEASE_TTL_MS || 120000);
 const PROVIDER_TIMEOUT_MS = Number(process.env.AI_PROVIDER_TIMEOUT_MS || 90000);
+const AI_RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_MAX || 20);
+const AI_RATE_LIMIT_WINDOW_SECONDS = Number(process.env.AI_RATE_LIMIT_WINDOW_SECONDS || 900); // 15 minutes = 900s
+
+// In-memory fallback map for when database is temporarily unavailable (fails safely)
+const fallbackRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function getPgClient() {
   const connectionString = process.env.DATABASE_URL;
@@ -29,8 +34,75 @@ function getPgClient() {
 
 function getUserId(req: Request): string {
   const id = (req as any).user?.id;
-  if (!id) throw new Error('Authenticated user is required');
-  return String(id);
+  if (!id) throw Object.assign(new Error('Authenticated user is required'), { statusCode: 401 });
+  const strId = String(id).trim();
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(strId)) {
+    const hash = crypto.createHash('sha256').update(strId).digest('hex');
+    return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`;
+  }
+  return strId;
+}
+
+async function enforceAIRateLimit(userId: string, reqCount: number = 1): Promise<{ remaining: number; resetAt: number }> {
+  try {
+    const client = getPgClient();
+    await client.connect();
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.zoal_ai_rate_limits (
+          user_id text NOT NULL,
+          window_start timestamptz NOT NULL,
+          request_count int NOT NULL DEFAULT 1,
+          PRIMARY KEY (user_id, window_start)
+        );
+      `);
+
+      // Prune old windows asynchronously
+      client.query(`DELETE FROM public.zoal_ai_rate_limits WHERE window_start < now() - interval '2 hours'`).catch(() => undefined);
+
+      const result = await client.query(`
+        INSERT INTO public.zoal_ai_rate_limits (user_id, window_start, request_count)
+        VALUES ($1, to_timestamp(floor(extract(epoch from now()) / $2) * $2), $3)
+        ON CONFLICT (user_id, window_start)
+        DO UPDATE SET request_count = public.zoal_ai_rate_limits.request_count + $3
+        RETURNING request_count, extract(epoch from window_start) + $2 AS reset_epoch
+      `, [userId, AI_RATE_LIMIT_WINDOW_SECONDS, reqCount]);
+
+      const count = Number(result.rows[0]?.request_count || 1);
+      const resetEpoch = Number(result.rows[0]?.reset_epoch || Math.ceil(Date.now() / 1000) + AI_RATE_LIMIT_WINDOW_SECONDS);
+
+      if (count > AI_RATE_LIMIT_MAX) {
+        const err: any = new Error(`AI rate limit exceeded (${AI_RATE_LIMIT_MAX} requests per ${Math.round(AI_RATE_LIMIT_WINDOW_SECONDS / 60)} minutes)`);
+        err.statusCode = 429;
+        err.rateLimit = { count, limit: AI_RATE_LIMIT_MAX, resetAt: resetEpoch };
+        throw err;
+      }
+
+      return {
+        remaining: Math.max(0, AI_RATE_LIMIT_MAX - count),
+        resetAt: resetEpoch
+      };
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  } catch (err: any) {
+    if (err?.statusCode === 429) throw err;
+    // Fail safely using in-memory tracker if Postgres connection fails
+    const now = Date.now();
+    const entry = fallbackRateLimitMap.get(userId);
+    if (!entry || now > entry.resetAt) {
+      fallbackRateLimitMap.set(userId, { count: reqCount, resetAt: now + (AI_RATE_LIMIT_WINDOW_SECONDS * 1000) });
+      return { remaining: AI_RATE_LIMIT_MAX - reqCount, resetAt: Math.ceil((now + (AI_RATE_LIMIT_WINDOW_SECONDS * 1000)) / 1000) };
+    }
+    entry.count += reqCount;
+    if (entry.count > AI_RATE_LIMIT_MAX) {
+      const error: any = new Error(`AI rate limit exceeded (${AI_RATE_LIMIT_MAX} requests per ${Math.round(AI_RATE_LIMIT_WINDOW_SECONDS / 60)} minutes)`);
+      error.statusCode = 429;
+      throw error;
+    }
+    return { remaining: Math.max(0, AI_RATE_LIMIT_MAX - entry.count), resetAt: Math.ceil(entry.resetAt / 1000) };
+  }
 }
 
 function getMasterKey(): Buffer {
@@ -210,10 +282,17 @@ async function writeAuditEvent(req: Request, action: string) {
 
 export async function aiGatewayGenerate(req: Request, res: Response) {
   try {
+    const userId = getUserId(req);
+    const rateLimit = await enforceAIRateLimit(userId, 1);
+    res.setHeader('X-RateLimit-Limit-AI', AI_RATE_LIMIT_MAX);
+    res.setHeader('X-RateLimit-Remaining-AI', rateLimit.remaining);
+    res.setHeader('X-RateLimit-Reset-AI', rateLimit.resetAt);
+
     const result = await executeAI(req, req.body as AIRequest);
+    await writeAuditEvent(req, 'AI_GENERATE').catch(() => undefined);
     return res.json({ ok: true, provider: 'gemini', text: result });
   } catch (error: any) {
-    const status = error?.statusCode === 429 ? 429 : 500;
+    const status = error?.statusCode === 429 ? 429 : (error?.statusCode || 500);
     return res.status(status).json({ ok: false, error: error?.message || 'AI request failed' });
   }
 }
@@ -224,9 +303,17 @@ export async function aiGatewayBatch(req: Request, res: Response) {
     if (!Array.isArray(requests) || requests.length < 1 || requests.length > 4) {
       return res.status(400).json({ ok: false, error: 'requests must contain 1 to 4 AI requests' });
     }
+
+    const userId = getUserId(req);
+    const rateLimit = await enforceAIRateLimit(userId, requests.length);
+    res.setHeader('X-RateLimit-Limit-AI', AI_RATE_LIMIT_MAX);
+    res.setHeader('X-RateLimit-Remaining-AI', rateLimit.remaining);
+    res.setHeader('X-RateLimit-Reset-AI', rateLimit.resetAt);
+
     const results = await Promise.allSettled(
       requests.map((item: AIRequest) => executeAI(req, item))
     );
+    await writeAuditEvent(req, 'AI_BATCH').catch(() => undefined);
     return res.json({
       ok: true,
       results: results.map((result) => result.status === 'fulfilled'
@@ -234,7 +321,8 @@ export async function aiGatewayBatch(req: Request, res: Response) {
         : { ok: false, error: (result.reason as any)?.message || 'AI request failed' })
     });
   } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error?.message || 'AI batch failed' });
+    const status = error?.statusCode === 429 ? 429 : (error?.statusCode || 500);
+    return res.status(status).json({ ok: false, error: error?.message || 'AI batch failed' });
   }
 }
 
@@ -308,7 +396,7 @@ export async function rotateAIProviderKey(req: Request, res: Response) {
   }
 
   try {
-    await writeAuditEvent(req, '[AI Gateway] Gemini credential rotated and verified');
+    await writeAuditEvent(req, 'AI_PROVIDER_ROTATE');
   } catch {
     // Audit failure must not expose or invalidate the credential operation.
   }
@@ -332,7 +420,7 @@ export async function disableAIProvider(req: Request, res: Response) {
     await client.end();
   }
   try {
-    await writeAuditEvent(req, '[AI Gateway] Gemini provider disabled');
+    await writeAuditEvent(req, 'AI_PROVIDER_DISABLE');
   } catch {
     // Audit failure must not expose secrets or change the provider state.
   }

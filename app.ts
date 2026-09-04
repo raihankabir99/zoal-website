@@ -67,6 +67,13 @@ import * as marketingModule from './server/marketing.ts';
 import * as legalModule from './server/legal.ts';
 import * as taxModule from './server/taxes.ts';
 import * as aiModule from './server/ai.ts';
+import {
+  aiGatewayGenerate,
+  aiGatewayBatch,
+  getAIProviderStatus,
+  rotateAIProviderKey,
+  disableAIProvider
+} from './server/ai_gateway.ts';
 import * as aiTranslationsModule from './server/ai_translations.ts';
 import * as analyticsModule from './server/analytics.ts';
 import * as kpiModule from './server/kpi.ts';
@@ -4611,6 +4618,23 @@ app.delete('/api/legal/documents/:id', authenticateRequest, requireRole(['admin'
 // Tax Management Routes
 app.get('/api/taxes', taxModule.getTaxData);
 app.put('/api/taxes/rates/:id', authenticateRequest, requireRole(['admin', 'manager', 'owner']), taxModule.updateTaxRate);
+
+// AI Provider Gateway Routes
+app.post('/api/ai/gateway/generate', authenticateRequest, aiGatewayGenerate);
+app.post('/api/ai/gateway/batch', authenticateRequest, aiGatewayBatch);
+app.get('/api/ai/gateway/status', authenticateRequest, getAIProviderStatus);
+app.post(
+  '/api/ai/gateway/rotate',
+  authenticateRequest,
+  requireRole(['owner', 'admin']),
+  rotateAIProviderKey
+);
+app.post(
+  '/api/ai/gateway/disable',
+  authenticateRequest,
+  requireRole(['owner', 'admin']),
+  disableAIProvider
+);
 
 // AI Workspace Routes
 app.get('/api/ai/workspace', aiModule.getAiWorkspaceData);
