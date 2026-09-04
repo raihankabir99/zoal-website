@@ -1,5 +1,6 @@
 import { getServiceSupabaseClient } from './supabase';
 import { logActivityAsync } from './auth_db';
+import { buildExecutiveForecast } from './forecasting';
 import { Request, Response } from 'express';
 
 const DEFAULT_MODELS = [
@@ -35,7 +36,7 @@ export async function getSimulationRuns(req: Request, res: Response) {
   try {
     const { data, error } = await supabase.from('zoal_simulation_runs').select('id,model_id,revenue_projection,profit_projection,risk_score,scenario_data,captured_at').order('captured_at', { ascending: false }).limit(200);
     if (error) throw error;
-    return res.json((data || []).map((row: any) => ({ id: row.id, model_id: row.model_id, scenario_name: row.scenario_data?.scenario_name || 'Unnamed Scenario', revenue_projection: Number(row.revenue_projection || 0), profit_projection: Number(row.profit_projection || 0), risk_score: Number(row.risk_score || 0), parameters: row.scenario_data?.parameters || {}, captured_at: row.captured_at, profitStatus: row.scenario_data?.resultStatus?.profit || 'unavailable', decisionSignal: row.scenario_data?.decision?.signal || 'insufficient_evidence', riskBasis: row.scenario_data?.risk?.basis || 'model_configuration', recommendation: row.scenario_data?.recommendation || null })));
+    return res.json((data || []).map((row: any) => ({ id: row.id, model_id: row.model_id, scenario_name: row.scenario_data?.scenario_name || 'Unnamed Scenario', revenue_projection: Number(row.revenue_projection || 0), profit_projection: Number(row.profit_projection || 0), risk_score: Number(row.risk_score || 0), parameters: row.scenario_data?.parameters || {}, captured_at: row.captured_at, profitStatus: row.scenario_data?.resultStatus?.profit || 'unavailable', decisionSignal: row.scenario_data?.decision?.signal || 'insufficient_evidence', riskBasis: row.scenario_data?.risk?.basis || 'model_configuration', recommendation: row.scenario_data?.recommendation || null, forecast: row.scenario_data?.forecast || null })));
   } catch (err: any) { console.error('Simulation run registry error:', err); return res.status(500).json({ error: 'Failed to load simulation runs.' }); }
 }
 
@@ -94,6 +95,7 @@ export async function createSimulationRun(req: Request, res: Response) {
     const parameterRisk = (type === 'Pricing' && (p2 > 30 || p1 < 0.8 || p1 > 1.5)) || ((type === 'Warehouse' || type === 'Inventory') && p2 > Math.max(1, baseRevenue * 0.1)) || (type === 'Discount' && p2 > 25);
     const risk = deriveOperationalRisk(core, modelRisk, parameterRisk);
 
+    const forecast = await buildExecutiveForecast(supabase);
     const decisionSignal = baseRevenue <= 0 ? 'insufficient_baseline' : revenueDeltaPct === null ? 'insufficient_evidence' : revenueDeltaPct >= 10 && verifiedGrossProfit !== null && risk.score < 8 ? 'favorable_with_verified_profit' : revenueDeltaPct >= 0 && risk.score < 8 ? 'favorable_revenue_signal_profit_unverified' : revenueDeltaPct < 0 ? 'unfavorable_revenue_signal' : 'review_required';
     const recommendation = decisionSignal === 'favorable_with_verified_profit'
       ? { action: 'Proceed to controlled review', rationale: 'Scenario revenue signal is favorable, verified gross profit is available, and current operational risk is below the review threshold.', confidence: 'deterministic_signal_only' }
@@ -111,9 +113,10 @@ export async function createSimulationRun(req: Request, res: Response) {
       variance: { revenueDelta, revenueDeltaPct },
       resultStatus: { revenue: 'authoritative_scenario', profit: verifiedGrossProfit == null ? 'unavailable' : 'derived_from_verified_gross_profit' },
       risk,
-      decision: { signal: decisionSignal, recommendationStatus: 'deterministic_scenario_signal_only', forecast: false },
+      decision: { signal: decisionSignal, recommendationStatus: 'deterministic_scenario_signal_only', forecast: forecast.status === 'verified' },
       recommendation,
-      data_lineage: { baseline: 'zoal_executive_financial_core_stats', actuals: 'paid_non_cancelled_non_refunded_orders_and_order_time_unit_cost', cogs: core?.cogsStatus || 'unavailable', profit: core?.profitStatus || 'unavailable', operationalRisk: 'lowStockCount+refundRatePct+model_configuration+parameter_bounds', generated_at: generatedAt },
+      forecast: { status: forecast.status, modelVersion: forecast.model_version, method: forecast.forecast_method, dataCutoff: forecast.data_cutoff, generatedAt: forecast.generated_at, accuracy: forecast.accuracy, horizons: forecast.forecasts, financialProfitForecast: forecast.financial },
+      data_lineage: { baseline: 'zoal_executive_financial_core_stats', actuals: 'paid_non_cancelled_non_refunded_orders_and_order_time_unit_cost', cogs: core?.cogsStatus || 'unavailable', profit: core?.profitStatus || 'unavailable', operationalRisk: 'lowStockCount+refundRatePct+model_configuration+parameter_bounds', forecast: 'server_forecasting.buildExecutiveForecast -> zoal_orders -> baseline-wma-v1', generated_at: generatedAt },
       model_type: type, generated_at: generatedAt
     };
 
@@ -121,10 +124,10 @@ export async function createSimulationRun(req: Request, res: Response) {
     if (insertError) throw insertError;
 
     try {
-      if (req.user?.id) await logActivityAsync(req.user.id, req.user.email || null, `[Decision Center] Scenario executed: ${scenario_name.trim()} (${type}) — signal=${decisionSignal}, risk=${risk.score}, profit=${scenarioData.resultStatus.profit}`, req.ip || '', req.headers['user-agent'] || '');
+      if (req.user?.id) await logActivityAsync(req.user.id, req.user.email || null, `[Decision Center] Scenario executed: ${scenario_name.trim()} (${type}) — signal=${decisionSignal}, risk=${risk.score}, profit=${scenarioData.resultStatus.profit}, forecast=${forecast.status}`, req.ip || '', req.headers['user-agent'] || '');
     } catch (auditError) { console.error('Decision simulation audit logging error:', auditError); }
 
-    return res.status(201).json({ id: inserted.id, model_id: inserted.model_id, scenario_name: inserted.scenario_data?.scenario_name, revenue_projection: Number(inserted.revenue_projection || 0), profit_projection: Number(inserted.profit_projection || 0), risk_score: Number(inserted.risk_score || 0), parameters: inserted.scenario_data?.parameters || {}, captured_at: inserted.captured_at, profitStatus: inserted.scenario_data?.resultStatus?.profit, decisionSignal: inserted.scenario_data?.decision?.signal, riskBasis: inserted.scenario_data?.risk?.basis, baselineRevenue: baseRevenue, recommendation: inserted.scenario_data?.recommendation || null });
+    return res.status(201).json({ id: inserted.id, model_id: inserted.model_id, scenario_name: inserted.scenario_data?.scenario_name, revenue_projection: Number(inserted.revenue_projection || 0), profit_projection: Number(inserted.profit_projection || 0), risk_score: Number(inserted.risk_score || 0), parameters: inserted.scenario_data?.parameters || {}, captured_at: inserted.captured_at, profitStatus: inserted.scenario_data?.resultStatus?.profit, decisionSignal: inserted.scenario_data?.decision?.signal, riskBasis: inserted.scenario_data?.risk?.basis, baselineRevenue: baseRevenue, recommendation: inserted.scenario_data?.recommendation || null, forecast: inserted.scenario_data?.forecast || null });
   } catch (err: any) { console.error('Decision simulation execution error:', err); return res.status(500).json({ error: 'Failed to execute authoritative scenario simulation.' }); }
 }
 
@@ -140,4 +143,4 @@ export async function updateDecisionModel(req: Request, res: Response) {
 
 export async function deleteDecisionModel(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{ const {count,error:countError}=await supabase.from('zoal_simulation_runs').select('id',{count:'exact',head:true}).eq('model_id',req.params.id); if(countError)throw countError; if((count||0)>0)return res.status(409).json({error:'Cannot delete a model with existing simulation history.'}); const {error}=await supabase.from('zoal_decision_models').delete().eq('id',req.params.id); if(error)throw error; return res.json({success:true}); }catch(err:any){console.error('Decision model delete error:',err);return res.status(500).json({error:'Failed to delete decision model.'});}}
 
-export async function deleteSimulationRun(req: Request,res:Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{const {error}=await supabase.from('zoal_simulation_runs').delete().eq('id',req.params.id);if(error)throw error;return res.json({success:true});}catch(err:any){console.error('Simulation run deletion error:',err);return res.status(500).json({error:'Failed to delete simulation run.'});}}
+export async function deleteSimulationRun(req: Request,res: Response){ const supabase=getServiceSupabaseClient(); if(!supabase)return res.status(500).json({error:'Supabase service client not initialized.'}); try{const {error}=await supabase.from('zoal_simulation_runs').delete().eq('id',req.params.id);if(error)throw error;return res.json({success:true});}catch(err:any){console.error('Simulation run deletion error:',err);return res.status(500).json({error:'Failed to delete simulation run.'});}}
