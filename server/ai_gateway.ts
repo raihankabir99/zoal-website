@@ -340,7 +340,6 @@ export async function rotateAIProviderKey(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'Invalid provider credential payload' });
   }
 
-  // Validate the supplied credential before activating it. No plaintext key is logged or persisted here.
   try {
     await generateWithGemini({
       provider: 'gemini',
@@ -356,6 +355,8 @@ export async function rotateAIProviderKey(req: Request, res: Response) {
   const client = getPgClient();
   await client.connect();
   try {
+    await client.query('BEGIN');
+    const userId = getUserId(req);
     await client.query(
       `INSERT INTO public.zoal_ai_provider_credentials
        (provider, credential_name, secret_ref, encrypted_secret, iv, auth_tag, status, created_by, rotated_at, last_verified_at)
@@ -368,19 +369,22 @@ export async function rotateAIProviderKey(req: Request, res: Response) {
          created_by = EXCLUDED.created_by,
          rotated_at = now(),
          last_verified_at = now()`,
-      [provider, encrypted.encrypted, encrypted.iv, encrypted.authTag, getUserId(req)]
+      [provider, encrypted.encrypted, encrypted.iv, encrypted.authTag, userId]
     );
+    await client.query(
+      `INSERT INTO public.zoal_activity_logs
+       (id, user_id, email, action, timestamp, ip, user_agent)
+       VALUES ($1, $2, $3, 'AI_PROVIDER_ROTATE', now(), $4, $5)`,
+      [crypto.randomUUID(), userId, (req as any).user?.email || null, req.ip || '', req.headers['user-agent'] || '']
+    );
+    await client.query('COMMIT');
+    return res.json({ ok: true, provider, status: 'active', verified: true });
+  } catch (error: any) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    return res.status(500).json({ ok: false, error: 'Provider credential rotation failed' });
   } finally {
     await client.end();
   }
-
-  try {
-    await writeAuditEvent(req, 'AI_PROVIDER_ROTATE');
-  } catch {
-    // Audit failure must not expose or invalidate the credential operation.
-  }
-
-  return res.json({ ok: true, provider, status: 'active', verified: true });
 }
 
 export async function disableAIProvider(req: Request, res: Response) {
@@ -389,19 +393,30 @@ export async function disableAIProvider(req: Request, res: Response) {
   const client = getPgClient();
   await client.connect();
   try {
-    await client.query(
+    await client.query('BEGIN');
+    const userId = getUserId(req);
+    const update = await client.query(
       `UPDATE public.zoal_ai_provider_credentials
        SET status = 'disabled'
        WHERE provider = $1 AND credential_name = 'primary'`,
       [provider]
     );
+    if (update.rowCount !== 1) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ ok: false, error: 'Provider credential not found' });
+    }
+    await client.query(
+      `INSERT INTO public.zoal_activity_logs
+       (id, user_id, email, action, timestamp, ip, user_agent)
+       VALUES ($1, $2, $3, 'AI_PROVIDER_DISABLE', now(), $4, $5)`,
+      [crypto.randomUUID(), userId, (req as any).user?.email || null, req.ip || '', req.headers['user-agent'] || '']
+    );
+    await client.query('COMMIT');
+    return res.json({ ok: true, provider, status: 'disabled' });
+  } catch {
+    await client.query('ROLLBACK').catch(() => undefined);
+    return res.status(500).json({ ok: false, error: 'Provider disable failed' });
   } finally {
     await client.end();
   }
-  try {
-    await writeAuditEvent(req, 'AI_PROVIDER_DISABLE');
-  } catch {
-    // Audit failure must not expose secrets or change the provider state.
-  }
-  return res.json({ ok: true, provider, status: 'disabled' });
 }
