@@ -138,7 +138,7 @@ export async function createSimulationRun(req: Request, res: Response) {
     const start = new Date(end);
     start.setDate(start.getDate() - 30);
 
-    const { data: core, error: coreError } = await supabase.rpc('zoal_business_insights_core_stats', {
+    const { data: core, error: coreError } = await supabase.rpc('zoal_executive_financial_core_stats', {
       p_start: start.toISOString(),
       p_end: end.toISOString()
     });
@@ -237,7 +237,18 @@ export async function createSimulationRun(req: Request, res: Response) {
         windowDays: 30,
         periodStart: start.toISOString(),
         periodEnd: end.toISOString(),
-        source: 'zoal_business_insights_core_stats'
+        source: 'zoal_executive_financial_core_stats'
+      },
+      financialBaseline: {
+        cogs: core?.cogs ?? null,
+        grossProfit: core?.grossProfit ?? null,
+        grossMargin: core?.grossMargin ?? null,
+        cogsStatus: core?.cogsStatus || 'unavailable',
+        profitStatus: core?.profitStatus || 'unavailable',
+        costCoverage: {
+          itemCount: Number(core?.itemCount || 0),
+          costedItemCount: Number(core?.costedItemCount || 0)
+        }
       },
       variance: {
         revenueDelta,
@@ -259,8 +270,8 @@ export async function createSimulationRun(req: Request, res: Response) {
       },
       recommendation,
       data_lineage: {
-        baseline: 'zoal_business_insights_core_stats',
-        actuals: 'transactional_revenue_aggregation',
+        baseline: 'zoal_executive_financial_core_stats',
+        actuals: 'paid_non_cancelled_non_refunded_orders_and_order_time_unit_cost',
         cogs: core?.cogsStatus || 'unavailable',
         profit: core?.profitStatus || 'unavailable',
         generated_at: new Date().toISOString()
