@@ -1996,10 +1996,31 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
         .maybeSingle();
 
       if (existingOrder) {
-        orderExists = true;
+        // P0 Security & IDOR Prevention: Enforce strict ownership on order reuse
+        if (existingOrder.customer_id) {
+          // 1. Order belongs to a registered customer: caller must be that exact authenticated user
+          if (!req.user || existingOrder.customer_id !== req.user.id) {
+            return res.status(403).json({
+              error: 'Forbidden',
+              message: 'You do not have permission to access or pay for this order.'
+            });
+          }
+        } else {
+          // 2. Order is a guest order (customer_id is null/empty):
+          // Never allow an authenticated user to claim a guest order merely by knowing its orderId.
+          if (req.user) {
+            return res.status(403).json({
+              error: 'Forbidden',
+              message: 'Authenticated users cannot claim or modify guest orders.'
+            });
+          }
+        }
+
         if (existingOrder.payment_status === 'paid') {
           return res.status(400).json({ error: 'This order has already been paid successfully. Cannot duplicate payment.' });
         }
+
+        orderExists = true;
         // Reuse order for retry - update its status back to draft/pending_payment and created_at to restart 15 min expiry
         await supabase
           .from('zoal_orders')
