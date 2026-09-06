@@ -1,18 +1,6 @@
 import React from 'react';
-import { 
-  TrendingUp 
-} from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell 
-} from 'recharts';
+import { TrendingUp } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface AnalyticsOverviewProps {
   metrics: any;
@@ -21,17 +9,17 @@ interface AnalyticsOverviewProps {
   formatCurrency: (value: number) => string;
 }
 
-const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({ 
-  metrics, 
-  revenueTrendData, 
-  categoryPerformanceData, 
-  formatCurrency 
+const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
+  metrics,
+  revenueTrendData,
+  categoryPerformanceData,
+  formatCurrency
 }) => {
+  const categoryCount = categoryPerformanceData.filter((entry: any) => Number(entry.value) > 0).length;
+
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* 1. Analytics Widgets Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
           <div className="flex justify-between items-center text-zinc-500">
             <span className="text-[9px] tracking-widest uppercase font-mono">TOTAL REVENUE</span>
@@ -41,8 +29,8 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
             {formatCurrency(metrics.totalRevenue)} SAR
           </span>
           <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5">
-            <span>Monthly quota: {formatCurrency(metrics.monthlySales)} SAR</span>
-            <span className="text-emerald-400 font-bold">+18.4%</span>
+            <span>Current Month: {formatCurrency(metrics.monthlySales)} SAR</span>
+            <span className="text-zinc-500 font-bold">LIVE</span>
           </div>
         </div>
 
@@ -55,14 +43,14 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
             {metrics.totalOrders} Orders
           </span>
           <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5">
-            <span>Active Pending: {metrics.pendingOrders}</span>
-            <span className="text-amber-400 font-bold">Processing: {metrics.preparingOrders}</span>
+            <span>Pending: {metrics.pendingOrders}</span>
+            <span className="text-amber-400 font-bold">Preparing: {metrics.preparingOrders}</span>
           </div>
         </div>
 
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
           <div className="flex justify-between items-center text-zinc-500">
-            <span className="text-[9px] tracking-widest uppercase font-mono">TOTAL CUSTOMERS</span>
+            <span className="text-[9px] tracking-widest uppercase font-mono">ORDERING CUSTOMERS</span>
             <TrendingUp className="w-4 h-4 text-zinc-400" />
           </div>
           <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">
@@ -70,7 +58,7 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
           </span>
           <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5">
             <span>Active Staff: {metrics.totalStaff}</span>
-            <span className="text-gold-pure font-bold">100% Verified</span>
+            <span className="text-zinc-500 font-bold">FROM CURRENT DATA</span>
           </div>
         </div>
 
@@ -89,18 +77,15 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
             </span>
           </div>
         </div>
-
       </div>
 
-      {/* 2. Interactive Analytical Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
         <div className="lg:col-span-8 bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4 text-left">
           <div className="flex items-center justify-between border-b border-white/5 pb-3">
             <h3 className="text-white text-[10px] font-display uppercase tracking-widest flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-gold-pure" /> Net Revenues Trend Analysis
+              <TrendingUp className="w-4 h-4 text-gold-pure" /> Revenue Trend Analysis
             </h3>
-            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Live List Feed</span>
+            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Current Data</span>
           </div>
 
           <div className="h-[250px] w-full text-xs font-mono">
@@ -115,7 +100,7 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
                 <XAxis dataKey="name" stroke="#222" tick={{ fill: '#666', fontSize: 10 }} />
                 <YAxis stroke="#222" tick={{ fill: '#666', fontSize: 10 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#090909', borderColor: '#222', color: '#fff' }} />
-                <Area type="monotone" dataKey="sales" stroke="#D4AF37" strokeWidth={2} fillOpacity={1} fill="url(#colorAdminRev)" name="Revenues (SAR)" />
+                <Area type="monotone" dataKey="sales" stroke="#D4AF37" strokeWidth={2} fillOpacity={1} fill="url(#colorAdminRev)" name="Revenue (SAR)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -145,7 +130,9 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
                 <Tooltip contentStyle={{ backgroundColor: '#090909', borderColor: '#222' }} />
               </PieChart>
             </ResponsiveContainer>
-            <p className="absolute text-[9px] uppercase font-display tracking-widest text-gold-pure font-bold">5 Categories</p>
+            <p className="absolute text-[9px] uppercase font-display tracking-widest text-gold-pure font-bold">
+              {categoryCount} Active Categories
+            </p>
           </div>
 
           <div className="space-y-2 text-[9px] font-mono">
@@ -160,7 +147,6 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );
