@@ -4,14 +4,10 @@ import {
   Activity, ArrowUpRight, Award, ChevronRight, Sliders, Globe, RefreshCw, Sparkles,
   Layers, FileText, CheckCircle2, Download, Clock, Landmark as BranchIcon, Briefcase, Bell
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
-  BarChart, Bar, Cell, PieChart, Pie, RadarChart, PolarGrid,
-  PolarAngleAxis, PolarRadiusAxis, Radar, Legend, LineChart, Line
+  ResponsiveContainer, LineChart, XAxis, YAxis, Tooltip, BarChart, Bar, Line
 } from 'recharts';
 import { Order, Product } from '../types';
-import { formatCurrency } from '../utils';
 import { supabaseClient } from '../lib/supabaseClient';
 import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
 
@@ -21,41 +17,39 @@ interface OwnerExecutiveDashboardProps {
   products: Product[];
 }
 
-export default function OwnerExecutiveDashboard({
-  currentUser,
-  orders,
-  products
-}: OwnerExecutiveDashboardProps) {
-  // 1. Core Authoritative Financial State from Backend KPI Engine
-  const [kpiData, setKpiData] = useState<{
-    totalRevenue: number | null;
-    totalOrders: number | null;
-    averageOrderValue: number | null;
-    activeCustomers: number | null;
-    lowStockCount: number | null;
-    regional: any[];
-  }>({
-    totalRevenue: null,
-    totalOrders: null,
-    averageOrderValue: null,
-    activeCustomers: null,
-    lowStockCount: null,
-    regional: []
-  });
-  const [isLoadingKpi, setIsLoadingKpi] = useState<boolean>(true);
-  
-  // Authoritative Profit & Margin: Requires verified accounting COGS. Set to null / Not Available as mandated.
-  const totalProfit: number | null = null;
-  const profitMargin: number | null = null;
-  const operatingExpenses: number | null = null;
-  const netYield: number | null = null;
+function SafeBriefing({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <div className="space-y-2 text-left">
+      {text.split('\n').map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} className="h-2" />;
+        if (trimmed.startsWith('### ')) {
+          return <h3 key={idx} className="text-white text-xs font-bold uppercase tracking-widest mt-5 mb-2 font-display text-gold-pure border-b border-white/5 pb-1">{trimmed.slice(4)}</h3>;
+        }
+        if (trimmed.startsWith('#### ')) {
+          return <h4 key={idx} className="text-zinc-200 text-[10.5px] font-bold uppercase tracking-wider mt-4 mb-1.5 font-mono">{trimmed.slice(5)}</h4>;
+        }
+        if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+          return <div key={idx} className="text-zinc-400 text-[10.5px] leading-relaxed ml-4 mb-1 font-sans">• {trimmed.replace(/^[*-]\s*/, '')}</div>;
+        }
+        return <p key={idx} className="text-zinc-300 text-[10.5px] leading-relaxed mb-2.5 font-sans">{line}</p>;
+      })}
+    </div>
+  );
+}
 
-  // 2. Regional and Branch Analysis
-  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+export default function OwnerExecutiveDashboard({ currentUser, orders, products }: OwnerExecutiveDashboardProps) {
+  const [kpiData, setKpiData] = useState<{ totalRevenue: number | null; totalOrders: number | null; averageOrderValue: number | null; activeCustomers: number | null; lowStockCount: number | null; regional: any[] }>({ totalRevenue: null, totalOrders: null, averageOrderValue: null, activeCustomers: null, lowStockCount: null, regional: [] });
+  const [isLoadingKpi, setIsLoadingKpi] = useState(true);
+  const [selectedBranch, setSelectedBranch] = useState('all');
   const [regionalRecords, setRegionalRecords] = useState<any[]>([]);
-  const [forecastRecords, setForecastRecords] = useState<any[]>([]);
-  const [isRegionalLoading, setIsRegionalLoading] = useState<boolean>(true);
-  const [isForecastLoading, setIsForecastLoading] = useState<boolean>(true);
+  const [aiBriefing, setAiBriefing] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiForecasts, setAiForecasts] = useState<any[]>([]);
+  const [selectedHour, setSelectedHour] = useState(18);
+  const [complianceStatus, setComplianceStatus] = useState('NOT_CONNECTED');
+  const [auditLogs, setAuditLogs] = useState<string[]>([]);
 
   const branches = [
     { id: 'all', name: 'Consolidated S.A.' },
@@ -69,66 +63,38 @@ export default function OwnerExecutiveDashboard({
     async function fetchAuthoritativeBackendData() {
       try {
         const { data: { session } } = await supabaseClient.auth.getSession();
-        const token = session?.access_token;
-        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-
-        // Fetch KPI engine data
+        const headers = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
         const kpiRes = await fetch('/api/kpi?range=yearly', { headers });
         if (kpiRes.ok) {
           const kpiJson = await kpiRes.json();
-          if (kpiJson && kpiJson.live) {
+          if (kpiJson?.live) {
             setKpiData({
-              totalRevenue: kpiJson.live.totalRevenue ?? 0,
-              totalOrders: kpiJson.live.orderCount ?? 0,
-              averageOrderValue: kpiJson.live.aov ?? 0,
-              activeCustomers: kpiJson.live.customerCount ?? 0,
-              lowStockCount: kpiJson.live.lowStockCount ?? 0,
+              totalRevenue: kpiJson.live.totalRevenue ?? null,
+              totalOrders: kpiJson.live.orderCount ?? null,
+              averageOrderValue: kpiJson.live.aov ?? null,
+              activeCustomers: kpiJson.live.customerCount ?? null,
+              lowStockCount: kpiJson.live.lowStockCount ?? null,
               regional: kpiJson.live.regional || []
             });
             setRegionalRecords(kpiJson.live.regional || []);
           }
         }
-
-        // Fetch forecasting
         const fcRes = await fetch('/api/forecasting', { headers });
         if (fcRes.ok) {
           const fcJson = await fcRes.json();
-          if (fcJson && fcJson.forecasts) {
-            setForecastRecords(fcJson.forecasts);
-            setAiForecasts(fcJson.forecasts.map((f: any) => ({
-              month: `Horizon ${f.horizon_days}D`,
-              revenue: f.forecast_revenue,
-              profit: null
-            })));
-          }
+          if (fcJson?.forecasts) setAiForecasts(fcJson.forecasts.map((f: any) => ({ month: `Horizon ${f.horizon_days}D`, revenue: f.forecast_revenue })));
         }
       } catch (err) {
         console.error('Failed to fetch authoritative analytics:', err);
       } finally {
         setIsLoadingKpi(false);
-        setIsRegionalLoading(false);
-        setIsForecastLoading(false);
       }
     }
     fetchAuthoritativeBackendData();
   }, []);
 
-  const activeBranchRevenue = selectedBranch === 'all' 
-    ? kpiData.totalRevenue
-    : (regionalRecords.find(r => r.region?.toLowerCase()?.includes(selectedBranch))?.revenue ?? null);
-  
-  const activeBranchProfit = null; // Requires authoritative COGS
-
-  // 3. Category Yield Analysis (Authoritative or Not Available)
-  const categoriesList: { name: string; value: number; color: string }[] = [];
-
-  // 4. Low stock count from authoritative backend
   const lowStockCount = kpiData.lowStockCount ?? 0;
-
-  // 5. AI Business Insights (Gemini Integration)
-  const [aiBriefing, setAiBriefing] = useState<string>('');
-  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
-  const [aiForecasts, setAiForecasts] = useState<any[]>([]);
+  const activeBranchRevenue = selectedBranch === 'all' ? kpiData.totalRevenue : (regionalRecords.find(r => r.region?.toLowerCase()?.includes(selectedBranch))?.revenue ?? null);
 
   const triggerAiAnalysis = async () => {
     setIsAiLoading(true);
@@ -136,97 +102,22 @@ export default function OwnerExecutiveDashboard({
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
-
-      if (!token) {
-        setAiBriefing("### ❌ Authorization Error\n\nNo active security session detected. Please re-authenticate as Owner.");
-        setIsAiLoading(false);
-        return;
-      }
-
+      if (!token) { setAiBriefing('Authorization Error\n\nNo active security session detected. Please re-authenticate as Owner.'); return; }
       const response = await fetch('/api/executive/insights', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          totalRevenue: kpiData.totalRevenue ?? 0,
-          totalProfit: null,
-          totalOrders: kpiData.totalOrders ?? 0,
-          lowStockCount
-        })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ totalRevenue: kpiData.totalRevenue ?? 0, totalProfit: null, totalOrders: kpiData.totalOrders ?? 0, lowStockCount })
       });
-
       const data = await response.json();
-      if (data.success) {
-        setAiBriefing(data.insights);
-      } else {
-        setAiBriefing(`### ❌ Operational Failure\n\n${data.error || 'Unable to assemble dynamic AI briefings.'}`);
-      }
+      setAiBriefing(data.success ? data.insights : `Operational Failure\n\n${data.error || 'Unable to assemble dynamic AI briefings.'}`);
     } catch (err: any) {
-      console.error(err);
-      setAiBriefing(`### ❌ Connection Interrupted\n\nFailed to establish cryptographic portal connection to the server-side model: ${err.message}`);
+      setAiBriefing(`Connection Interrupted\n\nFailed to establish server connection: ${err.message}`);
     } finally {
       setIsAiLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (!isLoadingKpi) {
-      triggerAiAnalysis();
-    }
-  }, [isLoadingKpi, forecastRecords]);
-
-  // Simple Markdown parsing helper for Boutique UI elegance
-  const renderMarkdown = (text: string) => {
-    if (!text) return '';
-    return text
-      .split('\n')
-      .map((line, idx) => {
-        let trimmed = line.trim();
-        if (trimmed.startsWith('###')) {
-          return `<h3 key=${idx} class="text-white text-xs font-bold uppercase tracking-widest mt-5 mb-2 font-display text-gold-pure border-b border-white/5 pb-1">${trimmed.replace(/^###\s*/, '')}</h3>`;
-        }
-        if (trimmed.startsWith('####')) {
-          return `<h4 key=${idx} class="text-zinc-200 text-[10.5px] font-bold uppercase tracking-wider mt-4 mb-1.5 font-mono">${trimmed.replace(/^####\s*/, '')}</h4>`;
-        }
-        if (trimmed.startsWith('*') || trimmed.startsWith('-')) {
-          let content = trimmed.replace(/^[\*\-]\s*/, '');
-          content = content.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-bold">$1</strong>');
-          return `<li key=${idx} class="text-zinc-400 text-[10.5px] leading-relaxed list-disc ml-4 mb-1 font-sans">${content}</li>`;
-        }
-        if (trimmed === '') {
-          return '<div class="h-2"></div>';
-        }
-        let content = line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-bold">$1</strong>');
-        return `<p key=${idx} class="text-zinc-300 text-[10.5px] leading-relaxed mb-2.5 font-sans">${content}</p>`;
-      })
-      .join('');
-  };
-
-  // 6. Interactive Peak-Hour Staff Calculator (Authoritative or Not Available)
-  const [selectedHour, setSelectedHour] = useState<number>(18);
-  const [calcResult, setCalcResult] = useState<any>({
-    activeOrders: null,
-    recommendedStaff: null,
-    efficiencyScore: "Staffing Insight: Not Available"
-  });
-
-  const runCalculation = (hour: number) => {
-    setCalcResult({
-      activeOrders: null,
-      recommendedStaff: null,
-      efficiencyScore: "Staffing Insight: Not Available"
-    });
-  };
-
-  useEffect(() => {
-    runCalculation(selectedHour);
-  }, [selectedHour]);
-
-  // 7. Audit Compliance Center
-  const [complianceStatus, setComplianceStatus] = useState<string>('NOT_CONNECTED');
-  const [auditLogs, setAuditLogs] = useState<string[]>([]);
+  useEffect(() => { if (!isLoadingKpi) triggerAiAnalysis(); }, [isLoadingKpi]);
 
   const runComplianceAudit = () => {
     setComplianceStatus('RUNNING');
@@ -235,407 +126,44 @@ export default function OwnerExecutiveDashboard({
       `[${new Date().toLocaleTimeString()}] Connecting to ZATCA Verification API...`,
       `[${new Date().toLocaleTimeString()}] Audit workflow requires connected verification service. Status: Not Connected.`
     ]);
-    setTimeout(() => {
-      setComplianceStatus('NOT_CONNECTED');
-    }, 1200);
+    setTimeout(() => setComplianceStatus('NOT_CONNECTED'), 1200);
   };
 
   return (
     <div className="space-y-6 text-left animate-fade-in font-sans pb-12" id="owner-executive-board">
-      
-      {/* Dynamic Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-4 gap-4">
-        <div>
-          <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">OWNER SECTOR</span>
-          <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white flex items-center gap-2">
-            <Landmark className="w-5 h-5 text-gold-pure animate-pulse" />
-            Owner Dashboard
-          </h2>
-        </div>
-
-        {/* Branch Switcher & Global Utilities */}
-        <div className="flex items-center gap-2">
-          {/* Branch Switcher */}
-          <div className="flex items-center gap-2 bg-zinc-950 p-1 border border-white/5 rounded-xs font-mono text-[9px] uppercase">
-            {branches.map(b => (
-              <button
-                key={b.id}
-                onClick={() => setSelectedBranch(b.id)}
-                className={`px-2.5 py-1 rounded-sm cursor-pointer transition-all ${
-                  selectedBranch === b.id 
-                    ? 'bg-gold-pure text-black font-bold' 
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {b.name}
-              </button>
-            ))}
-          </div>
-          
-          <DashboardLanguageSwitcher />
-          
-          <button className="p-2 border border-white/5 rounded-xs text-zinc-400 hover:text-white hover:border-gold-pure/40 transition-all">
-            <Bell className="w-4 h-4" />
-          </button>
-        </div>
+        <div><span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">OWNER SECTOR</span><h2 className="text-xl font-bold tracking-widest font-display uppercase text-white flex items-center gap-2"><Landmark className="w-5 h-5 text-gold-pure animate-pulse" />Owner Dashboard</h2></div>
+        <div className="flex items-center gap-2"><div className="flex items-center gap-2 bg-zinc-950 p-1 border border-white/5 rounded-xs font-mono text-[9px] uppercase">{branches.map(b => <button key={b.id} onClick={() => setSelectedBranch(b.id)} className={`px-2.5 py-1 rounded-sm cursor-pointer transition-all ${selectedBranch === b.id ? 'bg-gold-pure text-black font-bold' : 'text-zinc-400 hover:text-white'}`}>{b.name}</button>)}</div><DashboardLanguageSwitcher /><button className="p-2 border border-white/5 rounded-xs text-zinc-400 hover:text-white"><Bell className="w-4 h-4" /></button></div>
       </div>
 
-      {/* 1. Core Financial KPI Metrics (Glassmorphism layout) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Metric 1 */}
-        <div className="bg-zinc-950/40 backdrop-blur-md border border-white/5 p-4 rounded-xs space-y-1 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gold-pure/5 rounded-full blur-2xl group-hover:bg-gold-pure/10 duration-300" />
-          <div className="flex justify-between items-center text-zinc-500 font-mono text-[8px] uppercase tracking-widest">
-            <span>TOTAL REVENUE</span>
-            <Activity className="w-3.5 h-3.5 text-gold-pure" />
-          </div>
-          <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-white text-md font-sans tracking-tight">
-              {activeBranchRevenue !== null && activeBranchRevenue !== undefined
-                ? `${activeBranchRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`
-                : 'Not Available'}
-            </strong>
-            <span className="text-zinc-500 text-[8px] font-mono font-bold">
-              Growth: Not Available
-            </span>
-          </div>
-          <span className="text-zinc-600 font-mono text-[8px] block">
-            {selectedBranch === 'all' ? 'All national branches combined' : `${branches.find(b => b.id === selectedBranch)?.name} overview`}
-          </span>
-        </div>
-
-        {/* Metric 2 */}
-        <div className="bg-zinc-950/40 backdrop-blur-md border border-white/5 p-4 rounded-xs space-y-1 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gold-pure/5 rounded-full blur-2xl group-hover:bg-gold-pure/10 duration-300" />
-          <div className="flex justify-between items-center text-zinc-500 font-mono text-[8px] uppercase tracking-widest">
-            <span>Net Gross Profit Margin</span>
-            <Award className="w-3.5 h-3.5 text-gold-pure" />
-          </div>
-          <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-gold-pure text-sm font-sans tracking-tight">
-              Not Available
-            </strong>
-            <span className="text-zinc-500 text-[8.5px] font-mono">
-              Requires COGS
-            </span>
-          </div>
-          <span className="text-zinc-600 font-mono text-[8px] block">
-            Authoritative accounting COGS required
-          </span>
-        </div>
-
-        {/* Metric 3 */}
-        <div className="bg-zinc-950/40 backdrop-blur-md border border-white/5 p-4 rounded-xs space-y-1 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-red-500/5 rounded-full blur-2xl group-hover:bg-red-500/10 duration-300" />
-          <div className="flex justify-between items-center text-zinc-500 font-mono text-[8px] uppercase tracking-widest">
-            <span>Operational Overhead</span>
-            <Sliders className="w-3.5 h-3.5 text-zinc-500" />
-          </div>
-          <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-zinc-300 text-sm font-sans tracking-tight">
-              Not Available
-            </strong>
-            <span className="text-zinc-500 text-[8.5px] font-mono">
-              Unamortized
-            </span>
-          </div>
-          <span className="text-zinc-600 font-mono text-[8px] block">
-            Requires expense telemetry
-          </span>
-        </div>
-
-        {/* Metric 4 */}
-        <div className="bg-zinc-950/40 backdrop-blur-md border border-white/5 p-4 rounded-xs space-y-1 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 duration-300" />
-          <div className="flex justify-between items-center text-zinc-500 font-mono text-[8px] uppercase tracking-widest">
-            <span>Net Yield</span>
-            <Landmark className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="flex justify-between items-baseline pt-1">
-            <strong className="text-emerald-400 text-sm font-sans tracking-tight">
-              Not Available
-            </strong>
-            <span className="text-zinc-500 text-[8.5px] font-mono">
-              Requires Profit
-            </span>
-          </div>
-          <span className="text-zinc-600 font-mono text-[8px] block">
-            Net capital after operating fees
-          </span>
-        </div>
-
+        {[
+          ['TOTAL REVENUE', activeBranchRevenue !== null && activeBranchRevenue !== undefined ? `${activeBranchRevenue.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} SAR` : 'Not Available', selectedBranch === 'all' ? 'All national branches combined' : `${branches.find(b=>b.id===selectedBranch)?.name} overview`],
+          ['Net Gross Profit Margin', 'Not Available', 'Authoritative accounting COGS required'],
+          ['Operational Overhead', 'Not Available', 'Requires expense telemetry'],
+          ['Net Yield', 'Not Available', 'Requires authoritative profit and expenses']
+        ].map(([label,value,note]) => <div key={label} className="bg-zinc-950/40 border border-white/5 p-4 rounded-xs space-y-2"><div className="text-zinc-500 font-mono text-[8px] uppercase tracking-widest">{label}</div><strong className="text-white text-md">{value}</strong><span className="text-zinc-600 font-mono text-[8px] block">{note}</span></div>)}
       </div>
 
-      {/* 2. Visual Graphs Section (Bento Grid) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Double-Line Chart: Revenue & Profit Trends */}
-        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-3 lg:col-span-2">
-          <div className="flex justify-between items-center border-b border-white/5 pb-2">
-            <div>
-              <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Financial Velocity Trends</span>
-              <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Revenue Growth Trajectory</h3>
-            </div>
-            <div className="text-[8px] font-mono text-zinc-500 flex gap-3">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#D4AF37]" /> Revenue</span>
-            </div>
-          </div>
-          <div className="h-64 font-mono text-[8.5px]">
-            {kpiData.totalRevenue !== null ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={[
-                  { name: 'Current Period', revenue: kpiData.totalRevenue }
-                ]}>
-                  <XAxis dataKey="name" stroke="#555" fontSize={8} />
-                  <YAxis stroke="#555" fontSize={8} />
-                  <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 10 }} />
-                  <Line type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} dot={{ r: 3, fill: '#D4AF37' }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-zinc-500 text-center px-4">
-                <span>Revenue Growth Trajectory: Not Available — Requires authoritative trend data</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Category and Brand Shares breakdown */}
-        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-3">
-          <div className="border-b border-white/5 pb-2">
-            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Segment Allocation</span>
-            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Category Distribution Share</h3>
-          </div>
-          <div className="h-44 font-mono text-[9px] flex items-center justify-center text-zinc-500 text-center px-4">
-            <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Category Analytics: Not Available — Requires authoritative category metrics</span>
-          </div>
-          <div className="space-y-1.5 text-[8px] font-mono border-t border-white/5 pt-3 text-center text-zinc-600">
-            Authoritative category metrics required
-          </div>
-        </div>
-
+        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-3 lg:col-span-2"><div><span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Financial Velocity Trends</span><h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Revenue Growth Trajectory</h3></div><div className="h-64">{kpiData.totalRevenue !== null ? <ResponsiveContainer width="100%" height="100%"><LineChart data={[{name:'Current Period',revenue:kpiData.totalRevenue}]}><XAxis dataKey="name" stroke="#555" fontSize={8}/><YAxis stroke="#555" fontSize={8}/><Tooltip/><Line type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2}/></LineChart></ResponsiveContainer> : <div className="h-full flex items-center justify-center text-zinc-500">Not Available — Requires authoritative trend data</div>}</div></div>
+        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs flex items-center justify-center text-zinc-500 text-center text-[9px]">Category Analytics: Not Available — Requires authoritative category metrics</div>
       </div>
 
-      {/* 3. AI STRATEGIC BUSINESS INSIGHTS (Gemini integration module with gold glowing borders) */}
-      <div className="bg-black border border-gold-pure/20 rounded-xs overflow-hidden relative shadow-[0_0_25px_rgba(212,175,55,0.05)]">
-        <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-gold-pure to-transparent" />
-        
-        <div className="p-5 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-950/60">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-gold-pure animate-spin-slow" />
-              <span className="text-[9px] font-mono uppercase text-gold-pure tracking-widest font-bold block">AL ZOAL PROGNOSTIC PORTAL</span>
-            </div>
-            <h3 className="text-xs uppercase font-mono text-white tracking-widest font-bold">AI Strategic Business Advisor</h3>
-          </div>
-
-          <button
-            onClick={triggerAiAnalysis}
-            disabled={isAiLoading}
-            className="py-1 px-3 bg-gold-pure hover:bg-white text-black font-mono text-[8.5px] uppercase font-bold tracking-widest rounded-xs transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            {isAiLoading ? (
-              <>
-                <RefreshCw className="w-3 h-3 animate-spin" /> Assembling Briefing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-3 h-3" /> Recompile Strategic Assembly
-              </>
-            )}
-          </button>
-        </div>
-
+      <div className="bg-black border border-gold-pure/20 rounded-xs overflow-hidden">
+        <div className="p-5 border-b border-white/5 flex justify-between items-center gap-4"><div><span className="text-[9px] font-mono uppercase text-gold-pure tracking-widest font-bold">AL ZOAL PROGNOSTIC PORTAL</span><h3 className="text-xs uppercase font-mono text-white tracking-widest font-bold">AI Strategic Business Advisor</h3></div><button onClick={triggerAiAnalysis} disabled={isAiLoading} className="py-1 px-3 bg-gold-pure hover:bg-white text-black font-mono text-[8.5px] uppercase font-bold tracking-widest rounded-xs flex items-center gap-1.5">{isAiLoading ? <><RefreshCw className="w-3 h-3 animate-spin"/>Assembling Briefing...</> : <><RefreshCw className="w-3 h-3"/>Recompile Strategic Assembly</>}</button></div>
         <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-white/5">
-          
-          {/* Main Briefing Output Area */}
-          <div className="lg:col-span-2 p-6 space-y-4 max-h-[420px] overflow-y-auto custom-scrollbar bg-black">
-            {isAiLoading ? (
-              <div className="py-24 text-center space-y-3 font-mono text-[10px]">
-                <Sparkles className="w-6 h-6 text-gold-pure animate-spin mx-auto" />
-                <p className="text-zinc-500 uppercase tracking-widest animate-pulse">Establishing cryptographic connection to Gemini-3.5-Flash...</p>
-                <p className="text-[8px] text-zinc-600">Gathering live transaction indices and active warehouse stock parameters</p>
-              </div>
-            ) : aiBriefing ? (
-              <div className="text-left" dangerouslySetInnerHTML={{ __html: renderMarkdown(aiBriefing) }} />
-            ) : (
-              <div className="py-20 text-center text-zinc-500 font-mono text-[10px]">
-                No prognostic assembly compiled. Click <strong className="text-gold-pure">Recompile Strategic Assembly</strong> to initialize Gemini strategy brief.
-              </div>
-            )}
-          </div>
-
-          {/* Right Area: Dynamic Growth Forecasting Chart */}
-          <div className="p-6 space-y-5 bg-zinc-950/20">
-            <div>
-              <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Predictive Analytics</span>
-              <h4 className="text-[10px] uppercase font-mono text-white font-bold tracking-wider">Revenue Forecast — WMA Baseline</h4>
-              <p className="text-[9px] text-zinc-500 font-sans leading-relaxed mt-1">Generated dynamically based on server-side weighted moving average regression models.</p>
-            </div>
-
-            <div className="h-44 font-mono text-[8px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={aiForecasts}>
-                  <XAxis dataKey="month" stroke="#444" fontSize={8} />
-                  <YAxis stroke="#444" fontSize={8} />
-                  <Tooltip contentStyle={{ backgroundColor: '#050505', borderColor: '#222', fontSize: 9 }} />
-                  <Bar dataKey="revenue" fill="#D4AF37" name="Proj. Revenue" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="border-t border-white/5 pt-3 space-y-1.5 font-mono text-[8px] text-zinc-400">
-              <div className="flex justify-between">
-                <span>Profit Forecast:</span>
-                <span className="text-zinc-500 font-bold">Not Available</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Horizon Data Cutoff:</span>
-                <span className="text-white font-bold">Verified Backend</span>
-              </div>
-            </div>
-          </div>
-
+          <div className="lg:col-span-2 p-6 space-y-4 max-h-[420px] overflow-y-auto custom-scrollbar bg-black">{isAiLoading ? <div className="py-24 text-center text-zinc-500">Assembling Briefing...</div> : aiBriefing ? <SafeBriefing text={aiBriefing}/> : <div className="py-20 text-center text-zinc-500">No briefing compiled.</div>}</div>
+          <div className="p-6 space-y-5 bg-zinc-950/20"><h4 className="text-[10px] uppercase font-mono text-white font-bold tracking-wider">Revenue Forecast — WMA Baseline</h4><div className="h-44"><ResponsiveContainer width="100%" height="100%"><BarChart data={aiForecasts}><XAxis dataKey="month" stroke="#444" fontSize={8}/><YAxis stroke="#444" fontSize={8}/><Tooltip/><Bar dataKey="revenue" fill="#D4AF37" name="Proj. Revenue"/></BarChart></ResponsiveContainer></div><div className="text-[8px] text-zinc-500">Profit Forecast: Not Available</div></div>
         </div>
       </div>
 
-      {/* 4. Branch Performers & Operations Management Calculator (Bento Layout) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* Top VIP Clients and Performers Index */}
-        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
-          <div className="border-b border-white/5 pb-2">
-            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Premium Directory</span>
-            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Customer Intelligence</h3>
-          </div>
-
-          <div className="space-y-6 py-8 text-center font-mono text-[9px] text-zinc-500 px-4">
-            <p className="uppercase tracking-widest leading-relaxed">Customer Intelligence: Not Available — Requires authoritative customer analytics</p>
-          </div>
-        </div>
-
-        {/* Dynamic Peak-Hour Staff Allocation Calculator */}
-        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
-          <div className="border-b border-white/5 pb-2">
-            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Fulfillment Optimizer</span>
-            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Interactive Peak-Hour Staff Allocation</h3>
-          </div>
-
-          <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
-            Select a target hours coordinate to review active operational volume levels compiled from backend telemetry.
-          </p>
-
-          <div className="space-y-4 pt-2 font-mono text-[9px]">
-            {/* Slider */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-[10px]">
-                <span className="text-white font-bold">Standard Hour Selection:</span>
-                <span className="text-gold-pure font-bold font-mono text-xs">{selectedHour}:00 AST</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="23"
-                value={selectedHour}
-                onChange={(e) => setSelectedHour(Number(e.target.value))}
-                className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
-              />
-              <div className="flex justify-between text-[7px] text-zinc-600 uppercase font-bold pt-1">
-                <span>00:00 AM (Midnight)</span>
-                <span>12:00 PM (Noon)</span>
-                <span>23:00 PM</span>
-              </div>
-            </div>
-
-            {/* Outputs */}
-            <div className="grid grid-cols-3 gap-2 pt-2 text-center text-[10px]">
-              <div className="bg-black/60 border border-white/5 p-3 rounded-xs space-y-1">
-                <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Active Traffic</span>
-                <strong className="text-zinc-400 text-xs block font-sans">Not Available</strong>
-              </div>
-              <div className="bg-black/60 border border-white/5 p-3 rounded-xs space-y-1">
-                <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Support Staff</span>
-                <strong className="text-zinc-400 text-xs block font-sans">Not Available</strong>
-              </div>
-              <div className="bg-black/60 border border-white/5 p-3 rounded-xs space-y-1">
-                <span className="text-[7.5px] text-zinc-500 uppercase tracking-widest block">Service Protocol</span>
-                <strong className="text-zinc-400 text-[8.5px] block font-sans leading-tight mt-1">Staffing Insight: Not Available</strong>
-              </div>
-            </div>
-
-            {/* Quick Action */}
-            <button
-              onClick={() => {
-                alert(`Staffing Insight: Not Available — Requires authoritative telemetry.`);
-              }}
-              className="w-full py-2 bg-zinc-900 text-zinc-500 uppercase tracking-widest font-bold text-[8.5px] border border-white/10 cursor-not-allowed"
-            >
-              Sync Staff Matrix Schedules (Unavailable)
-            </button>
-          </div>
-        </div>
-
+        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs text-center text-zinc-500 text-[9px]">Customer Intelligence: Not Available — Requires authoritative customer analytics</div>
+        <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4"><h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Interactive Peak-Hour Staff Allocation</h3><input type="range" min="0" max="23" value={selectedHour} onChange={e=>setSelectedHour(Number(e.target.value))} className="w-full"/><div className="grid grid-cols-3 gap-2 text-center text-zinc-500 text-[9px]"><div>Active Traffic<br/><strong>Not Available</strong></div><div>Support Staff<br/><strong>Not Available</strong></div><div>Service Protocol<br/><strong>Not Available</strong></div></div></div>
       </div>
 
-      {/* 5. Compliance, Audits and Verification Center */}
-      <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-2 gap-4">
-          <div>
-            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Regulatory Gatekeeper</span>
-            <h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Compliance Auditor (Verification Service)</h3>
-          </div>
-          <button
-            onClick={runComplianceAudit}
-            disabled={complianceStatus === 'RUNNING'}
-            className="py-1.5 px-3 bg-white text-black font-mono text-[8.5px] uppercase font-bold tracking-widest hover:bg-[#D4AF37] hover:text-black rounded-xs transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Shield className="w-3.5 h-3.5" /> Trigger compliance audit
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 bg-black border border-white/5 p-4 rounded-xs font-mono text-[9px] text-zinc-400 space-y-1.5 h-44 overflow-y-auto custom-scrollbar text-left">
-            {auditLogs.length > 0 ? (
-              auditLogs.map((log, lIdx) => (
-                <div key={lIdx} className="border-b border-white/1 pb-1 flex gap-2">
-                  <span className="text-[#D4AF37] shrink-0 font-bold">●</span>
-                  <span>{log}</span>
-                </div>
-              ))
-            ) : (
-              <div className="h-full flex items-center justify-center text-zinc-600 uppercase tracking-widest text-[8.5px]">
-                Audit workflow requires connected verification service.
-              </div>
-            )}
-          </div>
-
-          <div className="bg-black/40 border border-white/5 p-4 rounded-xs space-y-3 font-mono text-[9px]">
-            <span className="text-zinc-500 text-[8px] uppercase tracking-widest block font-bold">Compliance Parameters</span>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>ZATCA TRN Verification:</span>
-                <span className="text-zinc-400 font-bold">Not Connected</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Standard GCC VAT Code:</span>
-                <span className="text-zinc-400">Verification Not Available</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Regional Data Isolation:</span>
-                <span className="text-zinc-400 font-bold">Not Available</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Compliance Level:</span>
-                <span className="px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase bg-zinc-900 text-zinc-400 border border-white/5">
-                  {complianceStatus}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4"><div className="flex justify-between items-center"><div><span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono block">Regulatory Gatekeeper</span><h3 className="text-xs uppercase font-mono text-gold-pure tracking-widest font-bold">Compliance Auditor (Verification Service)</h3></div><button onClick={runComplianceAudit} disabled={complianceStatus==='RUNNING'} className="py-1.5 px-3 bg-white text-black font-mono text-[8.5px] uppercase font-bold tracking-widest"><Shield className="w-3.5 h-3.5"/> Trigger compliance audit</button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="md:col-span-2 bg-black border border-white/5 p-4 rounded-xs font-mono text-[9px] text-zinc-400">{auditLogs.length ? auditLogs.map((log,i)=><div key={i}>{log}</div>) : 'Audit workflow requires connected verification service.'}</div><div className="bg-black/40 border border-white/5 p-4 rounded-xs text-[9px] text-zinc-400">ZATCA TRN Verification: Not Connected<br/>GCC VAT: Verification Not Available<br/>Regional Data Isolation: Not Available<br/>Compliance Level: {complianceStatus}</div></div></div>
     </div>
   );
 }
