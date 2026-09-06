@@ -7,6 +7,10 @@
   },
   "routes": [
     {
+      "src": "/api/admin/dashboard-analytics",
+      "dest": "/api/admin/dashboard-analytics.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
