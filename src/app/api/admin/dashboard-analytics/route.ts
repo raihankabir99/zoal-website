@@ -23,13 +23,7 @@ export async function GET(req: NextRequest) {
     const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const trendStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (ROLLING_MONTHS - 1), 1));
 
-    const [
-      customersResult,
-      staffResult,
-      productsResult,
-      categoriesResult,
-      ordersResult
-    ] = await Promise.all([
+    const [customersResult, staffResult, productsResult, categoriesResult, ordersResult, inventoryResult] = await Promise.all([
       supabase.from('zoal_users').select('id', { count: 'exact', head: true }).eq('role', 'customer'),
       supabase.from('zoal_users').select('id', { count: 'exact', head: true }).neq('role', 'customer'),
       supabase.from('zoal_products').select('id', { count: 'exact', head: true }).eq('is_active', true),
@@ -38,7 +32,8 @@ export async function GET(req: NextRequest) {
         .from('zoal_orders')
         .select('id, customer_id, status, total_amount, payment_status, created_at')
         .gte('created_at', trendStart.toISOString())
-        .lt('created_at', nextMonthStart.toISOString())
+        .lt('created_at', nextMonthStart.toISOString()),
+      supabase.from('zoal_inventory').select('quantity, min_stock, low_stock_threshold')
     ]);
 
     if (customersResult.error) throw customersResult.error;
@@ -46,6 +41,7 @@ export async function GET(req: NextRequest) {
     if (productsResult.error) throw productsResult.error;
     if (categoriesResult.error) throw categoriesResult.error;
     if (ordersResult.error) throw ordersResult.error;
+    if (inventoryResult.error) throw inventoryResult.error;
 
     const orders = ordersResult.data || [];
     const revenueOrders = orders.filter(
@@ -68,14 +64,13 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const categoryIds = (productsResult.data || []).map((product: any) => product.id);
+    const categoryCountMap: Record<string, number> = {};
     const { data: productsWithCategories, error: productCategoryError } = await supabase
       .from('zoal_products')
       .select('category_id')
       .eq('is_active', true);
     if (productCategoryError) throw productCategoryError;
 
-    const categoryCountMap: Record<string, number> = {};
     (productsWithCategories || []).forEach((product: any) => {
       if (product.category_id) categoryCountMap[product.category_id] = (categoryCountMap[product.category_id] || 0) + 1;
     });
@@ -92,16 +87,22 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {});
 
-    const uniqueCustomers = new Set(
-      orders.map((order: any) => order.customer_id).filter(Boolean)
-    ).size;
+    const inventory = inventoryResult.data || [];
+    const lowStockCount = inventory.filter((row: any) => {
+      const quantity = Number(row.quantity || 0);
+      const threshold = Number(row.low_stock_threshold ?? row.min_stock ?? 0);
+      return quantity > 0 && threshold > 0 && quantity <= threshold;
+    }).length;
+    const outOfStockCount = inventory.filter((row: any) => Number(row.quantity || 0) <= 0).length;
+
+    const uniqueCustomers = new Set(orders.map((order: any) => order.customer_id).filter(Boolean)).size;
 
     return apiResponse({
       metrics: {
         totalRevenue,
         monthlySales,
         totalOrders: orders.length,
-        totalCustomers: customersResult.count || uniqueCustomers,
+        totalCustomers: customersResult.count ?? uniqueCustomers,
         totalStaff: staffResult.count || 0,
         totalProductsCount: productsResult.count || 0,
         pendingOrders: statusCounts.Pending || 0,
@@ -109,8 +110,8 @@ export async function GET(req: NextRequest) {
         shippedOrders: statusCounts.Shipped || 0,
         deliveredOrders: statusCounts.Completed || 0,
         cancelledOrders: statusCounts.Cancelled || 0,
-        lowStockCount: 0,
-        outOfStockCount: 0
+        lowStockCount,
+        outOfStockCount
       },
       revenueTrendData: trendMonths,
       categoryPerformanceData
