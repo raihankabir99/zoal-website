@@ -1497,14 +1497,6 @@ app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) 
   // Never trust client-supplied order.customerId or req.body.customerId.
   const resolvedCustomerId = req.user?.id || null;
 
-  // P1 Guest Order IDOR Prevention: orderId alone is never proof of guest ownership.
-  // A secure retry token is generated only for newly-created guest orders; only its hash is persisted.
-  const isGuestCheckout = !resolvedCustomerId;
-  const newGuestRetryToken = isGuestCheckout ? randomBytes(32).toString('base64url') : null;
-  const newGuestRetryTokenHash = newGuestRetryToken
-    ? createHash('sha256').update(newGuestRetryToken).digest('hex')
-    : null;
-
   const supabase = getSupabaseClient();
   if (!supabase) {
     // If Supabase is not configured, we still return success because handleOrderSuccess 
@@ -1962,6 +1954,14 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
   // Unauthenticated (guest) checkout MUST use NULL.
   // Never trust client-supplied customerId from request body.
   const resolvedCustomerId = req.user?.id || null;
+
+  // P1 Guest Order IDOR Prevention: orderId alone is never proof of guest ownership.
+  // A secure retry token is generated only for newly-created guest orders; only its hash is persisted.
+  const isGuestCheckout = !resolvedCustomerId;
+  const newGuestRetryToken = isGuestCheckout ? randomBytes(32).toString('base64url') : null;
+  const newGuestRetryTokenHash = newGuestRetryToken
+    ? createHash('sha256').update(newGuestRetryToken).digest('hex')
+    : null;
 
   const supabase = getSupabaseClient();
   const dbConfigured = !!supabase;
