@@ -1497,6 +1497,14 @@ app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) 
   // Never trust client-supplied order.customerId or req.body.customerId.
   const resolvedCustomerId = req.user?.id || null;
 
+  // P1 Guest Order IDOR Prevention: orderId alone is never proof of guest ownership.
+  // A secure retry token is generated only for newly-created guest orders; only its hash is persisted.
+  const isGuestCheckout = !resolvedCustomerId;
+  const newGuestRetryToken = isGuestCheckout ? randomBytes(32).toString('base64url') : null;
+  const newGuestRetryTokenHash = newGuestRetryToken
+    ? createHash('sha256').update(newGuestRetryToken).digest('hex')
+    : null;
+
   const supabase = getSupabaseClient();
   if (!supabase) {
     // If Supabase is not configured, we still return success because handleOrderSuccess 
@@ -1928,7 +1936,8 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
     customerEmail, 
     customerPhone, 
     address,
-    termsAccepted
+    termsAccepted,
+    guestRetryToken
   } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -2006,12 +2015,29 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
             });
           }
         } else {
-          // 2. Order is a guest order (customer_id is null/empty):
-          // Never allow an authenticated user to claim a guest order merely by knowing its orderId.
+          // 2. Guest order: an authenticated user cannot claim it, and an anonymous caller
+          // must prove possession of the cryptographic retry credential. orderId is not enough.
           if (req.user) {
+            return res.status(403).json({ error: 'Forbidden', message: 'You do not have permission to access or pay for this order.' });
+          }
+
+          const storedHash = typeof existingOrder.guest_retry_token_hash === 'string'
+            ? existingOrder.guest_retry_token_hash
+            : '';
+          const submittedHash = typeof guestRetryToken === 'string' && guestRetryToken.length > 0
+            ? createHash('sha256').update(guestRetryToken).digest('hex')
+            : '';
+
+          let tokenValid = false;
+          if (storedHash && submittedHash && storedHash.length === submittedHash.length) {
+            tokenValid = timingSafeEqual(Buffer.from(storedHash, 'utf8'), Buffer.from(submittedHash, 'utf8'));
+          }
+
+          // Legacy guest orders without a stored credential fail closed.
+          if (!tokenValid) {
             return res.status(403).json({
               error: 'Forbidden',
-              message: 'Authenticated users cannot claim or modify guest orders.'
+              message: 'You do not have permission to access or pay for this order.'
             });
           }
         }
@@ -2059,8 +2085,8 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
             INSERT INTO zoal_orders (
               id, customer_id, status, subtotal, discount_amount, shipping_cost, 
               tax_amount, total_amount, payment_method, payment_status, notes, 
-              terms_accepted_version_id, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+              terms_accepted_version_id, guest_retry_token_hash, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
           `;
           await pgClient.query(orderSql, [
             orderId,
@@ -2074,7 +2100,8 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
             paymentMethod || 'credit_card',
             'unpaid',
             `Payment initiated via ${paymentMethod || 'Card'}.\nName: ${customerName || ''}\nEmail: ${customerEmail || ''}\nPhone: ${customerPhone || ''}\nAddress: ${address || ''}`,
-            termsAcceptedVersionId
+            termsAcceptedVersionId,
+            newGuestRetryTokenHash
           ]);
 
           // 2. Insert order items
@@ -2182,6 +2209,7 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
         payment_method: paymentMethod || 'credit_card',
         payment_status: 'unpaid',
         terms_accepted_version_id: termsAcceptedVersionId,
+        guest_retry_token_hash: newGuestRetryTokenHash,
         notes: `Payment initiated via ${paymentMethod || 'Card'}.\nName: ${customerName || ''}\nEmail: ${customerEmail || ''}\nPhone: ${customerPhone || ''}\nAddress: ${address || ''}`,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -2285,6 +2313,7 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
       success: true,
       orderId,
       paymentId,
+      ...(newGuestRetryToken ? { guestRetryToken: newGuestRetryToken } : {}),
       redirectUrl,
       amount: totals.totalAmount,
       isSimulation: !moyasarSecretKey
