@@ -947,11 +947,15 @@ export default function Checkout({
         headers['Authorization'] = `Bearer ${token}`;
       }
 
+      const paymentOrderId = `ZL-${Math.floor(100000 + Math.random() * 900000)}`;
+      const existingGuestRetryToken = sessionStorage.getItem(`zoal_guest_order_retry:${paymentOrderId}`);
+
       fetch('/api/payments/create', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          orderId: `ZL-${Math.floor(100000 + Math.random() * 900000)}`,
+          orderId: paymentOrderId,
+          ...(existingGuestRetryToken ? { guestRetryToken: existingGuestRetryToken } : {}),
           items: cart.map(item => ({
             productId: item.product.id,
             name: item.product.name,
@@ -976,6 +980,9 @@ export default function Checkout({
         return res.json();
       })
       .then(data => {
+        if (data.guestRetryToken && data.orderId) {
+          sessionStorage.setItem(`zoal_guest_order_retry:${data.orderId}`, data.guestRetryToken);
+        }
         if (data.redirectUrl) {
           window.location.href = data.redirectUrl;
         } else {
