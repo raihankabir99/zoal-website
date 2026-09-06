@@ -11,10 +11,7 @@ interface AnalyticsOverviewProps {
 
 const CATEGORY_COLORS = ['#D4AF37', '#F3E5AB', '#888', '#FFF', '#AA8C2C'];
 
-const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
-  metrics: fallbackMetrics,
-  formatCurrency
-}) => {
+const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({ formatCurrency }) => {
   const [serverData, setServerData] = useState<any | null>(null);
   const [analyticsError, setAnalyticsError] = useState(false);
 
@@ -46,7 +43,9 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
     };
   }, []);
 
-  const metrics = serverData?.metrics || fallbackMetrics || {};
+  // Dashboard values must come exclusively from the server-authoritative analytics endpoint.
+  // Never fall back to the legacy client-computed metrics or synthetic chart data.
+  const metrics = serverData?.metrics || {};
   const revenueTrendData = serverData?.revenueTrendData || [];
   const categoryPerformanceData = useMemo(() => {
     return (serverData?.categoryPerformanceData || []).map((entry: any, index: number) => ({
@@ -60,39 +59,39 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({
     <div className="space-y-8 animate-fade-in">
       {analyticsError && (
         <div className="border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-[9px] font-mono uppercase tracking-widest text-amber-300">
-          Live dashboard analytics unavailable — showing existing dashboard values only. Synthetic trend data is not displayed.
+          Live dashboard analytics unavailable — verified server data could not be loaded. No synthetic dashboard values are displayed.
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
           <div className="flex justify-between items-center text-zinc-500"><span className="text-[9px] tracking-widest uppercase font-mono">TOTAL REVENUE</span><TrendingUp className="w-4 h-4 text-gold-pure" /></div>
-          <span className="text-2xl sm:text-3xl font-mono text-gold-pure font-bold block">{formatCurrency(Number(metrics.totalRevenue || 0))} SAR</span>
-          <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5"><span>Current Month: {formatCurrency(Number(metrics.monthlySales || 0))} SAR</span><span className="text-zinc-500 font-bold">LIVE</span></div>
+          <span className="text-2xl sm:text-3xl font-mono text-gold-pure font-bold block">{serverData ? `${formatCurrency(Number(metrics.totalRevenue || 0))} SAR` : '—'}</span>
+          <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5"><span>Current Month: {serverData ? `${formatCurrency(Number(metrics.monthlySales || 0))} SAR` : '—'}</span><span className="text-zinc-500 font-bold">{serverData ? 'LIVE' : 'UNVERIFIED'}</span></div>
         </div>
 
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
           <div className="flex justify-between items-center text-zinc-500"><span className="text-[9px] tracking-widest uppercase font-mono">TOTAL ORDERS</span><TrendingUp className="w-4 h-4 text-[#AA8C2C]" /></div>
-          <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">{Number(metrics.totalOrders || 0)} Orders</span>
-          <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5"><span>Pending: {Number(metrics.pendingOrders || 0)}</span><span className="text-amber-400 font-bold">Preparing: {Number(metrics.preparingOrders || 0)}</span></div>
+          <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">{serverData ? `${Number(metrics.totalOrders || 0)} Orders` : '—'}</span>
+          <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5"><span>Pending: {serverData ? Number(metrics.pendingOrders || 0) : '—'}</span><span className="text-amber-400 font-bold">Preparing: {serverData ? Number(metrics.preparingOrders || 0) : '—'}</span></div>
         </div>
 
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
           <div className="flex justify-between items-center text-zinc-500"><span className="text-[9px] tracking-widest uppercase font-mono">ORDERING CUSTOMERS</span><TrendingUp className="w-4 h-4 text-zinc-400" /></div>
-          <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">{Number(metrics.totalCustomers || 0)} Accounts</span>
-          <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5"><span>Active Staff: {Number(metrics.totalStaff || 0)}</span><span className="text-zinc-500 font-bold">FROM CURRENT DATA</span></div>
+          <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">{serverData ? `${Number(metrics.totalCustomers || 0)} Accounts` : '—'}</span>
+          <div className="flex justify-between text-[8.5px] font-mono text-zinc-500 pt-1 border-t border-white/5"><span>Active Staff: {serverData ? Number(metrics.totalStaff || 0) : '—'}</span><span className="text-zinc-500 font-bold">{serverData ? 'FROM CURRENT DATA' : 'UNVERIFIED'}</span></div>
         </div>
 
         <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-2 text-left relative overflow-hidden group hover:border-gold-pure/45 duration-300">
           <div className="flex justify-between items-center text-zinc-500"><span className="text-[9px] tracking-widest uppercase font-mono">TOTAL PRODUCTS</span><TrendingUp className="w-4 h-4 text-zinc-400" /></div>
-          <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">{Number(metrics.totalProductsCount || 0)} Catalog Items</span>
-          <div className="flex justify-between text-[8.5px] font-mono pt-1 border-t border-white/5"><span className="text-zinc-500">Out of Stock: {Number(metrics.outOfStockCount || 0)}</span><span className={Number(metrics.lowStockCount || 0) > 0 ? 'text-red-400 font-bold animate-pulse' : 'text-zinc-500'}>Low Stock Alert: {Number(metrics.lowStockCount || 0)}</span></div>
+          <span className="text-2xl sm:text-3xl font-mono text-white font-bold block">{serverData ? `${Number(metrics.totalProductsCount || 0)} Catalog Items` : '—'}</span>
+          <div className="flex justify-between text-[8.5px] font-mono pt-1 border-t border-white/5"><span className="text-zinc-500">Out of Stock: {serverData ? Number(metrics.outOfStockCount || 0) : '—'}</span><span className={serverData && Number(metrics.lowStockCount || 0) > 0 ? 'text-red-400 font-bold animate-pulse' : 'text-zinc-500'}>Low Stock Alert: {serverData ? Number(metrics.lowStockCount || 0) : '—'}</span></div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4 text-left">
-          <div className="flex items-center justify-between border-b border-white/5 pb-3"><h3 className="text-white text-[10px] font-display uppercase tracking-widest flex items-center gap-2"><TrendingUp className="w-4 h-4 text-gold-pure" /> Revenue Trend Analysis</h3><span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Current Data</span></div>
+          <div className="flex items-center justify-between border-b border-white/5 pb-3"><h3 className="text-white text-[10px] font-display uppercase tracking-widest flex items-center gap-2"><TrendingUp className="w-4 h-4 text-gold-pure" /> Revenue Trend Analysis</h3><span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">{serverData ? 'Current Data' : 'UNVERIFIED'}</span></div>
           <div className="h-[250px] w-full text-xs font-mono">
             {revenueTrendData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
