@@ -1,4 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getServiceSupabaseClient, getSupabaseClient } from '../../backend/supabase.ts';
 import { authenticateRequest, requireRole, rateLimiterMiddleware } from '../../backend/security.ts';
 
@@ -18,21 +17,6 @@ async function runMiddleware(req: any, res: any, middleware: any): Promise<boole
   });
 }
 
-async function runAuthMiddleware(req: any, res: any, middleware: any): Promise<boolean> {
-  return new Promise((resolve, reject) => {
-    let finished = false;
-    const next = () => { if (!finished) { finished = true; resolve(true); } };
-    try {
-      Promise.resolve(middleware(req, res, next)).catch((error) => {
-        if (!finished) { finished = true; reject(error); }
-      });
-      if (res.writableEnded && !finished) { finished = true; resolve(false); }
-    } catch (error) {
-      if (!finished) { finished = true; reject(error); }
-    }
-  });
-}
-
 function monthKey(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 }
@@ -41,16 +25,16 @@ function monthLabel(date: Date) {
   return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
   const rateLimitPassed = await runMiddleware(req, res, rateLimiter);
   if (!rateLimitPassed || res.writableEnded) return;
 
-  const authenticated = await runAuthMiddleware(req, res, authenticateRequest);
+  const authenticated = await runMiddleware(req, res, authenticateRequest);
   if (!authenticated || res.writableEnded) return;
 
-  const authorized = await runAuthMiddleware(req, res, requireRole(['admin', 'owner', 'manager']));
+  const authorized = await runMiddleware(req, res, requireRole(['admin', 'owner', 'manager']));
   if (!authorized || res.writableEnded) return;
 
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
