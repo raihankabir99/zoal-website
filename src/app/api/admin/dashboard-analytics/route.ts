@@ -23,11 +23,13 @@ export async function GET(req: NextRequest) {
     const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const trendStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (ROLLING_MONTHS - 1), 1));
 
-    const [customersResult, staffResult, productsResult, categoriesResult, ordersResult, inventoryResult] = await Promise.all([
+    const [customersResult, staffResult, productsResult, categoriesResult, totalOrdersResult, allRevenueResult, ordersResult, inventoryResult] = await Promise.all([
       supabase.from('zoal_users').select('id', { count: 'exact', head: true }).eq('role', 'customer'),
-      supabase.from('zoal_users').select('id', { count: 'exact', head: true }).neq('role', 'customer'),
+      supabase.from('zoal_users').select('id', { count: 'exact', head: true }).in('role', ['staff', 'manager', 'admin', 'owner']),
       supabase.from('zoal_products').select('id', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('zoal_categories').select('id, name').order('name', { ascending: true }),
+      supabase.from('zoal_orders').select('id', { count: 'exact', head: true }),
+      supabase.from('zoal_orders').select('total_amount').eq('payment_status', 'paid').neq('status', 'Cancelled'),
       supabase
         .from('zoal_orders')
         .select('id, customer_id, status, total_amount, payment_status, created_at')
@@ -40,15 +42,14 @@ export async function GET(req: NextRequest) {
     if (staffResult.error) throw staffResult.error;
     if (productsResult.error) throw productsResult.error;
     if (categoriesResult.error) throw categoriesResult.error;
+    if (totalOrdersResult.error) throw totalOrdersResult.error;
+    if (allRevenueResult.error) throw allRevenueResult.error;
     if (ordersResult.error) throw ordersResult.error;
     if (inventoryResult.error) throw inventoryResult.error;
 
     const orders = ordersResult.data || [];
-    const revenueOrders = orders.filter(
-      (order: any) => order.payment_status === 'paid' && order.status !== 'Cancelled'
-    );
-
-    const totalRevenue = revenueOrders.reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
+    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && order.status !== 'Cancelled');
+    const totalRevenue = (allRevenueResult.data || []).reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
     const monthlySales = revenueOrders
       .filter((order: any) => new Date(order.created_at) >= currentMonthStart && new Date(order.created_at) < nextMonthStart)
       .reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
@@ -76,10 +77,7 @@ export async function GET(req: NextRequest) {
     });
 
     const categoryPerformanceData = (categoriesResult.data || [])
-      .map((category: any) => ({
-        name: category.name,
-        value: categoryCountMap[category.id] || 0
-      }))
+      .map((category: any) => ({ name: category.name, value: categoryCountMap[category.id] || 0 }))
       .filter((category: any) => category.value > 0);
 
     const statusCounts = orders.reduce((acc: Record<string, number>, order: any) => {
@@ -101,7 +99,7 @@ export async function GET(req: NextRequest) {
       metrics: {
         totalRevenue,
         monthlySales,
-        totalOrders: orders.length,
+        totalOrders: totalOrdersResult.count || 0,
         totalCustomers: customersResult.count ?? uniqueCustomers,
         totalStaff: staffResult.count || 0,
         totalProductsCount: productsResult.count || 0,
