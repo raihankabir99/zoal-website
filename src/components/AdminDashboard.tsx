@@ -69,6 +69,7 @@ const StrategicReport = lazyWithRetry(() => import('./StrategicReport').then(m =
 import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
 import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 import { useBranding } from './BrandingContext';
+import { supabaseClient } from '../lib/supabaseClient';
 import { useNotificationEngine } from '../lib/notificationStore';
 import { ConfirmationModal } from './common/ConfirmationModal';
 
@@ -110,6 +111,30 @@ export default function AdminDashboard({
 
   // State management for navigation
   const [activeTab, setActiveTab] = useState<string>(initialTab || 'dashboard');
+  const [dashboardSyncState, setDashboardSyncState] = useState<'unknown' | 'refreshing' | 'verified' | 'failed'>('unknown');
+
+  const refreshDashboardData = async () => {
+    setDashboardSyncState('refreshing');
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) throw new Error('No active authenticated session');
+
+      const response = await fetch('/api/admin/dashboard-analytics', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error(`Dashboard verification failed (${response.status})`);
+      await response.json();
+
+      setDashboardSyncState('verified');
+      addLog('Dashboard server verification completed successfully');
+      window.setTimeout(() => window.location.reload(), 150);
+    } catch (error) {
+      console.error('Dashboard refresh verification failed:', error);
+      setDashboardSyncState('failed');
+      addLog('Dashboard server verification failed');
+    }
+  };
 
   useEffect(() => {
     if (initialTab) {
@@ -3131,9 +3156,33 @@ export default function AdminDashboard({
           </div>
 
           {/* Quick status indicator */}
-          <div className="hidden lg:flex items-center gap-2 border border-emerald-500/20 bg-emerald-900/10 px-3 py-1 rounded-full text-emerald-400 text-[9px] uppercase tracking-widest font-mono">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Supabase Server: Fully Synchronized</span>
+          <div className="hidden lg:flex items-center gap-2 border border-white/10 bg-white/[0.02] px-3 py-1 rounded-full text-[9px] uppercase tracking-widest font-mono" aria-live="polite">
+            <div className={`w-1.5 h-1.5 rounded-full ${
+              dashboardSyncState === 'verified'
+                ? 'bg-emerald-500'
+                : dashboardSyncState === 'refreshing'
+                  ? 'bg-amber-400 animate-pulse'
+                  : dashboardSyncState === 'failed'
+                    ? 'bg-red-500'
+                    : 'bg-zinc-500'
+            }`} />
+            <span className={
+              dashboardSyncState === 'verified'
+                ? 'text-emerald-400'
+                : dashboardSyncState === 'refreshing'
+                  ? 'text-amber-300'
+                  : dashboardSyncState === 'failed'
+                    ? 'text-red-400'
+                    : 'text-zinc-500'
+            }>
+              {dashboardSyncState === 'verified'
+                ? 'Server Data Verified'
+                : dashboardSyncState === 'refreshing'
+                  ? 'Verifying Server Data…'
+                  : dashboardSyncState === 'failed'
+                    ? 'Verification Failed'
+                    : 'Server Sync Status Unknown'}
+            </span>
           </div>
 
           {/* Action Tools */}
@@ -3195,13 +3244,13 @@ export default function AdminDashboard({
                   {/* Sync & Refresh Actions */}
                   <div className="flex items-center shrink-0">
                     <button 
-                      onClick={() => {
-                        addLog('Triggered Manual Supabase Re-Sync');
-                        alert('Supabase master records verified and up-to-date!');
-                      }}
-                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
+                      type="button"
+                      onClick={refreshDashboardData}
+                      disabled={dashboardSyncState === 'refreshing'}
+                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 disabled:opacity-60 disabled:cursor-not-allowed rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
                     >
-                      <RefreshCw className="w-3 h-3 text-gold-pure" /> Refresh Data
+                      <RefreshCw className={`w-3 h-3 text-gold-pure ${dashboardSyncState === 'refreshing' ? 'animate-spin' : ''}`} />
+                      {dashboardSyncState === 'refreshing' ? 'Verifying…' : 'Refresh Data'}
                     </button>
                   </div>
                 </div>
