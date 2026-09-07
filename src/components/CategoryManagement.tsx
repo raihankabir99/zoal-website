@@ -920,72 +920,38 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   // Execute Import Action
-  const handleExecuteImport = () => {
+  const handleExecuteImport = async () => {
     if (!importValidationReport || importValidationReport.valid.length === 0) {
       alert("No valid category records available to import.");
       return;
     }
-
-    // Save backup for rollback
-    setPreviousCategoriesBackup([...categories]);
-
-    const validNewItems = importValidationReport.valid;
-    let finalCategoriesList: Category[] = [];
-    let updatedCount = 0;
-    let importedCount = 0;
-
     if (importMode === 'replace') {
-      finalCategoriesList = validNewItems;
-      importedCount = validNewItems.length;
-    } else if (importMode === 'merge') {
-      const mergedMap = new Map<string, Category>();
-      categories.forEach(c => mergedMap.set(c.id, c));
-      
-      validNewItems.forEach(newItem => {
-        if (mergedMap.has(newItem.id)) {
-          mergedMap.set(newItem.id, { ...mergedMap.get(newItem.id)!, ...newItem });
-          updatedCount++;
-        } else {
-          mergedMap.set(newItem.id, newItem);
-          importedCount++;
-        }
-      });
-      finalCategoriesList = Array.from(mergedMap.values());
-    } else {
-      // Skip Mode
-      const existingIds = new Set(categories.map(c => c.id));
-      const existingSlugs = new Set(categories.map(c => c.slug));
-      
-      const newOnly = validNewItems.filter(item => !existingIds.has(item.id) && !existingSlugs.has(item.slug));
-      importedCount = newOnly.length;
-      finalCategoriesList = [...categories, ...newOnly];
+      alert("Replace mode is disabled in production because destructive category replacement requires a dedicated transactional migration and product-reference safety check.");
+      return;
     }
 
-    setCategories(finalCategoriesList);
-    localStorage.setItem('zoal_admin_categories', JSON.stringify(finalCategoriesList));
-
-    setImportFinalResult({
-      imported: importedCount,
-      updated: updatedCount,
-      skipped: importValidationReport.summary.invalidCount,
-      failed: importValidationReport.summary.invalidCount,
-      mode: importMode.toUpperCase()
-    });
-
-    setImportStep('report');
-    addLog(`Bulk Imported Categories (${importedCount} new, ${updatedCount} updated, mode: ${importMode})`, "Category Import Engine");
+    try {
+      const result = await categoryApi.bulkImport(importValidationReport.valid, importMode);
+      await refreshCategoriesFromServer();
+      setPreviousCategoriesBackup(null);
+      setImportFinalResult({
+        imported: Number(result?.imported || 0),
+        updated: Number(result?.updated || 0),
+        skipped: Number(result?.skipped || 0) + importValidationReport.summary.invalidCount,
+        failed: Number(result?.failed || 0) + importValidationReport.summary.invalidCount,
+        mode: importMode.toUpperCase()
+      });
+      setImportStep('report');
+      addLog(`Bulk category import completed on server (${result?.imported || 0} new, ${result?.updated || 0} updated, mode: ${importMode})`, "Category Import Engine");
+    } catch (error: any) {
+      console.error('Server category import failed:', error);
+      alert(error?.message || 'Server import failed. No local fallback was used.');
+    }
   };
 
-  // Rollback Import Action
+  // Rollback is intentionally disabled: the former localStorage snapshot was not authoritative.
   const handleRollbackImport = () => {
-    if (previousCategoriesBackup) {
-      setCategories(previousCategoriesBackup);
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(previousCategoriesBackup));
-      setPreviousCategoriesBackup(null);
-      addLog("Rolled back previous category import operation", "Category Import Engine");
-      alert("Rollback successful! Categories restored to state prior to import.");
-      setIsImportModalOpen(false);
-    }
+    alert("Local rollback is disabled for data integrity. A production rollback must be performed from an authoritative server-side audit/version mechanism.");
   };
 
   // Export Categories to JSON or CSV file
