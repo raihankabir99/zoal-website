@@ -79,6 +79,16 @@ export const categoryApi = {
     return payload?.data || payload?.category || payload;
   },
 
+  async bulkUpdate(ids: string[], action: 'publish'|'unpublish'|'delete'|'sort') {
+    const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'bulk-update', ids, action }) });
+    return payload?.data || payload;
+  },
+
+  async duplicate(sourceId: string, includeChildren: boolean) {
+    const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'duplicate', sourceId, includeChildren }) });
+    return payload?.data || payload;
+  },
+
   async move(id: string, parentId: string | null) {
     const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'move', id, parentId }) });
     return payload?.data || payload;
