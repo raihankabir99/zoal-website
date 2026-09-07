@@ -97,48 +97,90 @@ export async function PUT(req: NextRequest) {
 /** DELETE /api/categories — authenticated admin/staff deletion. */
 export async function PATCH(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
-  const auth = await verifyAuthAndRole(req, MANAGEMENT_ROLES);
-  if (!auth.ok) return apiError(auth.error || 'Unauthorized', auth.status || 401);
+  const auth = await verifyAuthAndRole(req, MANAGEMENT_ROLES as any);
+  if (auth.error) return auth.error;
 
   try {
     const body = await req.json();
-    if (body?.operation !== 'bulk-import') return apiError('Unsupported category operation', 400);
-    const mode = body.mode;
-    const items = Array.isArray(body.items) ? body.items : [];
-    if (!['merge', 'skip'].includes(mode)) return apiError('Unsupported import mode. Replace is intentionally disabled for safety.', 400);
-    if (!items.length) return apiError('No category records supplied', 400);
-    if (items.length > 500) return apiError('Import batch exceeds 500 records', 400);
+    const operation = body?.operation;
 
-    const { data: existing, error: existingError } = await supabase.from('zoal_categories').select('id,name,slug');
-    if (existingError) return apiError(existingError.message, 500);
-    const byId = new Map((existing || []).map((x: any) => [x.id, x]));
-    const bySlug = new Map((existing || []).map((x: any) => [x.slug, x]));
-    const seen = new Set<string>();
-    const result = { imported: 0, updated: 0, skipped: 0, failed: 0 };
-
-    for (const raw of items) {
-      const key = String(raw.id || raw.slug || raw.name || '');
-      if (!key || seen.has(key)) { result.skipped++; continue; }
-      seen.add(key);
-      const mapped = mapCategoryPayload(raw);
-      if (!mapped.name || !mapped.slug) { result.failed++; continue; }
-      const existingRow = (raw.id && byId.get(raw.id)) || bySlug.get(mapped.slug);
-      if (existingRow) {
-        if (mode === 'skip') { result.skipped++; continue; }
-        const { error } = await supabase.from('zoal_categories').update(mapped).eq('id', existingRow.id);
-        if (error) result.failed++; else result.updated++;
-      } else {
-        const { error } = await supabase.from('zoal_categories').insert({ ...mapped, id: raw.id || undefined });
-        if (error) result.failed++; else result.imported++;
+    if (operation === 'bulk-import') {
+      const mode = body.mode;
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (!['merge', 'skip'].includes(mode)) return apiError('Unsupported import mode. Replace is intentionally disabled for safety.', 400);
+      if (!items.length || items.length > 500) return apiError('Import batch must contain 1–500 records', 400);
+      const { data: existing, error } = await supabase.from('zoal_categories').select('id,name,slug');
+      if (error) return apiError(error.message, 500);
+      const byId = new Map((existing || []).map((x: any) => [x.id, x]));
+      const bySlug = new Map((existing || []).map((x: any) => [x.slug, x]));
+      const result = { imported: 0, updated: 0, skipped: 0, failed: 0 };
+      for (const raw of items) {
+        const mapped = mapCategoryPayload(raw);
+        if (!mapped.name || !mapped.slug) { result.failed++; continue; }
+        const row = (raw.id && byId.get(raw.id)) || bySlug.get(mapped.slug);
+        const q = row
+          ? (mode === 'skip' ? null : supabase.from('zoal_categories').update(mapped).eq('id', row.id))
+          : supabase.from('zoal_categories').insert(mapped);
+        if (!q) { result.skipped++; continue; }
+        const { error: writeError } = await q;
+        if (writeError) result.failed++; else row ? result.updated++ : result.imported++;
       }
+      return apiResponse({ ...result, mode, rollbackAvailable: false });
     }
 
-    return apiResponse({ ...result, mode, rollbackAvailable: false });
+    if (operation === 'move') {
+      const id = String(body.id || '').trim();
+      const parentId = body.parentId === null || body.parentId === 'root' ? null : String(body.parentId || '').trim();
+      if (!id) return apiError('Category id is required', 400);
+      if (parentId === id) return apiError('A category cannot be its own parent', 400);
+      if (parentId) {
+        const { data: parent, error } = await supabase.from('zoal_categories').select('id').eq('id', parentId).single();
+        if (error || !parent) return apiError('Destination parent not found', 404);
+        let cursor = parentId, steps = 0;
+        while (cursor && steps++ < 100) {
+          const { data: node } = await supabase.from('zoal_categories').select('parent_id').eq('id', cursor).single();
+          if (!node) break;
+          if (node.parent_id === id) return apiError('Cannot move a category beneath its own descendant', 409);
+          cursor = node.parent_id;
+        }
+      }
+      const { data, error } = await supabase.from('zoal_categories').update({ parent_id: parentId, updated_at: new Date().toISOString() }).eq('id', id).select('*').single();
+      if (error) return apiError(error.message, 500);
+      return apiResponse(data);
+    }
+
+    if (operation === 'reorder') {
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (!items.length || items.length > 500) return apiError('Reorder batch must contain 1–500 records', 400);
+      for (const item of items) {
+        if (!item?.id || !Number.isFinite(Number(item.sortOrder))) return apiError('Invalid reorder item', 400);
+        const { error } = await supabase.from('zoal_categories').update({ sort_order: Number(item.sortOrder), updated_at: new Date().toISOString() }).eq('id', item.id);
+        if (error) return apiError(error.message, 500);
+      }
+      return apiResponse({ updated: items.length });
+    }
+
+    if (operation === 'merge') {
+      const sourceId = String(body.sourceId || '').trim(), destinationId = String(body.destinationId || '').trim();
+      if (!sourceId || !destinationId || sourceId === destinationId) return apiError('Valid distinct source and destination category ids are required', 400);
+      const { data: source } = await supabase.from('zoal_categories').select('id').eq('id', sourceId).single();
+      const { data: destination } = await supabase.from('zoal_categories').select('id').eq('id', destinationId).single();
+      if (!source || !destination) return apiError('Source or destination category not found', 404);
+      const { error: childError } = await supabase.from('zoal_categories').update({ parent_id: destinationId, updated_at: new Date().toISOString() }).eq('parent_id', sourceId);
+      if (childError) return apiError(childError.message, 500);
+      const sourceAction = body.archiveSource !== false
+        ? supabase.from('zoal_categories').update({ status: 'Archived', updated_at: new Date().toISOString() }).eq('id', sourceId)
+        : supabase.from('zoal_categories').delete().eq('id', sourceId);
+      const { error: sourceError } = await sourceAction;
+      if (sourceError) return apiError(sourceError.message, 500);
+      return apiResponse({ merged: true, sourceId, destinationId, archived: body.archiveSource !== false });
+    }
+
+    return apiError('Unsupported category operation', 400);
   } catch (err: any) {
     return apiError(err.message || 'Server error', 500);
   }
 }
-
 export async function DELETE(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
   const auth = await verifyAuthAndRole(req, MANAGEMENT_ROLES as any);
