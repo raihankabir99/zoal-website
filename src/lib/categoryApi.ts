@@ -79,6 +79,14 @@ export const categoryApi = {
     return payload?.data || payload?.category || payload;
   },
 
+  async bulkImport(items: Partial<CategoryApiRecord>[], mode: 'merge' | 'skip') {
+    const payload = await request('/api/categories', {
+      method: 'PATCH',
+      body: JSON.stringify({ operation: 'bulk-import', mode, items })
+    });
+    return payload?.data || payload;
+  },
+
   async remove(id: string) {
     return request('/api/categories', { method: 'DELETE', body: JSON.stringify({ id }) });
   },
