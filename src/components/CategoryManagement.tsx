@@ -1537,29 +1537,16 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   }, [categories, sortParentId]);
 
-  const handleMoveSiblingOrder = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === directSiblingsToSort.length - 1) return;
-
+  const handleMoveSiblingOrder = async (index: number, direction: 'up' | 'down') => {
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === directSiblingsToSort.length - 1)) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     const reordered = [...directSiblingsToSort];
-    
-    // Swap positions
-    const temp = reordered[index];
-    reordered[index] = reordered[targetIndex];
-    reordered[targetIndex] = temp;
-
-    // Apply sort indexes sequentially
-    const updatedCategories = categories.map(cat => {
-      const reorderIdx = reordered.findIndex(rc => rc.id === cat.id);
-      if (reorderIdx !== -1) {
-        return { ...cat, sortOrder: reorderIdx + 1 };
-      }
-      return cat;
-    });
-
-    setCategories(updatedCategories);
-    localStorage.setItem('zoal_admin_categories', JSON.stringify(updatedCategories));
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    try {
+      await categoryApi.reorder(reordered.map((cat, i) => ({ id: cat.id, sortOrder: i + 1 })));
+      await refreshCategoriesFromServer();
+      addLog(`Re-sorted subcategories for parent ID ${sortParentId}`, "Category Center");
+    } catch (error: any) { alert(error?.message || 'Server reorder failed.'); }
   };
 
   // Native HTML5 Drag and Drop Handlers for sibling reordering
@@ -1571,103 +1558,52 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     e.preventDefault();
   };
 
-  const handleDropSibling = (e: React.DragEvent, targetIndex: number) => {
+  const handleDropSibling = async (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
     const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
     if (isNaN(sourceIndex) || sourceIndex === targetIndex) return;
-
     const reordered = [...directSiblingsToSort];
     const [removed] = reordered.splice(sourceIndex, 1);
     reordered.splice(targetIndex, 0, removed);
-
-    const updatedCategories = categories.map(cat => {
-      const reorderIdx = reordered.findIndex(rc => rc.id === cat.id);
-      if (reorderIdx !== -1) {
-        return { ...cat, sortOrder: reorderIdx + 1 };
-      }
-      return cat;
-    });
-
-    setCategories(updatedCategories);
-    localStorage.setItem('zoal_admin_categories', JSON.stringify(updatedCategories));
-    addLog(`Re-sorted subcategories for parent ID ${sortParentId}`, "Category Center");
+    try {
+      await categoryApi.reorder(reordered.map((cat, i) => ({ id: cat.id, sortOrder: i + 1 })));
+      await refreshCategoriesFromServer();
+      addLog(`Re-sorted subcategories for parent ID ${sortParentId}`, "Category Center");
+    } catch (error: any) { alert(error?.message || 'Server reorder failed.'); }
   };
 
   // Merge Category execution (combines products under one category into another)
-  const handleMergeCategoriesSubmit = (e: React.FormEvent) => {
+  const handleMergeCategoriesSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mergeSourceId || !mergeDestId) {
-      alert("Please select both a source and a destination category.");
+    if (!mergeSourceId || !mergeDestId || mergeSourceId === mergeDestId) {
+      alert("Please select two different categories.");
       return;
     }
-    if (mergeSourceId === mergeDestId) {
-      alert("Source and destination categories must be different.");
-      return;
-    }
-
     const sourceCat = categories.find(c => c.id === mergeSourceId);
     const destCat = categories.find(c => c.id === mergeDestId);
-
-    if (!sourceCat || !destCat) {
-      alert("Invalid categories specified.");
-      return;
-    }
-
-    const confirmMerge = window.confirm(
-      `Merge Category Action Confirmation:\n\n` +
-      `All catalog products linked to "${sourceCat.name}" will be mapped under "${destCat.name}".\n\n` +
-      `This change is final. Proceed?`
-    );
-
-    if (!confirmMerge) return;
-
-    // Execute product category assignment swap (if product points to source slug or name)
-    addLog(`Merged Category division "${sourceCat.name}" into "${destCat.name}"`, "Category Center");
-    
-    // De-orphan or clean source category
-    const deleteSource = window.confirm(`Would you like to permanently delete the source category "${sourceCat.name}" now?`);
-    
-    if (deleteSource) {
-      setCategories(prev => {
-        const updated = prev
-          .filter(c => c.id !== mergeSourceId)
-          // Move any child subcategories to the destination parent
-          .map(c => c.parent === mergeSourceId ? { ...c, parent: mergeDestId } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-    } else {
-      // Keep but archive the source
-      setCategories(prev => {
-        const updated = prev.map(c => c.id === mergeSourceId ? { ...c, status: 'Archived' } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-    }
-
-    setIsMergeModalOpen(false);
-    alert("Merging and products re-mapping completed successfully.");
+    if (!sourceCat || !destCat || !window.confirm(`Merge "${sourceCat.name}" into "${destCat.name}"? Server-side hierarchy changes will be authoritative.`)) return;
+    const deleteSource = window.confirm(`Delete source category "${sourceCat.name}"? Cancel archives it instead.`);
+    try {
+      await categoryApi.merge(mergeSourceId, mergeDestId, !deleteSource);
+      await refreshCategoriesFromServer();
+      addLog(`Merged Category division "${sourceCat.name}" into "${destCat.name}"`, "Category Center");
+      setIsMergeModalOpen(false);
+    } catch (error: any) { alert(error?.message || 'Server merge failed.'); }
   };
 
   // Move entire branch sub-tree helper
-  const handleMoveBranchSubmit = (e: React.FormEvent) => {
+  const handleMoveBranchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!moveTargetId) return;
-
     const targetCat = categories.find(c => c.id === moveTargetId);
     if (!targetCat) return;
-
     const newParent = moveNewParentId === 'root' ? null : moveNewParentId;
-
-    setCategories(prev => {
-      const updated = prev.map(c => c.id === moveTargetId ? { ...c, parent: newParent } : c);
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-      return updated;
-    });
-
-    addLog(`Moved category branch "${targetCat.name}" to parent ${moveNewParentId}`, "Category Center");
-    setIsMoveModalOpen(false);
-    alert("Category branch moved successfully!");
+    try {
+      await categoryApi.move(moveTargetId, newParent);
+      await refreshCategoriesFromServer();
+      addLog(`Moved category branch "${targetCat.name}" to parent ${moveNewParentId}`, "Category Center");
+      setIsMoveModalOpen(false);
+    } catch (error: any) { alert(error?.message || 'Server move failed.'); }
   };
 
   // Bulk action operations
