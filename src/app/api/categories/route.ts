@@ -128,6 +128,60 @@ export async function PATCH(req: NextRequest) {
       return apiResponse({ ...result, mode, rollbackAvailable: false });
     }
 
+    if (operation === 'bulk-update') {
+      const ids = Array.isArray(body.ids) ? [...new Set(body.ids.filter((id: any) => typeof id === 'string' && id.trim()))] : [];
+      const action = body.action;
+      if (!ids.length || ids.length > 500) return apiError('Bulk operation requires 1–500 category ids', 400);
+      if (!['publish','unpublish','delete','sort'].includes(action)) return apiError('Unsupported bulk action', 400);
+      if (action === 'delete') {
+        const { data: children, error: childError } = await supabase.from('zoal_categories').select('id,parent_id').in('parent_id', ids);
+        if (childError) return apiError(childError.message, 500);
+        if ((children || []).length) return apiError('Bulk delete blocked: selected categories still have child categories. Move or merge them first.', 409);
+        const { error } = await supabase.from('zoal_categories').delete().in('id', ids);
+        if (error) return apiError(error.message, 500);
+        return apiResponse({ deleted: ids.length });
+      }
+      if (action === 'sort') {
+        for (let i=0;i<ids.length;i++) {
+          const { error } = await supabase.from('zoal_categories').update({ sort_order: i+1, updated_at: new Date().toISOString() }).eq('id', ids[i]);
+          if (error) return apiError(error.message, 500);
+        }
+        return apiResponse({ updated: ids.length });
+      }
+      const status = action === 'publish' ? 'Published' : 'Draft';
+      const { error } = await supabase.from('zoal_categories').update({ status, updated_at: new Date().toISOString() }).in('id', ids);
+      if (error) return apiError(error.message, 500);
+      return apiResponse({ updated: ids.length, status });
+    }
+
+    if (operation === 'duplicate') {
+      const sourceId = String(body.sourceId || '').trim();
+      const includeChildren = Boolean(body.includeChildren);
+      if (!sourceId) return apiError('Source category id is required', 400);
+      const { data: source, error } = await supabase.from('zoal_categories').select('*').eq('id', sourceId).single();
+      if (error || !source) return apiError('Source category not found', 404);
+      const suffix = String(Date.now());
+      const rootCopy = { ...source, id: undefined, name: `${source.name} (Copy)`, slug: `${source.slug}-copy-${suffix}`, parent_id: source.parent_id, created_at: undefined, updated_at: undefined };
+      const { data: created, error: createError } = await supabase.from('zoal_categories').insert(rootCopy).select('*').single();
+      if (createError) return apiError(createError.message, 500);
+      if (!includeChildren) return apiResponse({ root: created, duplicated: 1 });
+      const queue: Array<{oldId:string;newId:string}> = [{oldId: source.id,newId: created.id}];
+      let duplicated = 1;
+      while (queue.length && duplicated < 500) {
+        const node = queue.shift()!;
+        const { data: children, error: childError } = await supabase.from('zoal_categories').select('*').eq('parent_id', node.oldId);
+        if (childError) return apiError(childError.message, 500);
+        for (const child of children || []) {
+          const copy = { ...child, id: undefined, name: `${child.name} (Copy)`, slug: `${child.slug}-copy-${suffix}-${duplicated}`, parent_id: node.newId, created_at: undefined, updated_at: undefined };
+          const { data: childCreated, error: childCreateError } = await supabase.from('zoal_categories').insert(copy).select('*').single();
+          if (childCreateError) return apiError(childCreateError.message, 500);
+          queue.push({oldId: child.id,newId: childCreated.id}); duplicated++;
+          if (duplicated >= 500) break;
+        }
+      }
+      return apiResponse({ root: created, duplicated });
+    }
+
     if (operation === 'move') {
       const id = String(body.id || '').trim();
       const parentId = body.parentId === null || body.parentId === 'root' ? null : String(body.parentId || '').trim();
