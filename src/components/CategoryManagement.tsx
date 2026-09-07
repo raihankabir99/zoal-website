@@ -1480,53 +1480,15 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   // Duplicate Category action (deep clone options)
-  const handleDuplicateCategory = (cat: Category) => {
+  const handleDuplicateCategory = async (cat: Category) => {
     const includeChildren = window.confirm(`Duplicate "${cat.name}"?\n\nWould you like to also duplicate all of its subcategories?`);
-    
-    const cloneIdMap: Record<string, string> = {};
-    const newId = `cat-dup-${Date.now()}`;
-    cloneIdMap[cat.id] = newId;
-
-    const mainClone: any = {
-      ...cat,
-      id: newId,
-      name: `${cat.name} (Copy)`,
-      nameAr: cat.nameAr ? `${cat.nameAr} (نسخة)` : undefined,
-      slug: `${cat.slug}-copy`,
-      createdAt: new Date().toISOString()
-    };
-
-    let clonedList = [mainClone];
-
-    if (includeChildren) {
-      // Recursive helper to clone all nested children
-      const cloneChildrenRecursive = (parentId: string, newParentId: string) => {
-        const children = categories.filter(c => c.parent === parentId);
-        children.forEach(c => {
-          const childCloneId = `cat-dup-${Math.floor(Math.random() * 1000000)}-${Date.now()}`;
-          cloneIdMap[c.id] = childCloneId;
-          clonedList.push({
-            ...c,
-            id: childCloneId,
-            parent: newParentId,
-            name: `${c.name} (Copy)`,
-            slug: `${c.slug}-copy-${Math.floor(Math.random() * 1000)}`,
-            createdAt: new Date().toISOString()
-          });
-          cloneChildrenRecursive(c.id, childCloneId);
-        });
-      };
-
-      cloneChildrenRecursive(cat.id, newId);
+    try {
+      await categoryApi.duplicate(cat.id, includeChildren);
+      await refreshCategoriesFromServer();
+      addLog(`Duplicated category on server: ${cat.name}${includeChildren ? ' with sub-branches' : ''}`, "Category Center");
+    } catch (error: any) {
+      alert(error?.message || 'Server duplication failed. No local fallback was used.');
     }
-
-    setCategories(prev => {
-      const updated = [...prev, ...clonedList];
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-      return updated;
-    });
-
-    addLog(`Duplicated Category: ${cat.name} ${includeChildren ? 'with sub-branches' : ''}`, "Category Center");
   };
 
   // Sibling Sorting Tool handlers (native drag/drop or buttons)
@@ -1607,42 +1569,16 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   // Bulk action operations
-  const handleBulkAction = (action: 'publish' | 'unpublish' | 'delete' | 'sort') => {
-    if (selectedIds.length === 0) return;
-
-    if (action === 'delete') {
-      if (!window.confirm(`Are you sure you want to bulk-delete ${selectedIds.length} categories? Descendants of these categories may also be affected.`)) return;
-
-      setCategories(prev => {
-        const updated = prev.filter(c => !selectedIds.includes(c.id));
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
+  const handleBulkAction = async (action: 'publish' | 'unpublish' | 'delete' | 'sort') => {
+    if (!selectedIds.length) return;
+    if (action === 'delete' && !window.confirm(`Bulk-delete ${selectedIds.length} categories? Categories with children are protected by the server.`)) return;
+    try {
+      await categoryApi.bulkUpdate(selectedIds, action);
+      await refreshCategoriesFromServer();
       setSelectedIds([]);
-      addLog(`Bulk deleted ${selectedIds.length} category divisions`, "Category Center");
-    } else if (action === 'publish' || action === 'unpublish') {
-      const statusValue = action === 'publish' ? 'Published' : 'Draft';
-      setCategories(prev => {
-        const updated = prev.map(c => selectedIds.includes(c.id) ? { ...c, status: statusValue as any } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-      addLog(`Bulk updated ${selectedIds.length} categories to status: ${statusValue}`, "Category Center");
-    } else if (action === 'sort') {
-      // Sequences sorting index dynamically
-      setCategories(prev => {
-        let idx = 1;
-        const updated = prev.map(c => {
-          if (selectedIds.includes(c.id)) {
-            return { ...c, sortOrder: idx++ };
-          }
-          return c;
-        });
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-      addLog(`Bulk re-indexed sorting order for ${selectedIds.length} categories`, "Category Center");
-      alert("Bulk sequencing order updated successfully.");
+      addLog(`Bulk category operation completed on server: ${action} (${selectedIds.length})`, "Category Center");
+    } catch (error: any) {
+      alert(error?.message || 'Server bulk operation failed. No local fallback was used.');
     }
   };
 
