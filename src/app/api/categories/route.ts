@@ -95,6 +95,50 @@ export async function PUT(req: NextRequest) {
 }
 
 /** DELETE /api/categories — authenticated admin/staff deletion. */
+export async function PATCH(req: NextRequest) {
+  if (!checkRateLimit(req)) return apiError('Too many requests', 429);
+  const auth = await verifyAuthAndRole(req, MANAGEMENT_ROLES);
+  if (!auth.ok) return apiError(auth.error || 'Unauthorized', auth.status || 401);
+
+  try {
+    const body = await req.json();
+    if (body?.operation !== 'bulk-import') return apiError('Unsupported category operation', 400);
+    const mode = body.mode;
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (!['merge', 'skip'].includes(mode)) return apiError('Unsupported import mode. Replace is intentionally disabled for safety.', 400);
+    if (!items.length) return apiError('No category records supplied', 400);
+    if (items.length > 500) return apiError('Import batch exceeds 500 records', 400);
+
+    const { data: existing, error: existingError } = await supabase.from('zoal_categories').select('id,name,slug');
+    if (existingError) return apiError(existingError.message, 500);
+    const byId = new Map((existing || []).map((x: any) => [x.id, x]));
+    const bySlug = new Map((existing || []).map((x: any) => [x.slug, x]));
+    const seen = new Set<string>();
+    const result = { imported: 0, updated: 0, skipped: 0, failed: 0 };
+
+    for (const raw of items) {
+      const key = String(raw.id || raw.slug || raw.name || '');
+      if (!key || seen.has(key)) { result.skipped++; continue; }
+      seen.add(key);
+      const mapped = mapCategoryPayload(raw);
+      if (!mapped.name || !mapped.slug) { result.failed++; continue; }
+      const existingRow = (raw.id && byId.get(raw.id)) || bySlug.get(mapped.slug);
+      if (existingRow) {
+        if (mode === 'skip') { result.skipped++; continue; }
+        const { error } = await supabase.from('zoal_categories').update(mapped).eq('id', existingRow.id);
+        if (error) result.failed++; else result.updated++;
+      } else {
+        const { error } = await supabase.from('zoal_categories').insert({ ...mapped, id: raw.id || undefined });
+        if (error) result.failed++; else result.imported++;
+      }
+    }
+
+    return apiResponse({ ...result, mode, rollbackAvailable: false });
+  } catch (err: any) {
+    return apiError(err.message || 'Server error', 500);
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
   const auth = await verifyAuthAndRole(req, MANAGEMENT_ROLES as any);
