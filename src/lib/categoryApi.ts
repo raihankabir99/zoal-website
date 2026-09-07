@@ -79,6 +79,21 @@ export const categoryApi = {
     return payload?.data || payload?.category || payload;
   },
 
+  async move(id: string, parentId: string | null) {
+    const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'move', id, parentId }) });
+    return payload?.data || payload;
+  },
+
+  async reorder(items: { id: string; sortOrder: number }[]) {
+    const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'reorder', items }) });
+    return payload?.data || payload;
+  },
+
+  async merge(sourceId: string, destinationId: string, archiveSource = true) {
+    const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'merge', sourceId, destinationId, archiveSource }) });
+    return payload?.data || payload;
+  },
+
   async bulkImport(items: Partial<CategoryApiRecord>[], mode: 'merge' | 'skip') {
     const payload = await request('/api/categories', {
       method: 'PATCH',
