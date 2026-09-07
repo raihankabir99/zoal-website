@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Product } from '../types';
 import { SafeImage } from '../imageRegistry';
+import { categoryApi, CategoryApiRecord } from '../lib/categoryApi';
 
 // Category interface representing enterprise taxonomy
 export interface Category {
@@ -104,6 +105,27 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   allProducts,
   addLog
 }) => {
+  const [categorySyncError, setCategorySyncError] = useState<string | null>(null);
+  const [isCategorySyncing, setIsCategorySyncing] = useState(true);
+
+  const refreshCategoriesFromServer = useCallback(async () => {
+    setIsCategorySyncing(true);
+    setCategorySyncError(null);
+    try {
+      const records = await categoryApi.list();
+      setCategories(records);
+    } catch (error: any) {
+      console.error('Failed to load authoritative categories:', error);
+      setCategorySyncError(error?.message || 'Unable to load categories from server');
+    } finally {
+      setIsCategorySyncing(false);
+    }
+  }, [setCategories]);
+
+  useEffect(() => {
+    refreshCategoriesFromServer();
+  }, [refreshCategoriesFromServer]);
+
   // Views configuration
   const [activeView, setActiveView] = useState<'tree' | 'card' | 'table'>('tree');
 
@@ -1405,333 +1427,89 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   // Save changes from Form Modal
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Permissions check
     if (activeRole === 'customer') {
       alert("Permission Denied: Read-only Website Access. Customers cannot create or modify category taxonomies.");
       return;
     }
-
-    if (!formName || !formSlug) {
+    if (!formName.trim() || !formSlug.trim()) {
       alert("Validation Error: English Name and Slug are required fields.");
       return;
     }
 
-    // 1. Unique Name Validation
-    const nameExists = categories.some(c => (c.name || '').toLowerCase() === (formName || '').toLowerCase() && (!editingCategory || c.id !== editingCategory.id));
-    if (nameExists) {
-      alert(`Duplicate Category Name Error: A category division named "${formName}" already exists. Each division must maintain a unique identity.`);
+    const nameExists = categories.some(c => (c.name || '').toLowerCase() === formName.trim().toLowerCase() && (!editingCategory || c.id !== editingCategory.id));
+    const slugExists = categories.some(c => c.slug === formSlug.trim() && (!editingCategory || c.id !== editingCategory.id));
+    if (nameExists || slugExists) {
+      alert(nameExists ? `Duplicate Category Name Error: "${formName}" already exists.` : `Duplicate Slug Error: "/${formSlug}" is already in use.`);
       return;
     }
-
-    // 2. Unique Slug Validation
-    const slugExists = categories.some(c => c.slug === formSlug && (!editingCategory || c.id !== editingCategory.id));
-    if (slugExists) {
-      alert(`Duplicate Slug Error: The slug "/${formSlug}" is already in use by another category division.`);
-      return;
-    }
-
-    // 3. Self-parenting Validation
     if (formParent && editingCategory && formParent === editingCategory.id) {
-      alert("Hierarchy Error: A category division cannot select itself as its own parent.");
+      alert("Hierarchy Error: A category cannot select itself as its parent.");
       return;
     }
 
-    // 4. Circular Reference Protection (Check if parent isn't a descendant of the editing node)
-    if (formParent && editingCategory) {
-      const isDescendant = (parentId: string, targetId: string): boolean => {
-        const p = categories.find(c => c.id === parentId);
-        if (!p || !p.parent) return false;
-        if (p.parent === targetId) return true;
-        return isDescendant(p.parent, targetId);
-      };
-      if (isDescendant(formParent, editingCategory.id)) {
-        alert("Circular Reference Error: You cannot select a subcategory descendant as a parent node. This would create an infinite hierarchy loop.");
-        return;
+    const payload: Omit<CategoryApiRecord, 'id' | 'createdAt' | 'updatedAt'> = {
+      name: formName.trim(),
+      nameAr: formNameAr.trim() || undefined,
+      slug: formSlug.trim(),
+      description: formDesc.trim() || undefined,
+      shortDescription: formShortDesc.trim() || undefined,
+      featuredImage: isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined,
+      bannerImage: isImgValid(formBannerImage) ? formBannerImage.trim() : undefined,
+      imageUrl: isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined,
+      categoryIcon: formIcon,
+      parent: formParent || null,
+      sortOrder: Number(formSortOrder),
+      visibility: formVisibility,
+      status: formStatus,
+      featuredToggle: formFeatured,
+      homepageDisplayToggle: formHomepage,
+      seoTitle: formSeoTitle.trim() || undefined,
+      seoDescription: formSeoDescription.trim() || undefined,
+      seoKeywords: formSeoKeywords.trim() || undefined,
+      canonicalUrl: formCanonicalUrl.trim() || undefined,
+      openGraphImage: formOpenGraphImage.trim() || undefined,
+      structuredData: formStructuredData.trim() || undefined,
+      friendlyUrl: formFriendlyUrl.trim() || `/shop/${formSlug.trim()}`,
+      mobileBannerImage: formMobileBannerImage.trim() || undefined,
+      homepageImage: formHomepageImage.trim() || undefined
+    };
+
+    try {
+      if (modalMode === 'edit' && editingCategory) {
+        await categoryApi.update(editingCategory.id, payload);
+        addLog(`Updated category division: ${payload.name}`, "Category Center");
+      } else {
+        await categoryApi.create(payload);
+        addLog(`Created category division: ${payload.name}`, "Category Center");
       }
+      await refreshCategoriesFromServer();
+      if (formParent) setExpandedNodeIds(prev => ({ ...prev, [formParent]: true }));
+      setIsFormModalOpen(false);
+    } catch (error: any) {
+      console.error('Category save failed:', error);
+      alert(error?.message || 'Category save failed. No local fallback was used.');
     }
-
-    // Generate calculated friendly URL preview if not customized
-    const finalFriendlyUrl = formFriendlyUrl || `/shop/${formSlug}`;
-
-    if (modalMode === 'edit' && editingCategory) {
-      const oldThumbnail = editingCategory.featuredImage || '';
-      const oldBanner = editingCategory.bannerImage || '';
-      const oldMobileBanner = editingCategory.mobileBannerImage || '';
-      const oldHomepage = editingCategory.homepageImage || '';
-
-      const existingThumbnail = isImgValid(editingCategory.featuredImage) ? editingCategory.featuredImage! : '';
-      const existingBanner = isImgValid(editingCategory.bannerImage) ? editingCategory.bannerImage! : '';
-      const existingImage = isImgValid(editingCategory.image) ? editingCategory.image! : '';
-      const existingImageUrl = isImgValid(editingCategory.imageUrl) ? editingCategory.imageUrl! : '';
-      const initialThumbnailCombined = existingThumbnail || existingImage || existingImageUrl || '';
-
-      let finalFeaturedImage: string | undefined = editingCategory.featuredImage || undefined;
-      let finalImage: string | undefined = editingCategory.image || undefined;
-      let finalImageUrl: string | undefined = editingCategory.imageUrl || undefined;
-      let finalBannerImage: string | undefined = editingCategory.bannerImage || undefined;
-
-      // Handle featuredImage / thumbnail
-      if (formFeaturedImage.trim() !== initialThumbnailCombined) {
-        if (formFeaturedImage.trim() === '') {
-          finalFeaturedImage = undefined;
-          finalImage = undefined;
-          finalImageUrl = undefined;
-        } else if (isImgValid(formFeaturedImage)) {
-          finalFeaturedImage = formFeaturedImage.trim();
-          finalImage = formFeaturedImage.trim();
-          finalImageUrl = formFeaturedImage.trim();
-        }
-      }
-
-      // Handle bannerImage
-      if (formBannerImage.trim() !== existingBanner) {
-        if (formBannerImage.trim() === '') {
-          finalBannerImage = undefined;
-        } else if (isImgValid(formBannerImage)) {
-          finalBannerImage = formBannerImage.trim();
-        }
-      }
-
-      // Edit mode save
-      setCategories(prev => {
-        const updated = prev.map(c => c.id === editingCategory.id ? {
-          ...c,
-          name: formName,
-          nameAr: formNameAr || undefined,
-          slug: formSlug,
-          description: formDesc || undefined,
-          shortDescription: formShortDesc || undefined,
-          parent: formParent === '' ? null : formParent,
-          sortOrder: Number(formSortOrder),
-          categoryIcon: formIcon,
-          featuredImage: finalFeaturedImage,
-          bannerImage: finalBannerImage,
-          image: finalImage,
-          imageUrl: finalImageUrl,
-          visibility: formVisibility,
-          status: formStatus,
-          featuredToggle: formFeatured,
-          isFeatured: formFeatured, // fallback sync
-          homepageDisplayToggle: formHomepage,
-          
-          // SEO additions
-          seoTitle: formSeoTitle || undefined,
-          seoDescription: formSeoDescription || undefined,
-          seoKeywords: formSeoKeywords || undefined,
-          canonicalUrl: formCanonicalUrl || undefined,
-          openGraphImage: formOpenGraphImage || undefined,
-          structuredData: formStructuredData || undefined,
-          friendlyUrl: finalFriendlyUrl,
-
-          // Advanced Images additions
-          mobileBannerImage: formMobileBannerImage || undefined,
-          homepageImage: formHomepageImage || undefined,
-
-          updatedAt: new Date().toISOString()
-        } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-
-      // 7. Delete previous image from Storage after successful save
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
-      const deletePhoto = async (oldUrl: string) => {
-        if (!oldUrl) return;
-        let storagePath = '';
-        if (oldUrl.includes('/categories/')) {
-          const parts = oldUrl.split('/categories/');
-          storagePath = parts[parts.length - 1];
-        } else if (oldUrl.includes('/storage/v1/object/public/')) {
-          const parts = oldUrl.split('/public/');
-          const subParts = parts[1]?.split('/') || [];
-          if (subParts.length > 1) {
-            storagePath = subParts.slice(1).join('/');
-          }
-        }
-
-        if (storagePath) {
-          try {
-            console.log(`[Storage Replacement] Deleting old image after successful Save: ${storagePath}`);
-            const delRes = await fetch('/api/storage/delete', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ bucket: 'categories', path: storagePath })
-            });
-            const delData = await delRes.json();
-            if (!delRes.ok) {
-              console.warn(`[Storage Replacement] Cleanup failure: ${delData.error || 'Failed'}`);
-            } else {
-              console.log(`[Storage Replacement] Old image removed successfully from Supabase Storage`);
-            }
-          } catch (delErr) {
-            console.warn(`[Storage Replacement] Cleanup failure:`, delErr);
-          }
-        }
-      };
-
-      if (formFeaturedImage !== oldThumbnail && oldThumbnail) {
-        deletePhoto(oldThumbnail);
-      }
-      if (formBannerImage !== oldBanner && oldBanner) {
-        deletePhoto(oldBanner);
-      }
-      if (formMobileBannerImage !== oldMobileBanner && oldMobileBanner) {
-        deletePhoto(oldMobileBanner);
-      }
-      if (formHomepageImage !== oldHomepage && oldHomepage) {
-        deletePhoto(oldHomepage);
-      }
-
-      // Track granular change activity logs
-      addLog(`Edited Category division: ${formName}`, "Category Center");
-      
-      const isSeoChanged = formSeoTitle !== (editingCategory.seoTitle || '') || formSeoDescription !== (editingCategory.seoDescription || '') || finalFriendlyUrl !== (editingCategory.friendlyUrl || '');
-      if (isSeoChanged) {
-        addLog(`Updated SEO configurations for category "${formName}"`, "Category Center");
-      }
-
-      if (formHomepage !== (editingCategory.homepageDisplayToggle || false)) {
-        addLog(`Toggled homepage display for category "${formName}" to ${formHomepage ? 'Enabled' : 'Disabled'}`, "Category Center");
-      }
-    } else {
-      // Create mode save
-      const finalFeaturedImage = isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined;
-      const finalBannerImage = isImgValid(formBannerImage) ? formBannerImage.trim() : undefined;
-
-      const newCat: Category = {
-        id: `cat-${Date.now()}`,
-        name: formName,
-        nameAr: formNameAr || undefined,
-        slug: formSlug,
-        description: formDesc || undefined,
-        shortDescription: formShortDesc || undefined,
-        parent: formParent === '' ? null : formParent,
-        sortOrder: Number(formSortOrder),
-        categoryIcon: formIcon,
-        featuredImage: finalFeaturedImage,
-        bannerImage: finalBannerImage,
-        image: finalFeaturedImage,
-        imageUrl: finalFeaturedImage,
-        visibility: formVisibility,
-        status: formStatus,
-        featuredToggle: formFeatured,
-        homepageDisplayToggle: formHomepage,
-
-        // SEO additions
-        seoTitle: formSeoTitle || undefined,
-        seoDescription: formSeoDescription || undefined,
-        seoKeywords: formSeoKeywords || undefined,
-        canonicalUrl: formCanonicalUrl || undefined,
-        openGraphImage: formOpenGraphImage || undefined,
-        structuredData: formStructuredData || undefined,
-        friendlyUrl: finalFriendlyUrl,
-
-        // Advanced Images additions
-        mobileBannerImage: formMobileBannerImage || undefined,
-        homepageImage: formHomepageImage || undefined,
-
-        createdAt: new Date().toISOString()
-      };
-
-      setCategories(prev => {
-        const updated = [...prev, newCat];
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-
-      // Expand parent so child is visible in tree
-      if (formParent) {
-        setExpandedNodeIds(prev => ({ ...prev, [formParent]: true }));
-      }
-
-      addLog(`Created new Category division: ${formName}`, "Category Center");
-      
-      if (formSeoTitle || formSeoDescription) {
-        addLog(`Configured initial SEO tags for category: ${formName}`, "Category Center");
-      }
-    }
-
-    setIsFormModalOpen(false);
   };
 
   // Handle single category deletion (with recursive cascade / re-parent prompt)
-  const handleDeleteCategory = (catId: string, name: string) => {
-    // Permissions check
-    if (activeRole === 'customer') {
-      alert("Permission Denied: Read-only Website Access. Customers cannot delete categories.");
+  const handleDeleteCategory = async (catId: string, name: string) => {
+    if (activeRole !== 'admin') {
+      alert("Permission Denied: Only administrators can delete category divisions.");
       return;
     }
-    if (activeRole === 'staff') {
-      alert("Permission Denied: Staff level users are restricted from deleting category divisions to maintain operational integrity.");
-      return;
-    }
+    if (!window.confirm(`Are you sure you want to permanently erase category division "${name}"? Categories with children are protected by the server.`)) return;
 
-    // Check if category has subcategories
-    const subcats = categories.filter(c => c.parent === catId);
-    
-    if (subcats.length > 0) {
-      // Prompt for handling subcategories: Cascade or Orphan
-      const choice = window.confirm(
-        `Warning: Category "${name}" contains ${subcats.length} subcategories.\n\n` +
-        `• Click OK to CASCADE delete all subcategories.\n` +
-        `• Click CANCEL to KEEP subcategories (they will be moved up to the root or parent level).`
-      );
-
-      if (choice) {
-        // Cascade delete parent & all descendants recursively
-        const getDescendantIds = (id: string): string[] => {
-          const children = categories.filter(c => c.parent === id);
-          let ids = children.map(c => c.id);
-          children.forEach(c => {
-            ids = [...ids, ...getDescendantIds(c.id)];
-          });
-          return ids;
-        };
-
-        const idsToDelete = [catId, ...getDescendantIds(catId)];
-
-        setCategories(prev => {
-          const updated = prev.filter(c => !idsToDelete.includes(c.id));
-          localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-          return updated;
-        });
-
-        setSelectedIds(prev => prev.filter(id => !idsToDelete.includes(id)));
-        addLog(`Cascade deleted category "${name}" and its subcategories`, "Category Center");
-      } else {
-        // Keep descendants, re-parent to the deleted category's parent (or null)
-        const deletedCat = categories.find(c => c.id === catId);
-        const parentId = deletedCat ? deletedCat.parent : null;
-
-        setCategories(prev => {
-          const updated = prev
-            .filter(c => c.id !== catId)
-            .map(c => c.parent === catId ? { ...c, parent: parentId } : c);
-          localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-          return updated;
-        });
-
-        setSelectedIds(prev => prev.filter(id => id !== catId));
-        addLog(`Deleted category "${name}" and orphaned subcategories re-parented`, "Category Center");
-      }
-    } else {
-      // Normal simple delete
-      if (!window.confirm(`Are you sure you want to permanently erase category division "${name}"?`)) return;
-
-      setCategories(prev => {
-        const updated = prev.filter(c => c.id !== catId);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-
+    try {
+      await categoryApi.remove(catId);
       setSelectedIds(prev => prev.filter(id => id !== catId));
+      await refreshCategoriesFromServer();
       addLog(`Deleted category division "${name}"`, "Category Center");
+    } catch (error: any) {
+      console.error('Category delete failed:', error);
+      alert(error?.message || 'Category deletion failed. No local fallback was used.');
     }
   };
 
@@ -3273,7 +3051,9 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex justify-end animate-fade-in">
           <div className="w-full max-w-xl bg-zinc-950 border-l border-white/10 h-full flex flex-col justify-between overflow-y-auto shadow-2xl relative">
             
-            {/* Header */}
+            {categorySyncError && <div className="mb-3 border border-red-500/30 bg-red-500/10 px-3 py-2 text-[10px] text-red-300">Category server sync failed: {categorySyncError}</div>}
+      {isCategorySyncing && <div className="mb-3 text-[9px] font-mono text-zinc-500 uppercase">Loading authoritative categories…</div>}
+      {/* Header */}
             <div className="p-5 border-b border-white/5 flex justify-between items-center bg-zinc-900/60">
               <div>
                 <span className="text-[8.5px] font-mono text-gold-pure uppercase tracking-widest block">Category Configuration</span>
