@@ -28,15 +28,20 @@ export interface CategoryApiRecord {
   homepageImage?: string;
 }
 
-const getToken = () =>
-  localStorage.getItem('zoal_auth_token') ||
-  sessionStorage.getItem('zoal_auth_token') ||
-  localStorage.getItem('auth_token') ||
-  sessionStorage.getItem('auth_token') ||
-  '';
+import { supabaseClient } from './supabaseClient';
+
+const getToken = async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  return session?.access_token ||
+    localStorage.getItem('zoal_auth_token') ||
+    sessionStorage.getItem('zoal_auth_token') ||
+    localStorage.getItem('auth_token') ||
+    sessionStorage.getItem('auth_token') ||
+    '';
+};
 
 const request = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const token = getToken();
+  const token = await getToken();
   const headers = new Headers(init.headers || {});
   headers.set('Accept', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -61,20 +66,20 @@ export const categoryApi = {
   async create(category: Omit<CategoryApiRecord, 'id' | 'createdAt' | 'updatedAt'>) {
     const payload = await request('/api/categories', {
       method: 'POST',
-      body: JSON.stringify(category),
+      body: JSON.stringify({ ...category, parentId: category.parent ?? null }),
     });
     return payload?.data || payload?.category || payload;
   },
 
   async update(id: string, category: Partial<CategoryApiRecord>) {
-    const payload = await request(`/api/categories/${encodeURIComponent(id)}`, {
+    const payload = await request('/api/categories', {
       method: 'PUT',
-      body: JSON.stringify(category),
+      body: JSON.stringify({ ...category, id, parentId: category.parent }),
     });
     return payload?.data || payload?.category || payload;
   },
 
   async remove(id: string) {
-    return request(`/api/categories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return request('/api/categories', { method: 'DELETE', body: JSON.stringify({ id }) });
   },
 };
