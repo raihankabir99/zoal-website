@@ -15,6 +15,10 @@
       "dest": "/api/categories.ts"
     },
     {
+      "src": "/api/inventory",
+      "dest": "/api/inventory.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
