@@ -220,7 +220,20 @@ export async function PATCH(req: NextRequest) {
       const { data: source } = await supabase.from('zoal_categories').select('id').eq('id', sourceId).single();
       const { data: destination } = await supabase.from('zoal_categories').select('id').eq('id', destinationId).single();
       if (!source || !destination) return apiError('Source or destination category not found', 404);
-      const { error: childError } = await supabase.from('zoal_categories').update({ parent_id: destinationId, updated_at: new Date().toISOString() }).eq('parent_id', sourceId);
+      const now = new Date().toISOString();
+      // Reassign relational products first; if this fails, source category remains untouched.
+      const { error: productError } = await supabase.from('zoal_products').update({ category_id: destinationId, updated_at: now }).eq('category_id', sourceId);
+      if (productError) return apiError(`Product reassignment failed: ${productError.message}`, 500);
+      // Keep JSON product source synchronized with the relational source-of-truth.
+      const { data: jsonProducts, error: jsonReadError } = await supabase.from('zoal_supabase_products').select('id,data').or(`data->>categoryId.eq.${sourceId},data->>category_id.eq.${sourceId}`);
+      if (jsonReadError) return apiError(`Product metadata lookup failed: ${jsonReadError.message}`, 500);
+      for (const product of jsonProducts || []) {
+        const data = { ...(product.data || {}), categoryId: destinationId };
+        delete data.category_id;
+        const { error: jsonWriteError } = await supabase.from('zoal_supabase_products').update({ data, updated_at: now }).eq('id', product.id);
+        if (jsonWriteError) return apiError(`Product metadata reassignment failed: ${jsonWriteError.message}`, 500);
+      }
+      const { error: childError } = await supabase.from('zoal_categories').update({ parent_id: destinationId, updated_at: now }).eq('parent_id', sourceId);
       if (childError) return apiError(childError.message, 500);
       const sourceAction = body.archiveSource !== false
         ? supabase.from('zoal_categories').update({ status: 'Archived', updated_at: new Date().toISOString() }).eq('id', sourceId)
