@@ -17,6 +17,7 @@ import { updateProductInventory, updateProductFields, SafeImage, normalizeCatego
 import { formatCurrency } from '../utils';
 import { supabaseClient } from '../lib/supabaseClient';
 import { useNotificationEngine } from '../lib/notificationStore';
+import AuthoritativeInventoryActivityPanel, { InventoryDataNotProvisionedPanel } from './AuthoritativeInventoryActivityPanel';
 
 // Movement / Transaction Type Definitions
 export interface InventoryTransaction {
@@ -425,26 +426,7 @@ export default function EnterpriseInventoryManagement({
   const [showImportArea, setShowImportArea] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
-  // Initialize realistic inventory defaults if missing
-  useEffect(() => {
-    products.forEach((p) => {
-      const needsUpdate = !p.sku || !p.barcode || p.minStock === undefined || p.maxStock === undefined || !p.warehouseLocation;
-      if (needsUpdate) {
-        const catPrefix = p.category ? p.category.substring(0, 3).toUpperCase() : 'ALZ';
-        const fallbackSku = p.sku || `ALZ-${catPrefix}-${p.id.split('-').pop()?.toUpperCase() || Math.floor(Math.random() * 1000)}`;
-        const fallbackBarcode = p.barcode || `628100${p.id.split('-').pop()?.substring(0, 4).padEnd(4, '0') || '9912'}9`;
-        
-        updateProductFields(p.id, {
-          sku: fallbackSku,
-          barcode: fallbackBarcode,
-          minStock: p.minStock || 15,
-          maxStock: p.maxStock || 200,
-          warehouseLocation: p.warehouseLocation || 'Branch B Main Shelf A',
-          reservedStock: p.reservedStock || 0,
-        });
-      }
-    });
-  }, [products]);
+  // Inventory identifiers and thresholds are authoritative data; never synthesize production values client-side.
 
   // AUTOMATIC ORDER-TO-INVENTORY REALTIME SYNCHRONIZATION ENGINE
   useEffect(() => {
@@ -1053,6 +1035,18 @@ export default function EnterpriseInventoryManagement({
       </span>
     );
   };
+
+  if (activeTab === 'logs') {
+    return <AuthoritativeInventoryActivityPanel currentUser={currentUser} />;
+  }
+
+  if (activeTab === 'batches') {
+    return <InventoryDataNotProvisionedPanel title="Batches & Expiry" />;
+  }
+
+  if (activeTab === 'purchases') {
+    return <InventoryDataNotProvisionedPanel title="Purchase Orders" />;
+  }
 
   return (
     <div className="space-y-6 text-left animate-fade-in pb-12">
