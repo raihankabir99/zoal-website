@@ -149,13 +149,10 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
   const { settings } = useBranding();
   const notificationEngine = useNotificationEngine(currentUser);
 
-  // Localized RBAC Override Simulator for Preview/Reviewers
-  const [activeRole, setActiveRole] = useState<string>(() => {
-    return currentUser?.role || 'admin';
-  });
-
+  // Role is derived from the authenticated session; the UI must not simulate RBAC.
+  const activeRole = currentUser?.role || 'guest';
   const isStaff = activeRole === 'staff';
-  const isAdmin = activeRole === 'admin';
+  const isAdmin = ['owner', 'admin', 'manager'].includes(activeRole);
 
   // Helper to trigger system alerts for the main Admin Dashboard
   const addAdminNotification = async (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info', category: string) => {
@@ -243,96 +240,7 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
     fetchCrmCustomers();
   }, [fetchCrmCustomers]);
 
-  // Sync real-time shop orders with the customers database dynamic variables
-  const customersWithOrders = useMemo(() => {
-    return customers.map(cust => {
-      // Find orders matching this customer email
-      const matchedOrders = orders.filter(o => (o.email || '').toLowerCase() === (cust.email || '').toLowerCase());
-      
-      const totalSpendingFromOrders = matchedOrders.reduce((sum, o) => o.status !== 'Cancelled' ? sum + o.total : sum, 0);
-      const totalOrdersCountFromOrders = matchedOrders.length;
-
-      const baseSpend = cust.totalSpending !== undefined && cust.totalSpending > 0 
-        ? cust.totalSpending 
-        : totalSpendingFromOrders;
-      const baseOrders = cust.totalOrders !== undefined && cust.totalOrders > 0 
-        ? cust.totalOrders 
-        : totalOrdersCountFromOrders;
-      const lastPurchaseDate = matchedOrders.length > 0 ? matchedOrders[0].date : (cust.lastPurchase || undefined);
-
-      // Calculate AOV
-      const finalAov = baseOrders > 0 ? Math.round(baseSpend / baseOrders) : (cust.averageOrderValue || 0);
-
-      // Derive Loyalty parameters strictly from API records
-      const loyaltyPts = cust.loyaltyPoints ?? null;
-      const membershipLvl = cust.membershipLevel ?? null;
-      const refCredits = cust.referralCredits ?? null;
-      const birthdayRwd = cust.birthdayReward ?? null;
-
-      // Default coupons / rewards if not present
-      const crmCoupons = cust.coupons || [];
-
-      // Default loyalty rewards if not present
-      const crmRewards = cust.rewards || [];
-
-      // Enriched Review structures
-      const enrichedReviews = (cust.reviews || []).map((r, rIdx) => ({
-        id: r.id || `rev-${cust.id}-${rIdx}`,
-        productName: r.productName,
-        rating: r.rating,
-        comment: r.comment,
-        date: r.date,
-        approved: r.approved !== undefined ? r.approved : true,
-        rejected: r.rejected || false,
-        reply: r.reply || ''
-      }));
-
-      // Marketing preferences - pass null if no preference recorded
-      const enrichedMarketing = cust.marketingPreferences ?? null;
-
-      // Map communicationHistory to communicationsTimeline expected by UI
-      const enrichedCommunications = (cust.communicationHistory || []).map((comm) => ({
-        id: comm.id,
-        channel: comm.channel,
-        type: comm.subject,
-        content: comm.body,
-        date: comm.date,
-        status: comm.status || 'Sent'
-      }));
-
-      // Tags
-      const crmTags = cust.tags || [];
-
-      // Segment assignment from API or fallback to Customer
-      const calculatedSegment = cust.segment || 'Customer';
-
-      return {
-        ...cust,
-        segment: calculatedSegment,
-        orderHistory: matchedOrders.length > 0 ? matchedOrders : (cust.orderHistory || []),
-        totalOrders: baseOrders,
-        totalSpending: baseSpend,
-        averageOrderValue: finalAov,
-        lastPurchase: lastPurchaseDate,
-        
-        // Loyalty properties
-        loyaltyPoints: loyaltyPts,
-        membershipLevel: membershipLvl,
-        referralCredits: refCredits,
-        birthdayReward: birthdayRwd,
-        coupons: crmCoupons,
-        rewards: crmRewards,
-        
-        // Extended structures
-        reviews: enrichedReviews,
-        marketingPreferences: enrichedMarketing,
-        communicationsTimeline: enrichedCommunications,
-        tags: crmTags,
-        archived: cust.archived || false
-      };
-    });
-  }, [customers, orders]);
-
+  // Customer API already aggregates orders by canonical customer_id; do not reconstruct by email in the client.\n  const customersWithOrders = customers;\n
   // CRM Sub tabs
   const [crmSubTab, setCrmSubTab] = useState<'dashboard' | 'list'>('dashboard');
 
@@ -413,16 +321,21 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
   }, [customersWithOrders]);
 
   // --- RECHARTS CHART PREPARATIONS ---
-  // A. Customer Growth Over Time
-  const customerGrowthData = [
-    { month: 'Jan', registered: 1, cumulative: 1 },
-    { month: 'Feb', registered: 1, cumulative: 2 },
-    { month: 'Mar', registered: 1, cumulative: 3 },
-    { month: 'Apr', registered: 1, cumulative: 4 },
-    { month: 'May', registered: 1, cumulative: 5 },
-    { month: 'Jun', registered: 0, cumulative: 5 },
-    { month: 'Jul', registered: 2, cumulative: 7 }
-  ];
+  // A. Customer Growth Over Time — derived from authoritative registration dates.
+  const customerGrowthData = useMemo(() => {
+    const year = new Date().getFullYear();
+    const months = Array.from({ length: 12 }, (_, index) => ({
+      month: new Date(year, index, 1).toLocaleString(undefined, { month: 'short' }),
+      registered: 0,
+      cumulative: 0
+    }));
+    customers.forEach(customer => {
+      const date = customer.registrationDate ? new Date(customer.registrationDate) : null;
+      if (date && !Number.isNaN(date.getTime()) && date.getFullYear() === year) months[date.getMonth()].registered++;
+    });
+    let cumulative = 0;
+    return months.map(month => ({ ...month, cumulative: cumulative += month.registered }));
+  }, [customers]);
 
   // B. Repeat Customers Ratio
   const repeatCustomerData = [
@@ -439,12 +352,16 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
       .slice(0, 5);
   }, [customersWithOrders]);
 
-  // D. Monthly Registrations Split
-  const monthlyRegistrationsData = [
-    { name: 'Q1 2026', count: 3 },
-    { name: 'Q2 2026', count: 2 },
-    { name: 'Q3 2026 (July)', count: 2 }
-  ];
+  // D. Quarterly registrations — derived from authoritative registration dates.
+  const monthlyRegistrationsData = useMemo(() => {
+    const year = new Date().getFullYear();
+    const quarters = [0, 1, 2, 3].map(index => ({ name: `Q${index + 1} ${year}`, count: 0 }));
+    customers.forEach(customer => {
+      const date = customer.registrationDate ? new Date(customer.registrationDate) : null;
+      if (date && !Number.isNaN(date.getTime()) && date.getFullYear() === year) quarters[Math.floor(date.getMonth() / 3)].count++;
+    });
+    return quarters;
+  }, [customers]);
 
   // --- FILTERED AND SORTED CUSTOMERS LIST ---
   const filteredCustomers = useMemo(() => {
@@ -617,9 +534,9 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
           name: '',
           email: '',
           phone: '',
-          city: 'Branch A',
-          country: 'Saudi Arabia',
-          gender: 'Male',
+          city: '',
+          country: '',
+          gender: '',
           birthday: '',
           language: 'Arabic'
         });
@@ -692,15 +609,10 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
         })
       });
 
-      const data = res.ok ? await res.json() : null;
-      const noteRecord = data?.note || {
-        id: `n-${Date.now()}`,
-        type: newNoteType,
-        content: newNoteContent,
-        priority: newNotePriority,
-        author: currentUser?.name || 'Support Representative',
-        date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-      };
+      if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.message || errData.error || 'Unable to persist customer note.'); }
+      const data = await res.json();
+      const noteRecord = data?.note;
+      if (!noteRecord) throw new Error('Server did not return the persisted customer note.');
 
       setCustomers(prev => prev.map(c => {
         if (c.id === selectedCustomerId) {
