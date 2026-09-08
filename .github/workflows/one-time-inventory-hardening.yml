@@ -1,0 +1,61 @@
+name: One-time Inventory Hardening
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: "!contains(github.event.head_commit.message, '[inventory-hardening]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+
+      - name: Apply safe inventory hardening
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/components/EnterpriseInventoryManagement.tsx')
+          text = path.read_text()
+
+          if 'AuthoritativeInventoryActivityPanel' not in text:
+              marker = "import { useNotificationEngine } from '../lib/notificationStore';"
+              replacement = marker + "\nimport AuthoritativeInventoryActivityPanel, { InventoryDataNotProvisionedPanel } from './AuthoritativeInventoryActivityPanel';"
+              if marker not in text:
+                  raise SystemExit('Import marker not found')
+              text = text.replace(marker, replacement, 1)
+
+          guard = """\n  if (activeTab === 'logs') {\n    return <AuthoritativeInventoryActivityPanel currentUser={currentUser} />;\n  }\n\n  if (activeTab === 'batches') {\n    return <InventoryDataNotProvisionedPanel title=\"Batches & Expiry\" />;\n  }\n\n  if (activeTab === 'purchases') {\n    return <InventoryDataNotProvisionedPanel title=\"Purchase Orders\" />;\n  }\n"""
+          if "if (activeTab === 'logs') {\n    return <AuthoritativeInventoryActivityPanel" not in text:
+              marker = "\n  return (\n    <div className=\"space-y-6 text-left animate-fade-in pb-12\">"
+              if marker not in text:
+                  raise SystemExit('Return marker not found')
+              text = text.replace(marker, guard + marker, 1)
+
+          # Remove the automatic generation of fake SKU/barcode/threshold/location defaults.
+          pattern = re.compile(r"\n  // Initialize realistic inventory defaults if missing\n  useEffect\(\(\) => \{.*?\n  \}, \[products\]\);\n", re.S)
+          text, count = pattern.subn("\n  // Inventory identifiers and thresholds are authoritative data; never synthesize production values client-side.\n", text, count=1)
+          if count != 1:
+              raise SystemExit('Synthetic inventory default effect was not found exactly once')
+
+          path.write_text(text)
+
+          workflow = Path('.github/workflows/one-time-inventory-hardening.yml')
+          workflow.unlink(missing_ok=True)
+
+      - name: Commit hardening
+        run: |
+          git config user.name "zoal-inventory-hardening"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/components/EnterpriseInventoryManagement.tsx .github/workflows/one-time-inventory-hardening.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(inventory): harden authoritative ledger and remove synthetic defaults [inventory-hardening]"
+          git push origin audit/dashboard-sync-fix
