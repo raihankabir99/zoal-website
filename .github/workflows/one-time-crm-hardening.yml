@@ -14,8 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Apply CRM hardening
-        env:
-          TARGET: src/components/EnterpriseCrm.tsx
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -23,15 +21,12 @@ jobs:
           p = Path('src/components/EnterpriseCrm.tsx')
           s = p.read_text()
 
-          # Server-authoritative role: remove client-side RBAC simulation while preserving existing UI state variables.
           s = re.sub(r"  // Localized RBAC Override Simulator for Preview/Reviewers\n  const \[activeRole, setActiveRole\] = useState<string>\(\(\) => \{\n    return currentUser\?\.role \|\| 'admin';\n  \}\);\n\n  const isStaff = activeRole === 'staff';\n  const isAdmin = activeRole === 'admin';",
                       "  // RBAC is server-authoritative; the client only reflects the authenticated role.\n  const activeRole = currentUser?.role || '';\n  const isStaff = activeRole === 'staff';\n  const isAdmin = ['owner', 'admin', 'manager'].includes(activeRole);", s, count=1)
 
-          # Eliminate client-side reconstruction of orders by email. The API already aggregates by zoal_orders.customer_id.
           s = re.sub(r"  // Sync real-time shop orders with the customers database dynamic variables\n  const customersWithOrders = useMemo\(\(\) => \{.*?\n  \}, \[customers, orders\]\);",
                       "  // Customer financial/order metrics are server-authoritative and keyed by customer_id.\n  // Never reconstruct order history on the client or match customers by email.\n  const customersWithOrders = customers;", s, flags=re.S, count=1)
 
-          # Remove static registration analytics; derive charts only from records returned by the CRM API.
           s = re.sub(r"  // --- RECHARTS CHART PREPARATIONS ---\n  // A\. Customer Growth Over Time\n  const customerGrowthData = \[.*?\n  // B\. Repeat Customers Ratio",
                       "  // --- RECHARTS CHART PREPARATIONS ---\n  // A. Customer Growth Over Time (derived from authoritative API records)\n  const customerGrowthData = useMemo(() => {\n    const year = new Date().getFullYear();\n    const counts = Array.from({ length: 12 }, () => 0);\n    customersWithOrders.forEach(c => {\n      const d = new Date(c.registrationDate);\n      if (!Number.isNaN(d.getTime()) && d.getFullYear() === year) counts[d.getMonth()] += 1;\n    });\n    let cumulative = 0;\n    return counts.map((registered, month) => {\n      cumulative += registered;\n      return { month: new Date(year, month, 1).toLocaleString('en-US', { month: 'short' }), registered, cumulative };\n    });\n  }, [customersWithOrders]);\n\n  // B. Repeat Customers Ratio", s, flags=re.S, count=1)
 
@@ -39,42 +34,75 @@ jobs:
                       "  // D. Monthly Registrations Split (derived from authoritative API records)\n  const monthlyRegistrationsData = useMemo(() => {\n    const year = new Date().getFullYear();\n    const quarters = [0, 0, 0];\n    customersWithOrders.forEach(c => {\n      const d = new Date(c.registrationDate);\n      if (!Number.isNaN(d.getTime()) && d.getFullYear() === year) {\n        const q = Math.floor(d.getMonth() / 3);\n        if (q < 3) quarters[q] += 1;\n      }\n    });\n    return quarters.map((count, i) => ({ name: `Q${i + 1} ${year}`, count }));\n  }, [customersWithOrders]);",
                       s, flags=re.S, count=1)
 
-          # Delete/deactivate must fail closed; never remove UI state after a failed server request.
           s = s.replace("      } catch (err) {\n        console.error('Error deleting customer:', err);\n        setCustomers(prev => prev.filter(c => c.id !== id));\n      }",
                         "      } catch (err) {\n        console.error('Error deleting customer:', err);\n        alert('Customer update failed. No local state was changed.');\n      }")
 
-          # Notes: update local state only after a successful server response.
           s = re.sub(r"      const data = res\.ok \? await res\.json\(\) : null;\n      const noteRecord = data\?\.note \|\| \{.*?\n      \};\n\n      setCustomers\(prev => prev\.map\(c => \{",
                       "      if (!res.ok) {\n        const errData = await res.json().catch(() => ({}));\n        alert(`Note creation failed: ${errData.message || errData.error || 'server rejected the request'}`);\n        return;\n      }\n      const data = await res.json();\n      const noteRecord = data?.note;\n      if (!noteRecord) {\n        alert('Note creation failed: server returned no persisted note.');\n        return;\n      }\n\n      setCustomers(prev => prev.map(c => {", s, flags=re.S, count=1)
 
-          # Marketing preferences: persist through existing authoritative PATCH endpoint.
           s = re.sub(r"  // Update Individual Marketing Preferences\n  const handleUpdateMarketingPreferences = \(prefKey: string, value: boolean\) => \{.*?\n  \};\n\n  // Direct Communication Send Dispatch",
-                      "  // Update Individual Marketing Preferences through the authoritative CRM API.\n  const handleUpdateMarketingPreferences = async (prefKey: string, value: boolean) => {\n    if (!selectedCustomerId) return;\n    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n    if (!token) { alert('CRM authentication required.'); return; }\n    const customer = customers.find(c => c.id === selectedCustomerId);\n    if (!customer) return;\n    const marketingPreferences = { ...(customer.marketingPreferences || {}), [prefKey]: value };\n    try {\n      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, {\n        method: 'PATCH',\n        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },\n        body: JSON.stringify({ marketingPreferences })\n      });\n      if (!res.ok) {\n        const errData = await res.json().catch(() => ({}));\n        alert(`Marketing preference update failed: ${errData.message || errData.error || 'server rejected the request'}`);\n        return;\n      }\n      const data = await res.json();\n      if (data.customer) setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));\n      addLog(`Updated Marketing Preferences for ${customer.name}`, selectedCustomerId);\n      addAdminNotification('Marketing Preference Updated', `Customer ${customer.name}'s outreach preference [${prefKey}] set to ${value ? 'ON' : 'OFF'}.`, 'info', 'marketing_preference');\n    } catch (err) {\n      console.error('Error updating marketing preference:', err);\n      alert('Marketing preference update failed. No local state was changed.');\n    }\n  };\n\n  // Direct Communication Send Dispatch", s, flags=re.S, count=1)
+                      "  // Update Individual Marketing Preferences through the authoritative CRM API.\n  const handleUpdateMarketingPreferences = async (prefKey: string, value: boolean) => {\n    if (!selectedCustomerId) return;\n    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n    if (!token) { alert('CRM authentication required.'); return; }\n    const customer = customers.find(c => c.id === selectedCustomerId);\n    if (!customer) return;\n    const marketingPreferences = { ...(customer.marketingPreferences || {}), [prefKey]: value };\n    try {\n      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ marketingPreferences }) });\n      if (!res.ok) { const errData = await res.json().catch(() => ({})); alert(`Marketing preference update failed: ${errData.message || errData.error || 'server rejected the request'}`); return; }\n      const data = await res.json();\n      if (data.customer) setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));\n      addLog(`Updated Marketing Preferences for ${customer.name}`, selectedCustomerId);\n      addAdminNotification('Marketing Preference Updated', `Customer ${customer.name}'s outreach preference [${prefKey}] set to ${value ? 'ON' : 'OFF'}.`, 'info', 'marketing_preference');\n    } catch (err) {\n      console.error('Error updating marketing preference:', err);\n      alert('Marketing preference update failed. No local state was changed.');\n    }\n  };\n\n  // Direct Communication Send Dispatch", s, flags=re.S, count=1)
 
-          # Communication history is local only after the server confirms persistence.
           s = re.sub(r"      const data = res\.ok \? await res\.json\(\) : null;\n      const commRecord = data\?\.communication \|\| \{.*?\n      \};\n\n      setCustomers\(prev => prev\.map\(c => \{",
                       "      if (!res.ok) {\n        const errData = await res.json().catch(() => ({}));\n        alert(`Communication dispatch failed: ${errData.message || errData.error || 'server rejected the request'}`);\n        return;\n      }\n      const data = await res.json();\n      const commRecord = data?.communication;\n      if (!commRecord) {\n        alert('Communication dispatch failed: server returned no persisted communication.');\n        return;\n      }\n\n      setCustomers(prev => prev.map(c => {", s, flags=re.S, count=1)
 
-          # Disable synthetic review moderation; there is no verified authoritative review endpoint in CRM.
           s = re.sub(r"  // Moderation of Reviews left by Customer\n  const handleUpdateReviewStatus = \(reviewId: string, action: 'approve' \| 'reject', replyText\?: string\) => \{.*?\n  \};",
                       "  // Review moderation is intentionally fail-closed until an authoritative review endpoint exists.\n  const handleUpdateReviewStatus = (_reviewId: string, _action: 'approve' | 'reject', _replyText?: string) => {\n    alert('Review moderation is unavailable: no authoritative CRM review-moderation endpoint is configured. No local mutation was applied.');\n  };", s, flags=re.S, count=1)
 
-          # Replace synthetic purchase/support/reward mutations with fail-closed handlers.\n          s = re.sub(r"  // Simulate Large Purchase \(>5,000 SAR\) and trigger Admin notifications\n  const handleSimulateLargePurchase = \(\) => \{.*?\n  \};\n\n  // Simulate Support Request and trigger Admin notifications\n  const handleSimulateSupportRequest = \(\) => \{.*?\n  \};\n\n  // Grant Birthday Reward\n  const handleGrantBirthdayReward = \(\) => \{.*?\n  \};\n\n  // Redeem Loyalty Reward\n  const handleRedeemLoyaltyReward = \(rewardId: string, pointsCost: number\) => \{.*?\n  \};",
-                      "  // Synthetic business events are prohibited in production CRM.\n  const handleSimulateLargePurchase = () => {\n    alert('Simulation disabled: customer orders must originate from the authoritative order workflow.');\n  };\n\n  const handleSimulateSupportRequest = () => {\n    alert('Simulation disabled: support requests must originate from the authoritative Support Center workflow.');\n  };\n\n  const handleGrantBirthdayReward = async () => {\n    if (!selectedCustomerId) return;\n    const customer = customers.find(c => c.id === selectedCustomerId);\n    if (!customer) return;\n    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n    if (!token) { alert('CRM authentication required.'); return; }\n    const nextPoints = Number(customer.loyaltyPoints || 0) + 200;\n    try {\n      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ birthdayReward: 'Claimed', loyaltyPoints: nextPoints }) });\n      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(`Birthday reward failed: ${e.message || e.error || 'server rejected the request'}`); return; }\n      const data = await res.json();\n      if (data.customer) setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));\n      addLog(`Granted Birthday Reward to ${customer.name}`, selectedCustomerId);\n    } catch (err) { console.error(err); alert('Birthday reward failed. No local state was changed.'); }\n  };\n\n  const handleRedeemLoyaltyReward = async (rewardId: string, pointsCost: number) => {\n    if (!selectedCustomerId) return;\n    const customer = customers.find(c => c.id === selectedCustomerId);\n    if (!customer) return;\n    const currentPoints = Number(customer.loyaltyPoints || 0);\n    if (currentPoints < pointsCost) { alert(`Validation Refusal: Customer only has ${currentPoints} points.`); return; }\n    const updatedRewards = (customer.rewards || []).map(r => r.id === rewardId ? { ...r, status: 'Redeemed' } : r);\n    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n    if (!token) { alert('CRM authentication required.'); return; }\n    try {\n      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ loyaltyPoints: currentPoints - pointsCost, rewards: updatedRewards }) });\n      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(`Reward redemption failed: ${e.message || e.error || 'server rejected the request'}`); return; }\n      const data = await res.json();\n      if (data.customer) setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));\n      addLog(`Redeemed loyalty reward for ${customer.name}`, selectedCustomerId);\n    } catch (err) { console.error(err); alert('Reward redemption failed. No local state was changed.'); }\n  };", s, flags=re.S, count=1)
+          synthetic = r"  // Simulate Large Purchase \(>5,000 SAR\) and trigger Admin notifications\n  const handleSimulateLargePurchase = \(\) => \{.*?\n  \};\n\n  // Simulate Support Request and trigger Admin notifications\n  const handleSimulateSupportRequest = \(\) => \{.*?\n  \};\n\n  // Grant Birthday Reward\n  const handleGrantBirthdayReward = \(\) => \{.*?\n  \};\n\n  // Redeem Loyalty Reward\n  const handleRedeemLoyaltyReward = \(rewardId: string, pointsCost: number\) => \{.*?\n  \};"
+          replacement = """  // Synthetic business events are prohibited in production CRM.
+  const handleSimulateLargePurchase = () => {
+    alert('Simulation disabled: customer orders must originate from the authoritative order workflow.');
+  };
 
-          # Prevent fake customer defaults after create.
+  const handleSimulateSupportRequest = () => {
+    alert('Simulation disabled: support requests must originate from the authoritative Support Center workflow.');
+  };
+
+  const handleGrantBirthdayReward = async () => {
+    if (!selectedCustomerId) return;
+    const customer = customers.find(c => c.id === selectedCustomerId);
+    if (!customer) return;
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('CRM authentication required.'); return; }
+    const nextPoints = Number(customer.loyaltyPoints || 0) + 200;
+    try {
+      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ birthdayReward: 'Claimed', loyaltyPoints: nextPoints }) });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(`Birthday reward failed: ${e.message || e.error || 'server rejected the request'}`); return; }
+      const data = await res.json();
+      if (data.customer) setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));
+      addLog(`Granted Birthday Reward to ${customer.name}`, selectedCustomerId);
+    } catch (err) { console.error(err); alert('Birthday reward failed. No local state was changed.'); }
+  };
+
+  const handleRedeemLoyaltyReward = async (rewardId: string, pointsCost: number) => {
+    if (!selectedCustomerId) return;
+    const customer = customers.find(c => c.id === selectedCustomerId);
+    if (!customer) return;
+    const currentPoints = Number(customer.loyaltyPoints || 0);
+    if (currentPoints < pointsCost) { alert(`Validation Refusal: Customer only has ${currentPoints} points.`); return; }
+    const updatedRewards = (customer.rewards || []).map(r => r.id === rewardId ? { ...r, status: 'Redeemed' } : r);
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('CRM authentication required.'); return; }
+    try {
+      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ loyaltyPoints: currentPoints - pointsCost, rewards: updatedRewards }) });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(`Reward redemption failed: ${e.message || e.error || 'server rejected the request'}`); return; }
+      const data = await res.json();
+      if (data.customer) setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));
+      addLog(`Redeemed loyalty reward for ${customer.name}`, selectedCustomerId);
+    } catch (err) { console.error(err); alert('Reward redemption failed. No local state was changed.'); }
+  };"""
+          s = re.sub(synthetic, replacement, s, flags=re.S, count=1)
+
           s = s.replace("          city: 'Branch A',\n          country: 'Saudi Arabia',\n          gender: 'Male',\n          birthday: '',\n          language: 'Arabic'",
                         "          city: '',\n          country: '',\n          gender: '',\n          birthday: '',\n          language: ''")
 
-          # Client should not pretend to support a selectable role. Keep displayed role but make buttons inert.
           s = s.replace("                  setActiveRole('admin');\n                  addLog('Switched interface view to Admin Level');", "                  addLog('Server-authoritative role: Admin/Owner/Manager');")
           s = s.replace("                  setActiveRole('staff');\n                  addLog('Switched interface view to Staff Level');", "                  addLog('Server-authoritative role: Staff');")
 
           p.write_text(s)
           PY
-
           git diff --check
-          git status --short
           git add src/components/EnterpriseCrm.tsx
           git commit -m "fix(crm): enforce authoritative customer data and fail-closed actions [crm-hardening]"
           git push
