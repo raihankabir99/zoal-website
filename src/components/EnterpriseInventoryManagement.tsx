@@ -918,96 +918,59 @@ export default function EnterpriseInventoryManagement({
     }
   };
 
-  // CSV Import handler
-  const handleCSVImportSubmit = (e: React.FormEvent) => {
+  // CSV Import handler — stock mutations are sent to the authoritative inventory API
+  const handleCSVImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
       alert('Only Administrators can perform bulk inventory CSV imports.');
       return;
     }
-
-    try {
-      const lines = csvText.split('\n');
-      if (lines.length < 2) {
-        setImportStatus('Error: Invalid CSV format or empty file.');
-        return;
-      }
-
-      // Parse headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-      const idIdx = headers.findIndex(h => (h || '').toLowerCase().includes('id'));
-      const stockIdx = headers.findIndex(h => (h || '').toLowerCase().includes('stock') || (h || '').toLowerCase().includes('available'));
-      const skuIdx = headers.findIndex(h => (h || '').toLowerCase().includes('sku'));
-      const barcodeIdx = headers.findIndex(h => (h || '').toLowerCase().includes('barcode'));
-      const warehouseIdx = headers.findIndex(h => (h || '').toLowerCase().includes('warehouse') || (h || '').toLowerCase().includes('location'));
-
-      if (idIdx === -1 || stockIdx === -1) {
-        setImportStatus('Error: CSV must include at least "Product ID" and "Available Stock" (or "Stock") columns.');
-        return;
-      }
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // basic comma split (ignoring quoted commas for simplicity of simulation)
-        const cols = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-        const pid = cols[idIdx];
-        const stockVal = parseInt(cols[stockIdx], 10);
-
-        if (!pid || isNaN(stockVal)) {
-          errorCount++;
-          continue;
-        }
-
-        // Verify if product exists
-        const matched = products.find(p => p.id === pid || p.sku === pid);
-        if (matched) {
-          // Update Stock
-          updateProductInventory(matched.id, stockVal);
-          
-          // If SKU/Barcode/Warehouse columns were found and exist, override them
-          const extraFields: any = {};
-          if (skuIdx !== -1 && cols[skuIdx]) extraFields.sku = cols[skuIdx];
-          if (barcodeIdx !== -1 && cols[barcodeIdx]) extraFields.barcode = cols[barcodeIdx];
-          if (warehouseIdx !== -1 && cols[warehouseIdx]) extraFields.warehouseLocation = cols[warehouseIdx];
-
-          if (Object.keys(extraFields).length > 0) {
-            updateProductFields(matched.id, extraFields);
-          }
-
-          // Register import log
-          const newTx: InventoryTransaction = {
-            id: `TX-IMP-${Date.now().toString().slice(-4)}-${i}`,
-            productId: matched.id,
-            productName: matched.name,
-            sku: cols[skuIdx] || matched.sku || 'N/A',
-            type: 'Stock Adjustment',
-            quantityChange: stockVal - (matched.inventory || 0),
-            stockBefore: matched.inventory || 0,
-            stockAfter: stockVal,
-            warehouse: cols[warehouseIdx] || matched.warehouseLocation || 'Imported Warehouse',
-            shelfLocation: 'Bulk CSV Row',
-            operator: currentUser?.name || 'Administrator',
-            reason: 'Database bulk CSV synchronization upload.',
-            timestamp: new Date().toLocaleString(),
-          };
-          setTransactions(prev => [newTx, ...prev]);
-
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      }
-
-      setImportStatus(`Success: Processed ${successCount} products. Failed/Skipped: ${errorCount} items.`);
-      setCsvText('');
-    } catch (err: any) {
-      setImportStatus(`Import Exception: ${err.message}`);
+    const lines = csvText.split('\n');
+    if (lines.length < 2) {
+      setImportStatus('Error: Invalid CSV format or empty file.');
+      return;
     }
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+    const idIdx = headers.findIndex(h => (h || '').toLowerCase().includes('id'));
+    const stockIdx = headers.findIndex(h => (h || '').toLowerCase().includes('stock') || (h || '').toLowerCase().includes('available'));
+    const warehouseIdx = headers.findIndex(h => (h || '').toLowerCase().includes('warehouse') || (h || '').toLowerCase().includes('location'));
+    if (idIdx === -1 || stockIdx === -1) {
+      setImportStatus('Error: CSV must include Product ID and Available Stock/Stock columns.');
+      return;
+    }
+    let successCount = 0, errorCount = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const cols = line.split(',').map(x => x.trim().replace(/^["']|["']$/g, ''));
+      const pid = cols[idIdx];
+      const targetStock = parseInt(cols[stockIdx], 10);
+      const matched = pid ? products.find(p => p.id === pid || p.sku === pid) : undefined;
+      if (!matched || isNaN(targetStock) || targetStock < 0) { errorCount++; continue; }
+      const currentStock = matched.inventory || 0;
+      const delta = targetStock - currentStock;
+      if (delta === 0) { successCount++; continue; }
+      try {
+        const response = await fetch('/api/inventory', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            productId: matched.id,
+            quantityChange: delta,
+            warehouseId: cols[warehouseIdx] || undefined,
+            reason: 'CSV bulk inventory synchronization',
+            referenceId: `CSV-${Date.now()}-${i}`
+          })
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.message || result?.error || 'Inventory update failed');
+        successCount++;
+      } catch { errorCount++; }
+    }
+    await refreshProducts();
+    setImportStatus(`Completed: ${successCount} synchronized, ${errorCount} failed/skipped. All successful stock changes were recorded through the server.`);
+    if (successCount > 0) setCsvText('');
   };
 
   // Bulk operation triggers
