@@ -85,6 +85,11 @@ export default async function handler(req: any, res: any) {
   const adminClient = client();
 
   try {
+    // Inventory is an internal operational dataset. Every read and mutation requires
+    // the same authenticated staff/admin authorization boundary.
+    const auth = await authenticate(req, adminClient);
+    if (auth.status) return res.status(auth.status).json({ error: auth.message });
+
     if (req.method === 'GET') {
       const { data, error } = await adminClient
         .from('zoal_inventory')
@@ -94,8 +99,6 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ success: true, data: data || [] });
     }
 
-    const auth = await authenticate(req, adminClient);
-    if (auth.status) return res.status(auth.status).json({ error: auth.message });
     if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method Not Allowed' });
 
     const body = req.body || {};
@@ -138,6 +141,13 @@ export default async function handler(req: any, res: any) {
     if (body.minStock !== undefined || body.min_stock !== undefined) updatePayload.min_stock = cleanNonNegativeInteger(body.minStock ?? body.min_stock, 'minStock');
     if (body.maxStock !== undefined || body.max_stock !== undefined) updatePayload.max_stock = body.maxStock === null || body.max_stock === null ? null : cleanNonNegativeInteger(body.maxStock ?? body.max_stock, 'maxStock');
     if (body.lowStockThreshold !== undefined || body.low_stock_threshold !== undefined) updatePayload.low_stock_threshold = cleanNonNegativeInteger(body.lowStockThreshold ?? body.low_stock_threshold, 'lowStockThreshold');
+
+    if (updatePayload.max_stock !== undefined && updatePayload.max_stock !== null && Number(updatePayload.max_stock) < nextQuantity) {
+      return res.status(409).json({ error: 'maxStock cannot be below current quantity.' });
+    }
+    if (updatePayload.min_stock !== undefined && Number(updatePayload.min_stock) > nextQuantity) {
+      return res.status(409).json({ error: 'minStock cannot exceed current quantity.' });
+    }
 
     const { data: updated, error: updateError } = await adminClient
       .from('zoal_inventory')
