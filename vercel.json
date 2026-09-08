@@ -11,6 +11,10 @@
       "dest": "/api/admin/dashboard-analytics.ts"
     },
     {
+      "src": "/api/categories",
+      "dest": "/api/categories.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
