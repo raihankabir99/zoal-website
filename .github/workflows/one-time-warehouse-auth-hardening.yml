@@ -1,6 +1,8 @@
 name: one-time-warehouse-auth-hardening
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
 permissions:
   contents: write
 jobs:
