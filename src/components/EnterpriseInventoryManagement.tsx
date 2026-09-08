@@ -799,80 +799,43 @@ export default function EnterpriseInventoryManagement({
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
-  // Manual Adjust Handler
-  const handleManualAdjustment = (e: React.FormEvent) => {
+  // Manual Adjust Handler — server-authoritative inventory mutation
+  const handleManualAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isStaff) return;
-
-    if (!adjustProductId) {
-      alert('Please select a product first.');
+    if (!isStaff || !adjustProductId) {
+      if (!adjustProductId) alert('Please select a product first.');
       return;
     }
-
     const prod = products.find((p) => p.id === adjustProductId);
     if (!prod) return;
-
     const currentInv = prod.inventory || 0;
-    let qtyChange = adjustQty;
-    let newInv = currentInv;
-
-    if (adjustType === 'Stock In' || adjustType === 'Return') {
-      newInv = currentInv + adjustQty;
-      qtyChange = adjustQty;
-    } else {
-      newInv = Math.max(0, currentInv - adjustQty);
-      qtyChange = -Math.min(adjustQty, currentInv);
+    const delta = (adjustType === 'Stock In' || adjustType === 'Return') ? adjustQty : -adjustQty;
+    try {
+      const response = await fetch('/api/inventory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          productId: prod.id,
+          quantityChange: delta,
+          warehouseId: adjustWarehouse || undefined,
+          reason: adjustReason || adjustType,
+          referenceId: adjustRef || undefined,
+          batchNumber: adjustBatch || undefined
+        })
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || result?.error || 'Inventory update failed.');
+      await refreshProducts();
+      const newInv = currentInv + delta;
+      if (newInv <= (prod.minStock || 15)) {
+        addNotification(newInv <= 0 ? 'out_of_stock' : 'low_stock', newInv <= 0 ? 'Out of Stock Alert' : 'Low Stock Alert', `${prod.name} (SKU: ${prod.sku}) is now at ${Math.max(0, newInv)} units.`, newInv <= 0 ? 'critical' : 'high');
+      }
+      addNotification('adjustment', 'Stock Adjustment Recorded', `${prod.name} stock adjustment was saved to the authoritative inventory ledger.`, 'low');
+      setAdjustQty(0); setAdjustReason(''); setAdjustBatch(''); setAdjustRef(''); setAdjustShelf('');
+    } catch (error: any) {
+      alert(error?.message || 'Inventory adjustment failed. No local fallback was used.');
     }
-
-    // Apply change in database/localStorage overrides
-    updateProductInventory(prod.id, newInv);
-
-    // Trigger notification if stock is low
-    if (newInv <= (prod.minStock || 15)) {
-      addNotification(
-        newInv === 0 ? 'out_of_stock' : 'low_stock',
-        newInv === 0 ? 'Out of Stock Alert' : 'Low Stock Alert',
-        `${prod.name} (SKU: ${prod.sku}) is now at ${newInv} units. Immediate restock recommended.`,
-        newInv === 0 ? 'critical' : 'high'
-      );
-    }
-
-    // Save customized field updates
-    const fieldUpdates: any = {};
-    if (adjustWarehouse) {
-      fieldUpdates.warehouseLocation = adjustWarehouse;
-    }
-    updateProductFields(prod.id, fieldUpdates);
-
-    // Append to transactions logs list
-    const newTx: InventoryTransaction = {
-      id: `TX-${Date.now().toString().slice(-4)}`,
-      productId: prod.id,
-      productName: prod.name,
-      sku: prod.sku || 'N/A',
-      type: adjustType,
-      quantityChange: qtyChange,
-      stockBefore: currentInv,
-      stockAfter: newInv,
-      warehouse: adjustWarehouse,
-      shelfLocation: adjustShelf || 'Aisle 1 - Row A',
-      operator: currentUser?.name || 'Authorized Staff',
-      reason: adjustReason || `${adjustType} recorded manually.`,
-      timestamp: new Date().toLocaleString(),
-      batchNumber: adjustBatch || undefined,
-      referenceId: adjustRef || undefined
-    };
-
-    setTransactions((prev) => [newTx, ...prev]);
-
-    addNotification('adjustment', 'Stock Adjustment Recorded', `${prod.name} available stock updated from ${currentInv} to ${newInv} units.`, 'low');
-    
-    // Clear form inputs
-    setAdjustQty(0);
-    setAdjustReason('');
-    setAdjustBatch('');
-    setAdjustRef('');
-    setAdjustShelf('');
   };
 
   // Single Item Edit Save handler
