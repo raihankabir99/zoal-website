@@ -838,47 +838,36 @@ export default function EnterpriseInventoryManagement({
     }
   };
 
-  // Single Item Edit Save handler
-  const handleSaveProductSettings = () => {
+  // Single Item Edit Save handler — metadata persists through the existing product API
+  const handleSaveProductSettings = async () => {
     if (!selectedProduct || !isStaff) return;
-
-    const updatedSpecs = {
-      ...(selectedProduct.specifications || {}),
-      'Shelf Position': editShelf || 'Shelf A',
-      'Zone': editZone || 'Zone A',
-      'Rack': editRack || 'Rack R-12',
-      'Bin': editBin || 'Bin B-09'
-    };
-
-    updateProductFields(selectedProduct.id, {
-      sku: editSku,
-      barcode: editBarcode,
-      warehouseLocation: editWarehouse,
-      minStock: editMinStock,
-      maxStock: editMaxStock,
-      specifications: updatedSpecs
-    });
-
-    // Write a system log
-    const newTx: InventoryTransaction = {
-      id: `TX-${Date.now().toString().slice(-4)}`,
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
-      sku: editSku,
-      type: 'Stock Adjustment',
-      quantityChange: 0,
-      stockBefore: selectedProduct.inventory || 0,
-      stockAfter: selectedProduct.inventory || 0,
-      warehouse: editWarehouse,
-      shelfLocation: `${editZone} - ${editRack} - ${editShelf} - ${editBin}`,
-      operator: currentUser?.name || 'Authorized Admin',
-      reason: 'Product inventory thresholds and tracking SKU/Barcode settings updated.',
-      timestamp: new Date().toLocaleString(),
-    };
-
-    setTransactions((prev) => [newTx, ...prev]);
-    setShowEditModal(false);
-    alert(`Inventory settings for ${selectedProduct.name} saved successfully.`);
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('Authentication is required to update inventory settings.'); return; }
+    if (editMinStock < 0 || editMaxStock < editMinStock) {
+      alert('Invalid stock thresholds. Max Stock must be greater than or equal to Min Stock.');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/products/${selectedProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        body: JSON.stringify({
+          sku: editSku.trim(),
+          barcode: editBarcode.trim(),
+          warehouseLocation: editWarehouse.trim(),
+          minStock: editMinStock,
+          maxStock: editMaxStock
+        })
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || result?.error || 'Product inventory settings update failed.');
+      await refreshProducts();
+      setShowEditModal(false);
+      alert(`Inventory settings for ${selectedProduct.name} saved successfully.`);
+    } catch (error: any) {
+      alert(error?.message || 'Inventory settings update failed. No local fallback was used.');
+    }
   };
 
   // Export List as CSV file
