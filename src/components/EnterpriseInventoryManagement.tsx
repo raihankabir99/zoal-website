@@ -973,75 +973,47 @@ export default function EnterpriseInventoryManagement({
     if (successCount > 0) setCsvText('');
   };
 
-  // Bulk operation triggers
-  const handleBulkUpdate = (action: 'stock' | 'warehouse' | 'archive' | 'barcode-print') => {
-    if (selectedProductIds.length === 0) {
-      alert('Please select at least one product using checkboxes.');
+  // Bulk operation triggers — stock changes are server-authoritative
+  const handleBulkUpdate = async (action: 'stock' | 'warehouse' | 'archive' | 'barcode-print') => {
+    if (selectedProductIds.length === 0) { alert('Please select at least one product using checkboxes.'); return; }
+    if (action === 'stock') {
+      const targetStock = parseInt(bulkStockVal, 10);
+      if (isNaN(targetStock) || targetStock < 0) { alert('Please enter a valid stock quantity.'); return; }
+      let succeeded = 0, failed = 0;
+      for (const id of selectedProductIds) {
+        const prod = products.find(p => p.id === id);
+        if (!prod) { failed++; continue; }
+        const delta = targetStock - (prod.inventory || 0);
+        if (delta === 0) { succeeded++; continue; }
+        try {
+          const response = await fetch('/api/inventory', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+            body: JSON.stringify({ productId: id, quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })
+          });
+          if (!response.ok) throw new Error('Inventory update failed');
+          succeeded++;
+        } catch { failed++; }
+      }
+      await refreshProducts();
+      alert(`Bulk stock update complete. Success: ${succeeded}, Failed: ${failed}.`);
+      setSelectedProductIds([]); setBulkStockVal('');
       return;
     }
-
-    if (action === 'stock') {
-      const parsed = parseInt(bulkStockVal, 10);
-      if (isNaN(parsed) || parsed < 0) {
-        alert('Please enter a valid stock quantity.');
-        return;
-      }
-      
-      selectedProductIds.forEach(id => {
-        const prod = products.find(p => p.id === id);
-        if (prod) {
-          const old = prod.inventory || 0;
-          updateProductInventory(id, parsed);
-
-          // log transaction
-          const newTx: InventoryTransaction = {
-            id: `TX-${Date.now().toString().slice(-4)}`,
-            productId: id,
-            productName: prod.name,
-            sku: prod.sku || '',
-            type: 'Stock Adjustment',
-            quantityChange: parsed - old,
-            stockBefore: old,
-            stockAfter: parsed,
-            warehouse: prod.warehouseLocation || 'Branch B Main',
-            shelfLocation: 'Bulk Operation',
-            operator: currentUser?.name || 'Authorized Operator',
-            reason: 'Admin bulk stock value override.',
-            timestamp: new Date().toLocaleString(),
-          };
-          setTransactions(prev => [newTx, ...prev]);
-        }
-      });
-      alert(`Bulk updated ${selectedProductIds.length} products stock to ${parsed} units.`);
-      setSelectedProductIds([]);
-      setBulkStockVal('');
-
-    } else if (action === 'warehouse') {
-      if (!bulkWarehouseVal.trim()) {
-        alert('Please enter a warehouse destination.');
-        return;
-      }
-
-      selectedProductIds.forEach(id => {
-        updateProductFields(id, {
-          warehouseLocation: `${bulkWarehouseVal} - ${bulkShelfVal || 'Shelf A'}`
-        });
-      });
-
+    if (action === 'warehouse') {
+      if (!bulkWarehouseVal.trim()) { alert('Please enter a warehouse destination.'); return; }
+      selectedProductIds.forEach(id => updateProductFields(id, { warehouseLocation: `${bulkWarehouseVal} - ${bulkShelfVal || 'Shelf A'}` }));
       alert(`Bulk reassigned ${selectedProductIds.length} products to ${bulkWarehouseVal}.`);
-      setSelectedProductIds([]);
-      setBulkWarehouseVal('');
-      setBulkShelfVal('');
-    } else if (action === 'archive') {
+      setSelectedProductIds([]); setBulkWarehouseVal(''); setBulkShelfVal('');
+      return;
+    }
+    if (action === 'archive') {
       if (!confirm(`Are you sure you want to bulk-deactivate tracking for ${selectedProductIds.length} items?`)) return;
-      selectedProductIds.forEach(id => {
-        updateProductFields(id, { status: 'Inactive' });
-      });
+      selectedProductIds.forEach(id => updateProductFields(id, { status: 'Inactive' }));
       alert(`Archived / Deactivated inventory monitoring for ${selectedProductIds.length} items.`);
       setSelectedProductIds([]);
-    } else if (action === 'barcode-print') {
-      setShowBarcodePrintModal(true);
+      return;
     }
+    if (action === 'barcode-print') setShowBarcodePrintModal(true);
   };
 
   // Helper for status badge
