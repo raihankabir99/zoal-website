@@ -817,6 +817,7 @@ export default function EnterpriseInventoryManagement({
         credentials: 'include',
         body: JSON.stringify({
           productId: prod.id,
+          operation: 'adjust',
           quantityChange: delta,
           warehouseId: adjustWarehouse || undefined,
           reason: adjustReason || adjustType,
@@ -946,6 +947,7 @@ export default function EnterpriseInventoryManagement({
           credentials: 'include',
           body: JSON.stringify({
             productId: matched.id,
+            operation: 'adjust',
             quantityChange: delta,
             warehouseId: cols[warehouseIdx] || undefined,
             reason: 'CSV bulk inventory synchronization',
@@ -977,7 +979,7 @@ export default function EnterpriseInventoryManagement({
         try {
           const response = await fetch('/api/inventory', {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-            body: JSON.stringify({ productId: id, quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })
+            body: JSON.stringify({ productId: id, operation: 'adjust', quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })
           });
           if (!response.ok) throw new Error('Inventory update failed');
           succeeded++;
