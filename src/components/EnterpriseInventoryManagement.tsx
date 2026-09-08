@@ -988,18 +988,31 @@ export default function EnterpriseInventoryManagement({
       setSelectedProductIds([]); setBulkStockVal('');
       return;
     }
-    if (action === 'warehouse') {
-      if (!bulkWarehouseVal.trim()) { alert('Please enter a warehouse destination.'); return; }
-      selectedProductIds.forEach(id => updateProductFields(id, { warehouseLocation: `${bulkWarehouseVal} - ${bulkShelfVal || 'Shelf A'}` }));
-      alert(`Bulk reassigned ${selectedProductIds.length} products to ${bulkWarehouseVal}.`);
-      setSelectedProductIds([]); setBulkWarehouseVal(''); setBulkShelfVal('');
-      return;
-    }
-    if (action === 'archive') {
-      if (!confirm(`Are you sure you want to bulk-deactivate tracking for ${selectedProductIds.length} items?`)) return;
-      selectedProductIds.forEach(id => updateProductFields(id, { status: 'Inactive' }));
-      alert(`Archived / Deactivated inventory monitoring for ${selectedProductIds.length} items.`);
+    if (action === 'warehouse' || action === 'archive') {
+      if (action === 'warehouse' && !bulkWarehouseVal.trim()) { alert('Please enter a warehouse destination.'); return; }
+      if (action === 'archive' && !confirm(`Are you sure you want to bulk-deactivate tracking for ${selectedProductIds.length} items?`)) return;
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      if (!token) { alert('Authentication is required for bulk product updates.'); return; }
+      let succeeded = 0, failed = 0;
+      for (const id of selectedProductIds) {
+        try {
+          const body = action === 'warehouse'
+            ? { warehouseLocation: `${bulkWarehouseVal} - ${bulkShelfVal || 'Shelf A'}` }
+            : { status: 'Inactive' };
+          const response = await fetch(`/api/products/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            credentials: 'include',
+            body: JSON.stringify(body)
+          });
+          if (!response.ok) throw new Error('Product update failed');
+          succeeded++;
+        } catch { failed++; }
+      }
+      await refreshProducts();
+      alert(`Bulk ${action} complete. Success: ${succeeded}, Failed: ${failed}.`);
       setSelectedProductIds([]);
+      if (action === 'warehouse') { setBulkWarehouseVal(''); setBulkShelfVal(''); }
       return;
     }
     if (action === 'barcode-print') setShowBarcodePrintModal(true);
