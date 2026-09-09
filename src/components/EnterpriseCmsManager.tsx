@@ -138,67 +138,13 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
   const [webPages, setWebPages] = useState<WebPage[]>([]);
 
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
-    const raw = localStorage.getItem('cms_menu_items');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'menu-1', label: 'Boutique Sanctuary', link: '#store', icon: 'Compass', displayOrder: 1, external: false },
-      { id: 'menu-2', label: 'The Coffee Roasters', link: '#coffee', icon: 'Sparkles', displayOrder: 2, external: false },
-      { id: 'menu-3', label: 'Artisanal Bakery', link: '#bakery', icon: 'Award', displayOrder: 3, external: false },
-      { id: 'menu-4', label: 'Premium Sudanese Toob', link: '#fashion', icon: 'FileText', displayOrder: 4, external: false },
-      { id: 'menu-5', label: 'The Saudi Flagships', link: '#branches', icon: 'MapPin', displayOrder: 5, external: false }
-    ];
-  });
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
-  const [footerSettings, setFooterSettings] = useState<FooterSettings>(() => {
-    const raw = localStorage.getItem('cms_footer_settings');
-    if (raw) return JSON.parse(raw);
-    return {
-      companyInfo: 'AL ZOAL is a premium cultural bridge celebrating fine Sudanese artistry, organic agricultural marvels, and authentic Arabian luxury hospitality.',
-      address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-      phone: '+966 56 769 9315',
-      email: 'alzoal3003@gmail.com',
-      workingHours: 'Everyday: 07:00 AM - 11:30 PM (Special prayer pauses apply)',
-      socialLinks: { facebook: 'https://facebook.com/alzoal', instagram: 'https://instagram.com/alzoal', twitter: 'https://twitter.com/alzoal', snapchat: 'https://snapchat.com/add/alzoal', whatsapp: 'https://wa.me/966567699315' },
-      paymentIcons: ['mada', 'visa', 'mastercard', 'applepay', 'stcpay', 'banktransfer'],
-      certifications: ['Saudi Ministry of Commerce Registered', 'Maroof Elite Platform Bronze Stamp', 'SFDA Approved Food Grade Facilities'],
-      copyright: '© 2026 AL ZOAL Boutique Co. All rights reserved. Developed to Saudi e-Commerce standards.',
-      mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1m4!2sAl+Hofuf!3m2!1i1024!2i768!4f13.1!3m3!1m2!2sAbu+Bakr+As+Siddiq+Rd!5e0!3m2!1sen!2ssa!4v1'
-    };
-  });
+  const [footerSettings, setFooterSettings] = useState<FooterSettings>({ companyInfo: '', address: '', phone: '', email: '', workingHours: '', socialLinks: {}, paymentIcons: [], certifications: [], copyright: '', mapEmbedUrl: '' });
 
-  const [announcement, setAnnouncement] = useState<AnnouncementSettings>(() => {
-    const raw = localStorage.getItem('cms_announcement_settings');
-    if (raw) return JSON.parse(raw);
-    return {
-      enabled: true,
-      text: '✨ GRAND CULTURAL GALA: Celebrate Sudanese Heritage at our Dammam flagship. Premium coffee is complimentary.',
-      bgCol: '#D4AF37',
-      txtCol: '#000000',
-      btnText: 'View Location',
-      btnLink: '#branches',
-      countdownEnd: '2026-09-01T20:00:00',
-      scheduleStart: '2026-07-01',
-      scheduleEnd: '2026-09-01'
-    };
-  });
+  const [announcement, setAnnouncement] = useState<AnnouncementSettings>({ enabled: false, text: '', bgCol: '#D4AF37', txtCol: '#000000', btnText: '', btnLink: '', countdownEnd: '', scheduleStart: '', scheduleEnd: '' });
 
-  const [popup, setPopup] = useState<PopupSettings>(() => {
-    const raw = localStorage.getItem('cms_popup_settings');
-    if (raw) return JSON.parse(raw);
-    return {
-      enabled: true,
-      type: 'coupon',
-      title: 'Join The Elite Circle',
-      content: 'Subscribe to our botanical market circle & receive an exclusive 15% discount coupon on your first order of hand-tailored Sudanese Toobs.',
-      imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=400',
-      videoUrl: '',
-      couponCode: 'ZOALGOLD',
-      rule: 'seconds',
-      ruleSeconds: 5,
-      status: 'active'
-    };
-  });
+  const [popup, setPopup] = useState<PopupSettings>({ enabled: false, type: 'newsletter', title: '', content: '', imageUrl: '', videoUrl: '', couponCode: '', rule: 'first_visit', ruleSeconds: 5, status: 'inactive' });
 
 
   // Recent changes log inside CMS
@@ -271,6 +217,49 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   useEffect(() => {
     void fetchAuthoritativeCmsData();
   }, [fetchAuthoritativeCmsData]);
+
+  const [cmsSettingsLoaded, setCmsSettingsLoaded] = useState(false);
+  const saveCmsSetting = useCallback(async (key: string, value: unknown) => {
+    try {
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      const response = await fetch(`/api/cms/settings/${encodeURIComponent(key)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ value }) });
+      if (!response.ok) throw new Error(`CMS setting ${key} returned HTTP ${response.status}`);
+    } catch (error) { console.error(`[CMS] Failed to persist ${key}:`, error); }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch('/api/cms/settings');
+        if (!response.ok) throw new Error(`CMS settings API returned HTTP ${response.status}`);
+        const records = await response.json();
+        const byKey = new Map((Array.isArray(records) ? records : []).map((item: any) => [item.setting_key, item.setting_value]));
+        if (cancelled) return;
+        const menu = byKey.get('navigation.menu');
+        const footer = byKey.get('footer.settings');
+        const announcementValue = byKey.get('announcement.settings');
+        const popupValue = byKey.get('popup.settings');
+        if (Array.isArray(menu)) setMenuItems(menu);
+        if (footer && typeof footer === 'object') setFooterSettings(footer);
+        if (announcementValue && typeof announcementValue === 'object') setAnnouncement(announcementValue);
+        if (popupValue && typeof popupValue === 'object') setPopup(popupValue);
+      } catch (error) { console.error('[CMS] Authoritative global settings bootstrap failed:', error); }
+      finally { if (!cancelled) setCmsSettingsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!cmsSettingsLoaded) return;
+    const timer = window.setTimeout(() => {
+      void saveCmsSetting('navigation.menu', menuItems);
+      void saveCmsSetting('footer.settings', footerSettings);
+      void saveCmsSetting('announcement.settings', announcement);
+      void saveCmsSetting('popup.settings', popup);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup, saveCmsSetting]);
 
   // --- EDITORIAL LOOKBOOK STATE & HANDLERS ---
   const [editorialBlocks, setEditorialBlocks] = useState<any[]>([]);
@@ -914,7 +903,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     } catch (e) {
       console.error('Failed to load CMS activity logs:', e);
     }
-  }, [currentUser, userRole]);
+  }, [currentUser]);
 
   useEffect(() => {
     fetchCmsActivityLogs();
@@ -971,10 +960,6 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   useEffect(() => {
     localStorage.setItem('cms_website_status', websiteStatus);
     const nonLegalPages = webPages.filter(p => !p.isLegalDoc && p.key !== 'terms' && p.key !== 'privacy' && p.key !== 'terms-and-conditions' && p.key !== 'privacy-policy');
-    localStorage.setItem('cms_menu_items', JSON.stringify(menuItems));
-    localStorage.setItem('cms_footer_settings', JSON.stringify(footerSettings));
-    localStorage.setItem('cms_announcement_settings', JSON.stringify(announcement));
-    localStorage.setItem('cms_popup_settings', JSON.stringify(popup));
     localStorage.setItem('cms_homepage_layout_configs', JSON.stringify(homepageLayoutConfigs));
     localStorage.setItem('cms_promotions', JSON.stringify(promotions));
     localStorage.setItem('cms_seo_settings', JSON.stringify(seoSettings));
@@ -998,7 +983,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
         revisions
       });
     }
-  }, [websiteStatus, homepageSections, banners, webPages, menuItems, footerSettings, announcement, popup, homepageLayoutConfigs, promotions, seoSettings, mediaAssets, activityLogs, revisions]);
+  }, [websiteStatus, homepageSections, banners, webPages, homepageLayoutConfigs, promotions, seoSettings, mediaAssets, activityLogs, revisions]);
 
   // --- ACTIONS ---
   // Reorder Sections
@@ -1396,7 +1381,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
           
           <button
             onClick={() => {
-              if (userRole === 'customer') {
+              if (!['owner', 'admin', 'manager'].includes(String(currentUser?.role || '').toLowerCase())) {
                 alert("Permission Denied: Customer accounts are blocked from deploying CMS changes.");
                 return;
               }
@@ -1499,7 +1484,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
       <div className="space-y-6">
 
         {/* Access Denied Shield Guard if role is customer */}
-        {userRole === 'customer' ? (
+        {!['owner', 'admin', 'manager'].includes(String(currentUser?.role || '').toLowerCase()) ? (
           <div className="bg-zinc-950 border border-rose-500/35 p-8 rounded-xs text-center space-y-4">
             <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center rounded-full mx-auto">
               <Lock className="w-6 h-6" />
@@ -1512,9 +1497,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
             </div>
             <button
               onClick={() => {
-                setUserRole('owner');
-                handleAddCmsActivityLog("Escalated permissions from CUSTOMER to OWNER", "System Sentry");
-                alert("Simulated role upgraded back to OWNER. Full systems unlocked.");
+                alert("Permission denied. Your server-authoritative role does not allow CMS access.");
               }}
               className="py-1 px-4 bg-white hover:bg-gold-pure text-black font-mono font-bold text-[9px] uppercase tracking-widest rounded-xs cursor-pointer"
             >
@@ -5896,7 +5879,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                       <div className="flex gap-2 pt-1 border-t border-white/5 justify-end">
                         <button
                           onClick={() => {
-                            if (userRole === 'staff') {
+                            if (String(currentUser?.role || '').toLowerCase() === 'staff') {
                               alert("Permissions Guard: Staff role is restricted from restoring rollbacks.");
                               return;
                             }
