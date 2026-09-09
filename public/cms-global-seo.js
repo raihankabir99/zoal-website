@@ -1,6 +1,4 @@
 (() => {
-  const ADMIN_ROLES = new Set(['owner', 'admin', 'manager', 'staff']);
-  const DETAIL_PATH = /^\/blog\/[^/]+|^\/store$/;
   const DETAIL_QUERY = new URLSearchParams(window.location.search).has('product');
   let seo = null;
   let observerStarted = false;
@@ -17,7 +15,8 @@
       el.setAttribute(attr, selector.match(/\[name="([^"]+)"\]/)?.[1] || selector.match(/\[property="([^"]+)"\]/)?.[1] || '');
       document.head.appendChild(el);
     }
-    el.setAttribute('content', String(value));
+    const next = String(value);
+    if (el.getAttribute('content') !== next) el.setAttribute('content', next);
   }
 
   function setCanonical(url) {
@@ -28,7 +27,7 @@
       el.rel = 'canonical';
       document.head.appendChild(el);
     }
-    el.href = url;
+    if (el.href !== url) el.href = url;
   }
 
   function applyPublicSeo() {
@@ -36,7 +35,7 @@
     const ar = document.documentElement.lang === 'ar';
     const title = ar ? (seo.title_ar || seo.title) : seo.title;
     const description = ar ? (seo.description_ar || seo.description) : seo.description;
-    if (title) document.title = title;
+    if (title && document.title !== title) document.title = title;
     setMeta('meta[name="description"]', 'name', description);
     setMeta('meta[name="keywords"]', 'name', seo.keywords);
     setMeta('meta[name="robots"]', 'name', seo.robots);
@@ -52,13 +51,16 @@
     if (seo.jsonLd) {
       try {
         const parsed = typeof seo.jsonLd === 'string' ? JSON.parse(seo.jsonLd) : seo.jsonLd;
+        const serialized = JSON.stringify(parsed);
         const old = document.getElementById('cms-global-seo-jsonld');
-        if (old) old.remove();
-        const script = document.createElement('script');
-        script.id = 'cms-global-seo-jsonld';
-        script.type = 'application/ld+json';
-        script.textContent = JSON.stringify(parsed);
-        document.head.appendChild(script);
+        if (!old || old.textContent !== serialized) {
+          if (old) old.remove();
+          const script = document.createElement('script');
+          script.id = 'cms-global-seo-jsonld';
+          script.type = 'application/ld+json';
+          script.textContent = serialized;
+          document.head.appendChild(script);
+        }
       } catch (_) {
         // Invalid optional JSON-LD never blocks normal page metadata.
       }
@@ -164,7 +166,7 @@
       const value = {};
       Object.keys(inputs).forEach((key) => value[key] = inputs[key].value.trim());
       value.jsonLd = json.value.trim();
-      if (value.canonical && !/^https?:\\/\\//i.test(value.canonical)) { status.textContent = 'Canonical URL must be an absolute http(s) URL.'; return; }
+      if (value.canonical && !/^https?:\/\//i.test(value.canonical)) { status.textContent = 'Canonical URL must be an absolute http(s) URL.'; return; }
       if (value.jsonLd) { try { JSON.parse(value.jsonLd); } catch (_) { status.textContent = 'JSON-LD is invalid JSON.'; return; } }
       save.disabled = true; status.textContent = 'Saving…';
       try {
