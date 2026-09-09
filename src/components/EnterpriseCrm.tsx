@@ -1017,35 +1017,11 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
           </h2>
         </div>
 
-        {/* CONTROLS AREA WITH RBAC SIMULATOR */}
+        {/* CONTROLS AREA */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Active Role Switcher Indicator to demonstrate VIP RBAC controls in runtime */}
           <div className="bg-zinc-950 border border-white/5 rounded-xs p-1 px-2.5 flex items-center gap-2 select-none">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">RBAC Privilege:</span>
-            <div className="flex bg-black rounded-xs border border-white/5 p-0.5">
-              <button
-                onClick={() => {
-                  setActiveRole('admin');
-                  addLog('Switched interface view to Admin Level');
-                }}
-                className={`px-2 py-1 text-[7.5px] uppercase tracking-widest font-mono rounded-xs font-bold transition-all ${
-                  isAdmin ? 'bg-gold-pure text-black font-extrabold shadow-md' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                ADMIN
-              </button>
-              <button
-                onClick={() => {
-                  setActiveRole('staff');
-                  addLog('Switched interface view to Staff Level');
-                }}
-                className={`px-2 py-1 text-[7.5px] uppercase tracking-widest font-mono rounded-xs font-bold transition-all ${
-                  isStaff ? 'bg-gold-pure text-black font-extrabold shadow-md' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                STAFF
-              </button>
-            </div>
+            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">Authenticated Role:</span>
+            <span className="px-2 py-1 text-[7.5px] uppercase tracking-widest font-mono rounded-xs font-bold text-zinc-300">{activeRole}</span>
           </div>
 
           <button
