@@ -109,6 +109,9 @@ app.get('/api/cms', async (_req: Request, res: Response) => {
 });
 
 // Admin page mutations remain authenticated and role-protected.
+app.get('/api/cms/settings', cmsModule.getCmsSettings);
+app.put('/api/cms/settings/:key', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), cmsModule.upsertCmsSetting);
+
 app.put(
   '/api/cms/pages/:id',
   authenticateRequest,
