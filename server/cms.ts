@@ -2,7 +2,7 @@ import { getSupabaseClient, getServiceSupabaseClient, getCleanSupabaseUrl } from
 import { Request, Response } from 'express';
 import { logAuditEvent } from './audit';
 
-const PUBLIC_CMS_SETTING_KEYS = new Set(['navigation.menu', 'footer.settings', 'announcement.settings', 'popup.settings']);
+const PUBLIC_CMS_SETTING_KEYS = new Set(['navigation.menu', 'footer.settings', 'announcement.settings', 'popup.settings', 'seo.global']);
 
 
 // Generic authoritative registry for CMS settings that do not belong to a dedicated domain table.
