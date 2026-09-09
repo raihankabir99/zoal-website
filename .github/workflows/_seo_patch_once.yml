@@ -42,7 +42,7 @@ jobs:
           grep -F "'seo.global'" server/cms.ts
           ! grep -F "'priceValidUntil': '2030-12-31'" src/components/SEO.tsx
           ! grep -F "'reviewCount': '15'" src/components/SEO.tsx
-          npm ci
+          npm install
           npm run build
 
       - name: Commit patched source
