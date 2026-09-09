@@ -2,12 +2,14 @@ import { getSupabaseClient, getServiceSupabaseClient, getCleanSupabaseUrl } from
 import { Request, Response } from 'express';
 import { logAuditEvent } from './audit';
 
+const PUBLIC_CMS_SETTING_KEYS = new Set(['navigation.menu', 'footer.settings', 'announcement.settings', 'popup.settings']);
+
 
 // Generic authoritative registry for CMS settings that do not belong to a dedicated domain table.
 export async function getCmsSettings(req: Request, res: Response) {
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
-  const { data, error } = await supabase.from('zoal_cms_settings').select('*').eq('status', 'published');
+  const { data, error } = await supabase.from('zoal_cms_settings').select('id,setting_key,setting_value,status,created_at,updated_at').eq('status', 'published').in('setting_key', Array.from(PUBLIC_CMS_SETTING_KEYS));
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
 }
@@ -15,10 +17,12 @@ export async function getCmsSettings(req: Request, res: Response) {
 export async function upsertCmsSetting(req: Request, res: Response) {
   const { key } = req.params;
   if (!/^[a-z0-9_.-]{2,120}$/i.test(String(key))) return res.status(400).json({ error: 'Invalid CMS setting key.' });
+  if (!PUBLIC_CMS_SETTING_KEYS.has(String(key))) return res.status(404).json({ error: 'Unknown CMS setting key.' });
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
   const value = req.body?.value;
   if (value === undefined) return res.status(400).json({ error: 'CMS setting value is required.' });
+  if (JSON.stringify(value).length > 250000) return res.status(413).json({ error: 'CMS setting value is too large.' });
   const actor = (req as any).user?.id || (req as any).user?.email || null;
   const { data: existing } = await supabase.from('zoal_cms_settings').select('*').eq('setting_key', key).maybeSingle();
   const { data, error } = await supabase.from('zoal_cms_settings').upsert({
