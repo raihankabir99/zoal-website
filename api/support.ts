@@ -1,6 +1,6 @@
 import express from 'express';
-import * as supportModule from '../server/support';
-import { authenticateRequest, requireRole } from '../backend/security';
+import * as supportModule from '../server/support.ts';
+import { authenticateRequest, requireRole } from '../backend/security.ts';
 
 const app = express();
 
