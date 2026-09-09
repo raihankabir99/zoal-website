@@ -2,6 +2,33 @@ import { getSupabaseClient, getServiceSupabaseClient, getCleanSupabaseUrl } from
 import { Request, Response } from 'express';
 import { logAuditEvent } from './audit';
 
+
+// Generic authoritative registry for CMS settings that do not belong to a dedicated domain table.
+export async function getCmsSettings(req: Request, res: Response) {
+  const supabase = getServiceSupabaseClient() || getSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const { data, error } = await supabase.from('zoal_cms_settings').select('*').eq('status', 'published');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}
+
+export async function upsertCmsSetting(req: Request, res: Response) {
+  const { key } = req.params;
+  if (!/^[a-z0-9_.-]{2,120}$/i.test(String(key))) return res.status(400).json({ error: 'Invalid CMS setting key.' });
+  const supabase = getServiceSupabaseClient() || getSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const value = req.body?.value;
+  if (value === undefined) return res.status(400).json({ error: 'CMS setting value is required.' });
+  const actor = (req as any).user?.id || (req as any).user?.email || null;
+  const { data: existing } = await supabase.from('zoal_cms_settings').select('*').eq('setting_key', key).maybeSingle();
+  const { data, error } = await supabase.from('zoal_cms_settings').upsert({
+    setting_key: key, setting_value: value, status: 'published', updated_by: actor, created_by: existing?.created_by || actor, updated_at: new Date().toISOString()
+  }, { onConflict: 'setting_key' }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  logAuditEvent({ req, action: 'UPSERT_CMS_SETTING', resourceType: 'cms_setting', resourceId: String(data.id), beforeState: existing || null, afterState: data, source: 'cms' });
+  res.json(data);
+}
+
 // -------------------------------------------------------------
 // CENTRALIZED IMAGE URL NORMALIZATION (Option C)
 // -------------------------------------------------------------
