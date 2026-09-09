@@ -254,12 +254,14 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   }, []);
 
   useEffect(() => {
-    if (!cmsSettingsLoaded) return;
+    if (!cmsSettingsLoaded || !cmsSettingsDirtyRef.current) return;
     const timer = window.setTimeout(() => {
       void saveCmsSetting('navigation.menu', menuItems);
       void saveCmsSetting('footer.settings', footerSettings);
       void saveCmsSetting('announcement.settings', announcement);
       void saveCmsSetting('popup.settings', popup);
+      cmsSettingsDirtyRef.current = false;
+      cmsSettingsBaselineRef.current = JSON.stringify({ menu: menuItems, footer: footerSettings, announcement, popup });
     }, 700);
     return () => window.clearTimeout(timer);
   }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup, saveCmsSetting]);
