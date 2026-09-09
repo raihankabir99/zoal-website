@@ -1,0 +1,31 @@
+name: cms-final-hardening
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+    paths:
+      - '.github/workflows/cms-final-hardening.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = 'audit/dashboard-sync-fix';
+            const get = async (path) => (await github.rest.repos.getContent({owner,repo,path,ref:branch})).data;
+            const update = async (path, content, sha, message) => github.rest.repos.createOrUpdateFileContents({owner,repo,path,message,content:Buffer.from(content).toString('base64'),sha,branch});
+            const componentPath = 'src/components/EnterpriseCmsManager.tsx';
+            const component = await get(componentPath);
+            let c = Buffer.from(component.content, 'base64').toString('utf8');
+            if (!c.includes('useRef')) c = c.replace("import React, { useState, useEffect, useCallback } from 'react';", "import React, { useState, useEffect, useCallback, useRef } from 'react';");
+            c = c.replace("if (!cmsSettingsLoaded) return;\n    const timer = window.setTimeout(() => {", "if (!cmsSettingsLoaded || !cmsSettingsDirtyRef.current) return;\n    const timer = window.setTimeout(() => {");
+            if (!c.includes('cmsSettingsBaselineRef.current = JSON.stringify({ menu: menuItems')) c = c.replace("void saveCmsSetting('popup.settings', popup);\n    }, 700);", "void saveCmsSetting('popup.settings', popup);\n      cmsSettingsDirtyRef.current = false;\n      cmsSettingsBaselineRef.current = JSON.stringify({ menu: menuItems, footer: footerSettings, announcement, popup });\n    }, 700);");
+            if (c === Buffer.from(component.content, 'base64').toString('utf8')) throw new Error('No component changes were applied');
+            await update(componentPath, c, component.sha, 'fix(cms): finalize safe global settings persistence');
+            const wf = await get('.github/workflows/cms-final-hardening.yml');
+            await github.rest.repos.deleteFile({owner,repo,path:'.github/workflows/cms-final-hardening.yml',message:'chore: remove one-time cms final hardening workflow',sha:wf.sha,branch});
