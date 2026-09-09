@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   harden:
-    if: github.event.head_commit.message != 'fix(cms): harden authoritative SEO architecture'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,14 +37,11 @@ jobs:
           manager = manager_path.read_text()
           if "./CmsGlobalSeoPanel" not in manager:
               manager = manager.replace("import CmsTextsPanel from './CmsTextsPanel';", "import CmsTextsPanel from './CmsTextsPanel';\nimport CmsGlobalSeoPanel from './CmsGlobalSeoPanel';", 1)
-
           pattern = re.compile(r"  const \[seoSettings, setSeoSettings\] = useState\(\(\) => \{.*?\n  \}\);\n\n  const \[mediaAssets", re.S)
           manager, count = pattern.subn("  const [seoSettings, setSeoSettings] = useState<any[]>([]);\n\n  const [mediaAssets", manager, count=1)
           if count != 1:
               raise SystemExit(f'Expected synthetic seoSettings state block exactly once, found {count}')
-
           manager = manager.replace("    localStorage.setItem('cms_seo_settings', JSON.stringify(seoSettings));\n", "", 1)
-
           seo_pattern = re.compile(r"        \{cmsTab === 'seo' && \(.*?\n        \)\}\n\n        /\* 10\. MEDIA LIBRARY CMS TAB \*/", re.S)
           replacement = '''        {cmsTab === 'seo' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-[10px]">
@@ -55,9 +51,7 @@ jobs:
             <div className="space-y-6">
               <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">
                 <span className="text-[8.5px] font-mono uppercase text-gold-pure tracking-widest block font-bold border-b border-white/5 pb-1">SEO Runtime Surface</span>
-                <p className="text-zinc-400 font-sans leading-relaxed">
-                  Global SEO metadata is stored in the authoritative CMS settings registry. Page, Hero, and Editorial SEO fields continue to use their existing relational CMS columns.
-                </p>
+                <p className="text-zinc-400 font-sans leading-relaxed">Global SEO metadata is stored in the authoritative CMS settings registry. Page, Hero, and Editorial SEO fields continue to use their existing relational CMS columns.</p>
                 <div className="p-3 bg-black border border-white/5 rounded-xs text-[8.5px] font-mono text-zinc-400 space-y-1">
                   <div>Global: <span className="text-emerald-400">Supabase CMS registry</span></div>
                   <div>Canonical: <span className="text-zinc-300">runtime document metadata</span></div>
@@ -82,12 +76,10 @@ jobs:
           injection = marker + "  const [globalSeo, setGlobalSeo] = useState<any>(null);\n\n  useEffect(() => {\n    let cancelled = false;\n    fetch('/api/cms/settings')\n      .then(res => res.ok ? res.json() : [])\n      .then(records => {\n        if (cancelled || !Array.isArray(records)) return;\n        const value = records.find((item: any) => item.setting_key === 'seo.global')?.setting_value;\n        if (value && typeof value === 'object') setGlobalSeo(value);\n      })\n      .catch(() => undefined);\n    return () => { cancelled = true; };\n  }, []);\n"
           if marker in seo and "const [globalSeo" not in seo:
               seo = seo.replace(marker, injection, 1)
-
           defaults_marker = "    let ogImage = settings.businessLogo; // Use business logo as default OG image\n"
           defaults_injection = defaults_marker + "\n    if (globalSeo && !selectedPost && !selectedProduct) {\n      const isArabic = i18n.language === 'ar';\n      title = (isArabic && globalSeo.seoTitleAr) || globalSeo.seoTitle || title;\n      description = (isArabic && globalSeo.seoDescAr) || globalSeo.seoDesc || description;\n      keywords = globalSeo.keywords || keywords;\n      if (globalSeo.canonicalUrl && currentPage === 'home') canonical = globalSeo.canonicalUrl;\n      ogImage = globalSeo.ogImage || ogImage;\n    }\n"
           if defaults_marker in seo and "globalSeo.seoTitleAr" not in seo:
               seo = seo.replace(defaults_marker, defaults_injection, 1)
-
           replacements = [
             ("    setMetaTag('name', 'robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');", "    setMetaTag('name', 'robots', globalSeo?.robots || 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');"),
             ("    setMetaTag('property', 'og:title', title);", "    setMetaTag('property', 'og:title', globalSeo?.ogTitle && !selectedPost && !selectedProduct ? globalSeo.ogTitle : title);"),
