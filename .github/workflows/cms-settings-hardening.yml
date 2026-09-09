@@ -1,6 +1,9 @@
 name: cms-settings-hardening
 on:
-  workflow_dispatch:
+  push:
+    branches: [audit/dashboard-sync-fix]
+    paths:
+      - '.github/workflows/cms-settings-hardening.yml'
 permissions:
   contents: write
 jobs:
