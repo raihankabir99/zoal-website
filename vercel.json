@@ -27,6 +27,14 @@
       "dest": "/api/support.ts"
     },
     {
+      "src": "/api/cms",
+      "dest": "/api/cms.ts"
+    },
+    {
+      "src": "/api/cms/(.*)",
+      "dest": "/api/cms.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
