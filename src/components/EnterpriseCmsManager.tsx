@@ -219,6 +219,8 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   }, [fetchAuthoritativeCmsData]);
 
   const [cmsSettingsLoaded, setCmsSettingsLoaded] = useState(false);
+  const cmsSettingsBaselineRef = useRef<string>('');
+  const cmsSettingsDirtyRef = useRef(false);
   const saveCmsSetting = useCallback(async (key: string, value: unknown) => {
     try {
       const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
@@ -244,6 +246,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
         if (footer && typeof footer === 'object') setFooterSettings(footer);
         if (announcementValue && typeof announcementValue === 'object') setAnnouncement(announcementValue);
         if (popupValue && typeof popupValue === 'object') setPopup(popupValue);
+      cmsSettingsBaselineRef.current = JSON.stringify({ menu, footer, announcement: announcementValue, popup: popupValue });
       } catch (error) { console.error('[CMS] Authoritative global settings bootstrap failed:', error); }
       finally { if (!cancelled) setCmsSettingsLoaded(true); }
     })();
@@ -260,6 +263,12 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     }, 700);
     return () => window.clearTimeout(timer);
   }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup, saveCmsSetting]);
+
+  useEffect(() => {
+    if (!cmsSettingsLoaded) return;
+    const current = JSON.stringify({ menu: menuItems, footer: footerSettings, announcement, popup });
+    if (cmsSettingsBaselineRef.current && current !== cmsSettingsBaselineRef.current) cmsSettingsDirtyRef.current = true;
+  }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup]);
 
   // --- EDITORIAL LOOKBOOK STATE & HANDLERS ---
   const [editorialBlocks, setEditorialBlocks] = useState<any[]>([]);
