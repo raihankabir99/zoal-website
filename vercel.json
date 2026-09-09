@@ -19,7 +19,11 @@
       "dest": "/api/inventory.ts"
     },
     {
-      "src": "/api/support(?:/(.*))?",
+      "src": "/api/support",
+      "dest": "/api/support.ts"
+    },
+    {
+      "src": "/api/support/(.*)",
       "dest": "/api/support.ts"
     },
     {
