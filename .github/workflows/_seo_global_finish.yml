@@ -1,0 +1,205 @@
+name: SEO Global Finish
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+permissions:
+  contents: write
+
+jobs:
+  finish:
+    if: github.actor == 'github-actions[bot]' || github.event.head_commit.author.username == 'raihankabir99' || github.event.head_commit.author.name == 'Raihan Kabir'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+      - name: Apply audited SEO integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          cms = Path('server/cms.ts')
+          s = cms.read_text()
+          old = "  if (value === undefined) return res.status(400).json({ error: 'CMS setting value is required.' });\n  if (JSON.stringify(value).length > 250000) return res.status(413).json({ error: 'CMS setting value is too large.' });"
+          new = """  if (value === undefined) return res.status(400).json({ error: 'CMS setting value is required.' });
+          if (key === 'seo.global') {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return res.status(400).json({ error: 'SEO global value must be an object.' });
+            const allowed = new Set(['title', 'title_ar', 'description', 'description_ar', 'keywords', 'canonicalUrl', 'ogImage', 'robots']);
+            const unknown = Object.keys(value).filter((field) => !allowed.has(field));
+            if (unknown.length) return res.status(400).json({ error: `Unsupported SEO global fields: ${unknown.join(', ')}` });
+            for (const field of ['title', 'title_ar', 'description', 'description_ar', 'keywords', 'canonicalUrl', 'ogImage', 'robots']) {
+              if (value[field] !== undefined && typeof value[field] !== 'string') return res.status(400).json({ error: `SEO global field ${field} must be a string.` });
+            }
+            if (typeof value.canonicalUrl === 'string' && value.canonicalUrl.trim()) {
+              try {
+                const url = new URL(value.canonicalUrl.trim());
+                if (!['http:', 'https:'].includes(url.protocol)) throw new Error('invalid protocol');
+              } catch {
+                return res.status(400).json({ error: 'canonicalUrl must be an absolute HTTP(S) URL.' });
+              }
+            }
+          }
+          if (JSON.stringify(value).length > 250000) return res.status(413).json({ error: 'CMS setting value is too large.' });"""
+          if old not in s: raise SystemExit('cms anchor not found')
+          cms.write_text(s.replace(old, new, 1))
+
+          seo = Path('src/components/SEO.tsx')
+          s = seo.read_text()
+          s = s.replace("import { useEffect } from 'react';", "import { useEffect, useState } from 'react';", 1)
+          anchor = "  const brandName = 'ZOAL';\n"
+          replacement = """  const brandName = 'ZOAL';
+          const [globalSeo, setGlobalSeo] = useState<Record<string, string>>({});
+
+          useEffect(() => {
+            let cancelled = false;
+            fetch('/api/cms/settings')
+              .then((res) => res.ok ? res.json() : [])
+              .then((rows) => {
+                if (cancelled || !Array.isArray(rows)) return;
+                const row = rows.find((item: any) => item?.setting_key === 'seo.global');
+                if (row?.setting_value && typeof row.setting_value === 'object' && !Array.isArray(row.setting_value)) {
+                  setGlobalSeo(row.setting_value);
+                }
+              })
+              .catch(() => { /* SEO must fail safely to existing metadata. */ });
+            return () => { cancelled = true; };
+          }, []);
+"""
+          if anchor not in s: raise SystemExit('seo state anchor not found')
+          s = s.replace(anchor, replacement, 1)
+
+          fallback_anchor = "    // Dynamic page determination\n"
+          global_block = """    // Apply authoritative global SEO only as the lowest-priority CMS layer.
+          if (!selectedPost && !selectedProduct) {
+            const globalTitle = i18n.language === 'ar' ? globalSeo.title_ar : globalSeo.title;
+            const globalDescription = i18n.language === 'ar' ? globalSeo.description_ar : globalSeo.description;
+            if (globalTitle?.trim()) title = globalTitle.trim();
+            if (globalDescription?.trim()) description = globalDescription.trim();
+            if (globalSeo.keywords?.trim()) keywords = globalSeo.keywords.trim();
+            if (globalSeo.canonicalUrl?.trim()) {
+              try {
+                const parsed = new URL(globalSeo.canonicalUrl.trim(), window.location.origin);
+                if (parsed.protocol === 'http:' || parsed.protocol === 'https:') canonical = parsed.toString();
+              } catch { /* Keep route-derived canonical. */ }
+            }
+            if (globalSeo.ogImage?.trim()) ogImage = globalSeo.ogImage.trim();
+          }
+
+"""
+          if fallback_anchor not in s: raise SystemExit('seo global anchor not found')
+          s = s.replace(fallback_anchor, global_block + fallback_anchor, 1)
+          s = s.replace("    if (selectedPost) {", "    if (selectedPost) {", 1)
+          s = s.replace("          'worstRating': '1'\n        } : undefined", "          'worstRating': '1'\n        } : undefined", 1)
+          s = s.replace("  }, [currentPage, selectedProduct, selectedPost, i18n.language, authModalOpen, authModalView]);", "  }, [currentPage, selectedProduct, selectedPost, i18n.language, authModalOpen, authModalView, globalSeo]);", 1)
+          seo.write_text(s)
+
+          panel = Path('src/components/CmsGlobalSeoPanel.tsx')
+          panel.write_text(r'''import React, { useEffect, useState } from 'react';
+
+interface SeoGlobal {
+  title: string;
+  title_ar: string;
+  description: string;
+  description_ar: string;
+  keywords: string;
+  canonicalUrl: string;
+  ogImage: string;
+  robots: string;
+}
+
+const emptySeo: SeoGlobal = {
+  title: '', title_ar: '', description: '', description_ar: '', keywords: '', canonicalUrl: '', ogImage: '', robots: 'index, follow'
+};
+
+export default function CmsGlobalSeoPanel({ currentUser }: { currentUser: any }) {
+  const [form, setForm] = useState<SeoGlobal>(emptySeo);
+  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(true);
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '') : '';
+
+  const load = async () => {
+    setLoading(true); setStatus('');
+    try {
+      const res = await fetch('/api/cms/settings');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = await res.json();
+      const row = Array.isArray(rows) ? rows.find((item: any) => item?.setting_key === 'seo.global') : null;
+      if (row?.setting_value && typeof row.setting_value === 'object' && !Array.isArray(row.setting_value)) setForm({ ...emptySeo, ...row.setting_value });
+    } catch (e: any) { setStatus(`Load failed: ${e.message}`); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!['owner', 'admin', 'manager', 'staff'].includes(String(currentUser?.role || '').toLowerCase())) {
+      setStatus('Permission denied by CMS role policy.'); return;
+    }
+    if (form.canonicalUrl.trim()) {
+      try { const u = new URL(form.canonicalUrl.trim()); if (!['http:', 'https:'].includes(u.protocol)) throw new Error(); }
+      catch { setStatus('Canonical URL must be an absolute HTTP(S) URL.'); return; }
+    }
+    setStatus('Saving…');
+    try {
+      const res = await fetch('/api/cms/settings/seo.global', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ value: form })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setStatus('Saved to authoritative CMS registry.');
+    } catch (e: any) { setStatus(`Save failed: ${e.message}`); }
+  };
+
+  const field = (key: keyof SeoGlobal, label: string, multiline = false) => (
+    <label className="space-y-1 block">
+      <span className="text-[8px] font-mono uppercase tracking-wider text-zinc-500">{label}</span>
+      {multiline ? <textarea value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} rows={3} className="w-full bg-black border border-white/10 p-2 text-[10px] text-white outline-none focus:border-gold-pure" /> : <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="w-full bg-black border border-white/10 p-2 text-[10px] text-white outline-none focus:border-gold-pure" />}
+    </label>
+  );
+
+  return <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-5">
+    <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
+      <div><span className="text-[8px] font-mono uppercase text-gold-pure tracking-widest">AUTHORITATIVE CMS REGISTRY</span><h3 className="text-sm font-bold uppercase tracking-widest text-white">Global SEO</h3></div>
+      <span className="text-[8px] font-mono text-zinc-500">{loading ? 'Loading…' : status || 'Ready'}</span>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {field('title', 'Title')}{field('title_ar', 'Title Arabic')}{field('description', 'Description', true)}{field('description_ar', 'Description Arabic', true)}{field('keywords', 'Keywords', true)}{field('canonicalUrl', 'Canonical URL')}{field('ogImage', 'Open Graph Image URL')}{field('robots', 'Robots')}
+    </div>
+    <div className="flex justify-end gap-2"><button onClick={load} className="px-3 py-1.5 border border-white/10 text-zinc-300 text-[9px] uppercase font-mono">Reload</button><button onClick={save} className="px-4 py-1.5 bg-white text-black text-[9px] uppercase font-bold font-mono">Save Global SEO</button></div>
+    <p className="text-[8px] text-zinc-500 leading-relaxed">Global SEO is a fallback layer. Product, article, and page-specific authoritative metadata remains higher priority. Structured-data review counts and fixed validity dates are not fabricated.</p>
+  </div>;
+}
+''')
+
+          ent = Path('src/components/EnterpriseCmsManager.tsx')
+          s = ent.read_text()
+          imp = "import CmsTextsPanel from './CmsTextsPanel';\n"
+          if imp not in s: raise SystemExit('enterprise import anchor not found')
+          s = s.replace(imp, imp + "import CmsGlobalSeoPanel from './CmsGlobalSeoPanel';\n", 1)
+          tab_anchor = "          { id: 'seo', label: lang === 'ar' ? '🔍 إدارة الـ SEO والكلمات' : '🔍 SEO Tools' },\n"
+          if tab_anchor not in s: raise SystemExit('enterprise tab anchor not found')
+          s = s.replace(tab_anchor, tab_anchor + "          { id: 'seo-global', label: lang === 'ar' ? '🌐 SEO العام' : '🌐 Global SEO' },\n", 1)
+          render_anchor = "        {/* 1. CMS DASHBOARD SUBTAB */}\n"
+          if render_anchor not in s: raise SystemExit('enterprise render anchor not found')
+          render = """        {/* GLOBAL SEO REGISTRY SUBTAB */}
+        {cmsTab === 'seo-global' && <CmsGlobalSeoPanel currentUser={currentUser} />}
+
+"""
+          s = s.replace(render_anchor, render + render_anchor, 1)
+          ent.write_text(s)
+          print('SEO integration patch applied')
+          PY
+
+          grep -n "seo.global" server/cms.ts src/components/SEO.tsx src/components/EnterpriseCmsManager.tsx src/components/CmsGlobalSeoPanel.tsx
+          npm install
+          npm run build
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/cms.ts src/components/SEO.tsx src/components/EnterpriseCmsManager.tsx src/components/CmsGlobalSeoPanel.tsx
+          git diff --cached --check
+          git commit -m 'feat(seo): integrate authoritative global SEO settings'
+          git push origin audit/dashboard-sync-fix
