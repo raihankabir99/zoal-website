@@ -1,0 +1,73 @@
+name: One-time Support Route Repair
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: contains(github.event.head_commit.message, 'one-time targeted route wiring repair')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Replace only disconnected Support route block
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          p = Path('server.ts')
+          text = p.read_text(encoding='utf-8')
+
+          start = text.find('// SUPPORT CENTER API ROUTES')
+          end = text.find('// BLOG PUBLIC API', start)
+          if start < 0 or end < 0:
+              raise SystemExit('ABORT: expected Support route block boundaries were not found')
+
+          block = text[start:end]
+          if 'app.get(\'/api/support/tickets\', async (req, res)' not in block:
+              raise SystemExit('ABORT: current Support route block does not match expected disconnected stub')
+          if 'supportModule.getTickets' in block:
+              raise SystemExit('ABORT: authoritative Support routes already present; no write needed')
+
+          replacement = '''// SUPPORT CENTER API ROUTES
+
+app.get('/api/support/tickets', authenticateRequest, supportModule.getTickets);
+app.post('/api/support/tickets', authenticateRequest, supportModule.createTicket);
+app.post('/api/support/tickets/:id/messages', authenticateRequest, supportModule.addMessage);
+app.put('/api/support/tickets/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.updateTicket);
+app.post('/api/support/tickets/:id/attachments', authenticateRequest, supportModule.uploadTicketAttachment);
+app.get('/api/support/attachments/:id/download', authenticateRequest, supportModule.downloadTicketAttachment);
+
+app.get('/api/support/kb', authenticateRequest, supportModule.getKBArticles);
+app.post('/api/support/kb', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.createKBArticle);
+app.put('/api/support/kb/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.updateKBArticle);
+app.delete('/api/support/kb/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.deleteKBArticle);
+
+app.get('/api/support/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.getStaffRoster);
+app.post('/api/support/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.createSupportLog);
+app.get('/api/support/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.getSupportLogs);
+app.get('/api/support/reports', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.getSupportReports);
+
+'''
+          p.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+
+      - name: Commit targeted repair and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --check
+          git diff -- server.ts
+          git add server.ts .github/workflows/repair-support-routes.yml
+          git commit -m "fix(support): reconnect authoritative API handlers [support-route-repair]"
+          git rm .github/workflows/repair-support-routes.yml
+          git commit -m "chore(support): remove one-time route repair workflow"
+          git push origin HEAD:audit/dashboard-sync-fix
