@@ -1,0 +1,100 @@
+name: SEO hardening (one-time)
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.event.head_commit.message != 'fix(cms): harden authoritative SEO architecture'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Apply targeted SEO hardening
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          cms = Path('server/cms.ts')
+          text = cms.read_text()
+          old = "const PUBLIC_CMS_SETTING_KEYS = new Set(['navigation.menu', 'footer.settings', 'announcement.settings', 'popup.settings']);"
+          new = "const PUBLIC_CMS_SETTING_KEYS = new Set(['navigation.menu', 'footer.settings', 'announcement.settings', 'popup.settings', 'seo.global']);"
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif "'seo.global'" not in text:
+              raise SystemExit('Expected CMS settings allowlist was not found')
+          cms.write_text(text)
+
+          manager_path = Path('src/components/EnterpriseCmsManager.tsx')
+          manager = manager_path.read_text()
+          if "./CmsGlobalSeoPanel" not in manager:
+              manager = manager.replace("import CmsTextsPanel from './CmsTextsPanel';", "import CmsTextsPanel from './CmsTextsPanel';\nimport CmsGlobalSeoPanel from './CmsGlobalSeoPanel';", 1)
+
+          pattern = re.compile(r"  const \[seoSettings, setSeoSettings\] = useState\(\(\) => \{.*?\n  \}\);\n\n  const \[mediaAssets", re.S)
+          manager, count = pattern.subn("  const [seoSettings, setSeoSettings] = useState<any[]>([]);\n\n  const [mediaAssets", manager, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected synthetic seoSettings state block exactly once, found {count}')
+
+          manager = manager.replace("    localStorage.setItem('cms_seo_settings', JSON.stringify(seoSettings));\n", "", 1)
+
+          seo_pattern = re.compile(r"        \{cmsTab === 'seo' && \(.*?\n        \)\}\n\n        /\* 10\. MEDIA LIBRARY CMS TAB \*/", re.S)
+          replacement = '''        {cmsTab === 'seo' && (\n          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-[10px]">\n            <div className="lg:col-span-2 bg-zinc-950 border border-white/5 p-5 rounded-xs">\n              <CmsGlobalSeoPanel currentUser={currentUser} addLog={addLog} />\n            </div>\n            <div className="space-y-6">\n              <div className="bg-zinc-950 border border-white/5 p-5 rounded-xs space-y-4">\n                <span className="text-[8.5px] font-mono uppercase text-gold-pure tracking-widest block font-bold border-b border-white/5 pb-1">SEO Runtime Surface</span>\n                <p className="text-zinc-400 font-sans leading-relaxed">\n                  Global SEO metadata is stored in the authoritative CMS settings registry. Page, Hero, and Editorial SEO fields continue to use their existing relational CMS columns.\n                </p>\n                <div className="p-3 bg-black border border-white/5 rounded-xs text-[8.5px] font-mono text-zinc-400 space-y-1">\n                  <div>Global: <span className="text-emerald-400">Supabase CMS registry</span></div>\n                  <div>Canonical: <span className="text-zinc-300">runtime document metadata</span></div>\n                  <div>JSON-LD: <span className="text-zinc-300">validated before save</span></div>\n                  <div>Robots: <span className="text-zinc-300">authoritative global directive</span></div>\n                </div>\n              </div>\n            </div>\n          </div>\n        )}\n\n        /* 10. MEDIA LIBRARY CMS TAB */'''
+          manager, count = seo_pattern.subn(replacement, manager, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected SEO tab block exactly once, found {count}')
+          manager_path.write_text(manager)
+
+          seo_path = Path('src/components/SEO.tsx')
+          seo = seo_path.read_text()
+          seo = seo.replace("import { useEffect } from 'react';", "import { useEffect, useState } from 'react';", 1)
+          marker = "  const brandName = 'ZOAL';\n"
+          injection = marker + "  const [globalSeo, setGlobalSeo] = useState<any>(null);\n\n  useEffect(() => {\n    let cancelled = false;\n    fetch('/api/cms/settings')\n      .then(res => res.ok ? res.json() : [])\n      .then(records => {\n        if (cancelled || !Array.isArray(records)) return;\n        const value = records.find((item: any) => item.setting_key === 'seo.global')?.setting_value;\n        if (value && typeof value === 'object') setGlobalSeo(value);\n      })\n      .catch(() => undefined);\n    return () => { cancelled = true; };\n  }, []);\n"
+          if marker in seo and "const [globalSeo" not in seo:
+              seo = seo.replace(marker, injection, 1)
+
+          defaults_marker = "    let ogImage = settings.businessLogo; // Use business logo as default OG image\n"
+          defaults_injection = defaults_marker + "\n    // Apply authoritative global SEO only when a page-specific product/article override is not active.\n    if (globalSeo && !selectedPost && !selectedProduct) {\n      const isArabic = i18n.language === 'ar';\n      title = (isArabic && globalSeo.seoTitleAr) || globalSeo.seoTitle || title;\n      description = (isArabic && globalSeo.seoDescAr) || globalSeo.seoDesc || description;\n      keywords = globalSeo.keywords || keywords;\n      if (globalSeo.canonicalUrl && currentPage === 'home') canonical = globalSeo.canonicalUrl;\n      ogImage = globalSeo.ogImage || ogImage;\n    }\n"
+          if defaults_marker in seo and "Apply authoritative global SEO" not in seo:
+              seo = seo.replace(defaults_marker, defaults_injection, 1)
+
+          seo = seo.replace("    setMetaTag('name', 'robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');", "    setMetaTag('name', 'robots', globalSeo?.robots || 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');", 1)
+          seo = seo.replace("    setMetaTag('property', 'og:title', title);", "    setMetaTag('property', 'og:title', globalSeo?.ogTitle && !selectedPost && !selectedProduct ? globalSeo.ogTitle : title);", 1)
+          seo = seo.replace("    setMetaTag('property', 'og:description', description);", "    setMetaTag('property', 'og:description', globalSeo?.ogDesc && !selectedPost && !selectedProduct ? globalSeo.ogDesc : description);", 1)
+          seo = seo.replace("    setMetaTag('name', 'twitter:card', 'summary_large_image');", "    setMetaTag('name', 'twitter:card', globalSeo?.twitterCard || 'summary_large_image');", 1)
+          seo = seo.replace("    setMetaTag('name', 'twitter:title', title);", "    setMetaTag('name', 'twitter:title', globalSeo?.twitterTitle && !selectedPost && !selectedProduct ? globalSeo.twitterTitle : title);", 1)
+          seo = seo.replace("    setMetaTag('name', 'twitter:description', description);", "    setMetaTag('name', 'twitter:description', globalSeo?.twitterDesc && !selectedPost && !selectedProduct ? globalSeo.twitterDesc : description);", 1)
+          seo = seo.replace("    setMetaTag('name', 'twitter:image', ogImage);", "    setMetaTag('name', 'twitter:image', globalSeo?.twitterImage && !selectedPost && !selectedProduct ? globalSeo.twitterImage : ogImage);", 1)
+          seo = seo.replace("  }, [currentPage, selectedProduct, selectedPost, i18n.language, authModalOpen, authModalView]);", "  }, [currentPage, selectedProduct, selectedPost, i18n.language, authModalOpen, authModalView, globalSeo, settings]);", 1)
+
+          # Remove fabricated product review count and long fixed validity date. Omit optional fields when authoritative values are absent.
+          seo = seo.replace("          'priceValidUntil': '2030-12-31',\n", "", 1)
+          seo = seo.replace("          'aggregateRating': selectedProduct.rating ? {\n          '@type': 'AggregateRating',\n          'ratingValue': selectedProduct.rating.toString(),\n          'reviewCount': '15',\n          'bestRating': '5',\n          'worstRating': '1'\n        } : undefined", "          'aggregateRating': undefined", 1)
+          seo_path.write_text(seo)
+
+          # Verify the intended safety invariants before commit.
+          final_manager = manager_path.read_text()
+          final_seo = seo_path.read_text()
+          if "cms_seo_settings" in final_manager:
+              raise SystemExit('Synthetic cms_seo_settings persistence still exists')
+          if "reviewCount': '15'" in final_seo or "priceValidUntil': '2030-12-31'" in final_seo:
+              raise SystemExit('Synthetic product SEO values still exist')
+          if "seo.global" not in cms.read_text():
+              raise SystemExit('seo.global was not added to the CMS allowlist')
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/cms.ts src/components/EnterpriseCmsManager.tsx src/components/SEO.tsx
+          git rm .github/workflows/seo-hardening.yml
+          git commit -m "fix(cms): harden authoritative SEO architecture"
+          git push origin audit/dashboard-sync-fix
