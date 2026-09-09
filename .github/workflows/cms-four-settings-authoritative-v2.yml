@@ -1,0 +1,49 @@
+name: cms-four-settings-authoritative-v2
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Patch CMS component through GitHub API
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const path = 'src/components/EnterpriseCmsManager.tsx';
+            const branch = 'audit/dashboard-sync-fix';
+            const repo = context.repo;
+            const file = await github.rest.repos.getContent({ ...repo, path, ref: branch });
+            const sha = file.data.sha;
+            let s = Buffer.from(file.data.content, 'base64').toString('utf8');
+
+            const replaceOnce = (pattern, replacement, label) => {
+              const next = s.replace(pattern, replacement);
+              if (next === s) core.setFailed(`Pattern not found: ${label}`);
+              s = next;
+            };
+
+            replaceOnce(/  const \[menuItems, setMenuItems\][\s\S]*?\n  const \[footerSettings,/, "  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);\n\n  const [footerSettings,", 'menu state');
+            replaceOnce(/  const \[footerSettings, setFooterSettings\][\s\S]*?\n  const \[announcement,/, "  const [footerSettings, setFooterSettings] = useState<FooterSettings>({ companyInfo: '', address: '', phone: '', email: '', workingHours: '', socialLinks: {}, paymentIcons: [], certifications: [], copyright: '', mapEmbedUrl: '' });\n\n  const [announcement,", 'footer state');
+            replaceOnce(/  const \[announcement, setAnnouncement\][\s\S]*?\n  const \[popup,/, "  const [announcement, setAnnouncement] = useState<AnnouncementSettings>({ enabled: false, text: '', bgCol: '#D4AF37', txtCol: '#000000', btnText: '', btnLink: '', countdownEnd: '', scheduleStart: '', scheduleEnd: '' });\n\n  const [popup,", 'announcement state');
+            replaceOnce(/  const \[popup, setPopup\][\s\S]*?\n\n\n  \/\/ Recent changes log/, "  const [popup, setPopup] = useState<PopupSettings>({ enabled: false, type: 'newsletter', title: '', content: '', imageUrl: '', videoUrl: '', couponCode: '', rule: 'first_visit', ruleSeconds: 5, status: 'inactive' });\n\n\n  // Recent changes log", 'popup state');
+
+            const marker = "  useEffect(() => {\n    void fetchAuthoritativeCmsData();\n  }, [fetchAuthoritativeCmsData]);";
+            if (!s.includes(marker)) core.setFailed('CMS bootstrap marker not found');
+            const authority = `${marker}\n\n  const [cmsSettingsLoaded, setCmsSettingsLoaded] = useState(false);\n  const saveCmsSetting = useCallback(async (key: string, value: unknown) => {\n    try {\n      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n      const response = await fetch(\`/api/cms/settings/\${encodeURIComponent(key)}\`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: \`Bearer \${token}\` } : {}) }, body: JSON.stringify({ value }) });\n      if (!response.ok) throw new Error(\`CMS setting \${key} returned HTTP \${response.status}\`);\n    } catch (error) { console.error(\`[CMS] Failed to persist \${key}:\`, error); }\n  }, []);\n\n  useEffect(() => {\n    let cancelled = false;\n    (async () => {\n      try {\n        const response = await fetch('/api/cms/settings');\n        if (!response.ok) throw new Error(\`CMS settings API returned HTTP \${response.status}\`);\n        const records = await response.json();\n        const byKey = new Map((Array.isArray(records) ? records : []).map((item: any) => [item.setting_key, item.setting_value]));\n        if (cancelled) return;\n        const menu = byKey.get('navigation.menu');\n        const footer = byKey.get('footer.settings');\n        const announcementValue = byKey.get('announcement.settings');\n        const popupValue = byKey.get('popup.settings');\n        if (Array.isArray(menu)) setMenuItems(menu);\n        if (footer && typeof footer === 'object') setFooterSettings(footer);\n        if (announcementValue && typeof announcementValue === 'object') setAnnouncement(announcementValue);\n        if (popupValue && typeof popupValue === 'object') setPopup(popupValue);\n      } catch (error) { console.error('[CMS] Authoritative global settings bootstrap failed:', error); }\n      finally { if (!cancelled) setCmsSettingsLoaded(true); }\n    })();\n    return () => { cancelled = true; };\n  }, []);\n\n  useEffect(() => {\n    if (!cmsSettingsLoaded) return;\n    const timer = window.setTimeout(() => {\n      void saveCmsSetting('navigation.menu', menuItems);\n      void saveCmsSetting('footer.settings', footerSettings);\n      void saveCmsSetting('announcement.settings', announcement);\n      void saveCmsSetting('popup.settings', popup);\n    }, 700);\n    return () => window.clearTimeout(timer);\n  }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup, saveCmsSetting]);`;
+            replaceOnce(marker, authority, 'settings bootstrap');
+
+            s = s.replace(/\s*localStorage\.setItem\('cms_menu_items', JSON\.stringify\(menuItems\)\);\n\s*localStorage\.setItem\('cms_footer_settings', JSON\.stringify\(footerSettings\)\);\n\s*localStorage\.setItem\('cms_announcement_settings', JSON\.stringify\(announcement\)\);\n\s*localStorage\.setItem\('cms_popup_settings', JSON\.stringify\(popup\)\);/, '');
+            s = s.replace("  }, [websiteStatus, homepageSections, banners, webPages, menuItems, footerSettings, announcement, popup, homepageLayoutConfigs, promotions, seoSettings, mediaAssets, activityLogs, revisions]);", "  }, [websiteStatus, homepageSections, banners, webPages, homepageLayoutConfigs, promotions, seoSettings, mediaAssets, activityLogs, revisions]);");
+            s = s.replace("if (userRole === 'customer') {", "if (!['owner', 'admin', 'manager'].includes(String(currentUser?.role || '').toLowerCase())) {");
+            s = s.replace("{userRole === 'customer' ? (", "{!['owner', 'admin', 'manager'].includes(String(currentUser?.role || '').toLowerCase()) ? (");
+            s = s.replace("                setUserRole('owner');\n                handleAddCmsActivityLog(\"Escalated permissions from CUSTOMER to OWNER\", \"System Sentry\");\n                alert(\"Simulated role upgraded back to OWNER. Full systems unlocked.\");", "                alert(\"Permission denied. Your server-authoritative role does not allow CMS access.\");");
+            s = s.replace("  }, [currentUser, userRole]);", "  }, [currentUser]);");
+            s = s.replace("if (userRole === 'staff') {", "if (String(currentUser?.role || '').toLowerCase() === 'staff') {");
+
+            await github.rest.repos.createOrUpdateFileContents({ ...repo, path, branch, message: 'fix(cms): connect menu footer announcement popup to authoritative settings', content: Buffer.from(s, 'utf8').toString('base64'), sha });
+            await github.rest.repos.deleteFile({ ...repo, path: '.github/workflows/cms-four-settings-authoritative.yml', branch, message: 'chore: remove failed one-time cms workflow', sha: (await github.rest.repos.getContent({ ...repo, path: '.github/workflows/cms-four-settings-authoritative.yml', ref: branch })).data.sha });
+            await github.rest.repos.deleteFile({ ...repo, path: '.github/workflows/cms-four-settings-authoritative-v2.yml', branch, message: 'chore: remove one-time cms settings workflow', sha: (await github.rest.repos.getContent({ ...repo, path: '.github/workflows/cms-four-settings-authoritative-v2.yml', ref: branch })).data.sha });
