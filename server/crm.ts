@@ -551,7 +551,7 @@ export async function updateCustomer(req: Request, res: Response) {
   const { 
     name, email, phone, status, segment, manualSegment, gender, birthday, 
     preferredLanguage, city, country, photoUrl, tags, loyaltyPoints, 
-    membershipLevel, referralCredits, birthdayReward, marketingPreferences, archived 
+    membershipLevel, referralCredits, birthdayReward, marketingPreferences, rewards, archived 
   } = req.body;
 
   try {
@@ -603,6 +603,7 @@ export async function updateCustomer(req: Request, res: Response) {
     if (referralCredits !== undefined) crmUpdates.referral_credits = Math.max(0, parseFloat(referralCredits));
     if (birthdayReward !== undefined) crmUpdates.birthday_reward = birthdayReward;
     if (marketingPreferences !== undefined) crmUpdates.marketing_preferences = marketingPreferences;
+    if (rewards !== undefined) crmUpdates.rewards = rewards;
     if (archived !== undefined) crmUpdates.archived = Boolean(archived);
 
     const { data: existingCrm } = await supabase.from('zoal_customer_crm').select('id').eq('user_id', id).maybeSingle();
