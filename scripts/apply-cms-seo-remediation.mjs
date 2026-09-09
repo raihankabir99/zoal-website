@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+// One-time branch remediation runner for CMS SEO.
 
 const root = process.cwd();
 const read = (p) => fs.readFileSync(`${root}/${p}`, 'utf8');
