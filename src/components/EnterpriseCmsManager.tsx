@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Globe, LayoutGrid, Layers, FileText, Compass, PanelBottom, Megaphone,
   Bell, Check, X, Plus, Edit, Trash2, ArrowUp, ArrowDown, ExternalLink,
