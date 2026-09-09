@@ -1,0 +1,90 @@
+name: CMS authoritative batch
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: "!contains(github.event.head_commit.message, '[cms-batch]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply safe CMS source hardening
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/EnterpriseCmsManager.tsx')
+          s = p.read_text()
+
+          # Remove core CMS localStorage fallbacks; server data is authoritative.
+          for snippet in [
+              "    const raw = localStorage.getItem('cms_homepage_sections');\n    if (raw) return JSON.parse(raw);\n",
+              "    const raw = localStorage.getItem('cms_banners');\n    if (raw) return JSON.parse(raw);\n",
+              "    const raw = localStorage.getItem('cms_web_pages');\n    if (raw) return JSON.parse(raw);\n",
+          ]:
+              s = s.replace(snippet, '')
+
+          # Remove client-side RBAC simulator state and replace all simulator references with the authenticated role.
+          import re
+          s = re.sub(
+              r"  const \[userRole, setUserRole\] = useState<'owner' \| 'admin' \| 'staff' \| 'customer'\>\(\(\) => \{\n    return \(currentUser\?\.role as any\) \|\| 'owner';\n  \}\);\n",
+              "",
+              s,
+              count=1,
+          )
+          s = s.replace('userRole.toUpperCase()', "String(currentUser?.role || 'unknown').toUpperCase()")
+          s = s.replace("userRole === 'customer'", "currentUser?.role === 'customer'")
+          s = s.replace("userRole === 'staff'", "currentUser?.role === 'staff'")
+          s = s.replace("userRole === 'admin'", "['owner', 'admin', 'manager'].includes(currentUser?.role)")
+          s = s.replace("setUserRole('admin')", "void 0")
+          s = s.replace("setUserRole('staff')", "void 0")
+
+          # Replace the visible role simulator block if still present.
+          start = s.find("          {/* 2. Interactive Role Swapper (RBAC simulation) */}")
+          if start != -1:
+              end_marker = "\n\n          {/* 3. English/Arabic RTL Switcher */}"
+              end = s.find(end_marker, start)
+              if end == -1:
+                  raise SystemExit('role simulator end marker not found')
+              replacement = '''          {/* 2. Server-authoritative role indicator */}\n          <div className="flex items-center gap-1.5 bg-zinc-900 border border-white/5 py-1 px-2.5 rounded-xs">\n            <Shield className="w-3.5 h-3.5 text-gold-pure" />\n            <span className="text-[9.5px] uppercase tracking-wider font-mono text-zinc-300">\n              Role: {String(currentUser?.role || 'unknown').toUpperCase()}\n            </span>\n          </div>'''
+              s = s[:start] + replacement + s[end:]
+
+          # Add a single authoritative CMS refresh that consumes the existing API contract.
+          anchor = "  // --- EDITORIAL LOOKBOOK STATE & HANDLERS ---"
+          if 'const refreshAuthoritativeCms = useCallback' not in s:
+              insert = '''  // --- AUTHORITATIVE CMS READ ---\n  const refreshAuthoritativeCms = useCallback(async () => {\n    try {\n      const response = await fetch('/api/cms');\n      if (!response.ok) throw new Error(`CMS API returned HTTP ${response.status}`);\n      const data = await response.json();\n\n      if (Array.isArray(data.sections)) {\n        setHomepageSections(data.sections.map((row: any, index: number) => ({\n          id: String(row.section_key ?? row.id ?? `section-${index + 1}`),\n          name: String(row.title ?? row.section_key ?? `Section ${index + 1}`),\n          enabled: Boolean(row.is_active),\n          order: Number(row.display_order ?? index + 1),\n          publishAt: row.settings_json?.schedule_start ?? '',\n          expireAt: row.settings_json?.schedule_end ?? ''\n        })).sort((a: HomepageSection, b: HomepageSection) => a.order - b.order));\n      }\n\n      if (Array.isArray(data.banners)) {\n        setBanners(data.banners.map((row: any) => ({\n          id: String(row.id),\n          type: 'homepage',\n          title: String(row.title ?? ''),\n          subtitle: String(row.subtitle ?? ''),\n          description: '',\n          buttonText: '',\n          buttonLink: String(row.link_url ?? ''),\n          bgImage: String(row.image_url ?? ''),\n          mobileImage: String(row.image_url ?? ''),\n          priority: 0,\n          scheduleStart: '',\n          scheduleEnd: '',\n          status: row.is_active ? 'published' : 'archived',\n          animation: 'fade'\n        })) as Banner[]);\n      }\n\n      if (Array.isArray(data.pages)) {\n        setWebPages(data.pages.map((row: any) => ({\n          id: String(row.id),\n          key: String(row.slug ?? row.id),\n          title: String(row.title ?? ''),\n          content: typeof row.content_json === 'object' ? String(row.content_json?.content ?? row.content_json?.body ?? '') : String(row.content_json ?? ''),\n          images: Array.isArray(row.content_json?.images) ? row.content_json.images : [],\n          videos: Array.isArray(row.content_json?.videos) ? row.content_json.videos : [],\n          seoTitle: String(row.content_json?.seo_title ?? ''),\n          seoDesc: String(row.content_json?.seo_description ?? ''),\n          status: 'published',\n          lastModified: String(row.updated_at ?? row.created_at ?? ''),\n          revisionHistory: []\n        })) as WebPage[]);\n      }\n    } catch (error) {\n      console.error('[CMS] Authoritative refresh failed:', error);\n    }\n  }, []);\n\n  useEffect(() => {\n    void refreshAuthoritativeCms();\n  }, [refreshAuthoritativeCms]);\n\n'''
+              if anchor not in s:
+                  raise SystemExit('CMS anchor not found')
+              s = s.replace(anchor, insert + anchor, 1)
+
+          # Remove writes that turn localStorage into the source of truth for core CMS datasets.
+          s = re.sub(r"\s*localStorage\.setItem\('cms_homepage_sections', JSON\.stringify\(homepageSections\)\);", '', s)
+          s = re.sub(r"\s*localStorage\.setItem\('cms_banners', JSON\.stringify\(banners\)\);", '', s)
+          s = re.sub(r"\s*localStorage\.setItem\('cms_web_pages', JSON\.stringify\(nonLegalPages\)\);", '', s)
+
+          p.write_text(s)
+          PY
+
+      - name: Validate
+        run: |
+          grep -q "Authoritative CMS READ" src/components/EnterpriseCmsManager.tsx
+          ! grep -q "Interactive Role Swapper (RBAC simulation)" src/components/EnterpriseCmsManager.tsx
+          ! grep -q "const \[userRole" src/components/EnterpriseCmsManager.tsx
+          git diff --check
+          npm run build
+
+      - name: Commit and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/EnterpriseCmsManager.tsx
+          git commit -m "fix(cms): make core reads server-authoritative [cms-batch]"
+          git push
+          git rm .github/workflows/cms-authoritative-batch.yml
+          git commit -m "chore(cms): remove temporary authoritative batch workflow [cms-batch]"
+          git push
