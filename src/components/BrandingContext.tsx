@@ -31,54 +31,25 @@ export interface GlobalSettings {
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
-  businessName: 'AL ZOAL Enterprise',
-  businessLogo: BRANDING.LOGO,
-  favicon: BRANDING.FAVICON,
-  address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-  email: 'alzoal3003@gmail.com',
-  phone: '+966 56 769 9315',
-  instagram: 'https://instagram.com/alzoal',
-  twitter: 'https://twitter.com/alzoal',
-  website: 'https://alzoal.sa',
-  language: 'en',
-  currency: 'SAR',
-  shippingFeeDefault: 35,
-  shippingFreeThreshold: 500,
-  taxRate: 15,
-  taxId: 'VAT-789-ZOAL-99',
-  smtpHost: 'smtp.zoal-cloud.sa',
-  smtpPort: '587',
-  smtpUser: 'relays@zoal.sa',
-  ipWhitelist: '0.0.0.0/0',
-  sessionExpirationMinutes: 120,
-  autoBackupFrequency: 'daily',
-  accentColor: '#D4AF37',
-  companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-  theme: 'dark'
+  businessName: 'AL ZOAL Enterprise', businessLogo: BRANDING.LOGO, favicon: BRANDING.FAVICON,
+  address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia', email: 'alzoal3003@gmail.com', phone: '+966 56 769 9315',
+  instagram: 'https://instagram.com/alzoal', twitter: 'https://twitter.com/alzoal', website: 'https://alzoal.sa', language: 'en', currency: 'SAR',
+  shippingFeeDefault: 35, shippingFreeThreshold: 500, taxRate: 15, taxId: 'VAT-789-ZOAL-99', smtpHost: 'smtp.zoal-cloud.sa', smtpPort: '587', smtpUser: 'relays@zoal.sa',
+  ipWhitelist: '0.0.0.0/0', sessionExpirationMinutes: 120, autoBackupFrequency: 'daily', accentColor: '#D4AF37',
+  companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform', theme: 'dark'
 };
 
 const getValidLogo = (logoPath: any): string => {
-  if (typeof logoPath === 'string' && logoPath.trim() !== '' && !logoPath.includes('logo.svg') && !logoPath.includes('zoal-logo.jpg') && !logoPath.includes('zoal-logo-4.jpg')) {
-    return logoPath;
-  }
+  if (typeof logoPath === 'string' && logoPath.trim() !== '' && !logoPath.includes('logo.svg') && !logoPath.includes('zoal-logo.jpg') && !logoPath.includes('zoal-logo-4.jpg')) return logoPath;
   return BRANDING.LOGO;
 };
 
-/**
- * Sanitizes settings before storage or client consumption to ensure no sensitive credentials
- * (SMTP passwords, private keys, API secrets) ever persist in browser storage or component state.
- */
 export const sanitizeSettingsForClient = (raw: any): GlobalSettings => {
-  if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_SETTINGS };
-  }
-
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS };
   const validLogo = getValidLogo(raw.businessLogo);
-
   return {
     businessName: typeof raw.businessName === 'string' && raw.businessName.trim() ? raw.businessName : DEFAULT_SETTINGS.businessName,
-    businessLogo: validLogo,
-    favicon: BRANDING.FAVICON,
+    businessLogo: validLogo, favicon: BRANDING.FAVICON,
     address: typeof raw.address === 'string' ? raw.address : DEFAULT_SETTINGS.address,
     email: typeof raw.email === 'string' ? raw.email : DEFAULT_SETTINGS.email,
     phone: typeof raw.phone === 'string' ? raw.phone : DEFAULT_SETTINGS.phone,
@@ -123,36 +94,23 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const parsed = JSON.parse(saved);
         const sanitized = sanitizeSettingsForClient(parsed);
-        if ('smtpPass' in parsed || 'smtp_pass' in parsed || 'password' in parsed || 'secret' in parsed) {
-          localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitized));
-        }
+        if ('smtpPass' in parsed || 'smtp_pass' in parsed || 'password' in parsed || 'secret' in parsed) localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitized));
         return sanitized;
-      } catch (e) {
-        console.error('Failed to parse branding settings:', e);
-      }
+      } catch (e) { console.error('Failed to parse branding settings:', e); }
     }
     return DEFAULT_SETTINGS;
   });
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const getAuthToken = () => localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
 
   const refreshBranding = async () => {
     try {
       setError(null);
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('Authentication required to load authoritative branding settings.');
-      }
-
-      const res = await fetch('/api/branding', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to load branding: ${res.statusText}`);
-      }
+      if (!token) throw new Error('Authentication required to load authoritative branding settings.');
+      const res = await fetch('/api/branding', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Failed to load branding: ${res.statusText}`);
       const data = await res.json();
       const sanitized = sanitizeSettingsForClient(data);
       setSettings(sanitized);
@@ -160,100 +118,56 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (err: any) {
       console.warn('⚠️ Authoritative branding unavailable; retaining last known client state:', err.message || err);
       setError(err.message || String(err));
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const updateSettings = async (newSettingsOrFn: GlobalSettings | ((prev: GlobalSettings) => GlobalSettings)): Promise<boolean> => {
     const previousSettings = settings;
     const nextSettings = typeof newSettingsOrFn === 'function' ? newSettingsOrFn(settings) : newSettingsOrFn;
     const token = getAuthToken();
-
-    if (!token) {
-      setError('Authentication required to persist branding settings.');
-      return false;
-    }
-
+    if (!token) { setError('Authentication required to persist branding settings.'); return false; }
     try {
       const response = await fetch('/api/branding', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(nextSettings)
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(nextSettings)
       });
-
       if (!response.ok) {
         let message = 'Failed to persist branding settings.';
-        try {
-          const errData = await response.json();
-          message = errData.error || errData.message || message;
-        } catch (_) {}
+        try { const errData = await response.json(); message = errData.error || errData.message || message; } catch (_) {}
         throw new Error(message);
       }
-
       const data = await response.json();
-      if (!data.success || !data.settings) {
-        throw new Error('Branding persistence returned an invalid server response.');
-      }
-
+      if (!data.success || !data.settings) throw new Error('Branding persistence returned an invalid server response.');
       const sanitizedServer = sanitizeSettingsForClient(data.settings);
       setSettings(sanitizedServer);
       localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitizedServer));
       setError(null);
       return true;
     } catch (err: any) {
-      // Never leave a failed optimistic mutation looking persisted.
-      setSettings(previousSettings);
-      setError(err.message || String(err));
-      console.error('❌ Failed to persist branding on server:', err.message || err);
-      return false;
+      setSettings(previousSettings); setError(err.message || String(err));
+      console.error('❌ Failed to persist branding on server:', err.message || err); return false;
     }
   };
 
   useEffect(() => {
     refreshBranding();
-
-    const handleOnline = () => {
-      refreshBranding();
-    };
-
+    const handleOnline = () => { refreshBranding(); };
     window.addEventListener('online', handleOnline);
-    const interval = setInterval(() => {
-      if (error) refreshBranding();
-    }, 20000);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      clearInterval(interval);
-    };
+    const interval = setInterval(() => { if (error) refreshBranding(); }, 20000);
+    return () => { window.removeEventListener('online', handleOnline); clearInterval(interval); };
   }, []);
 
   useEffect(() => {
     const faviconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
-    if (faviconLink) {
-      faviconLink.href = settings.favicon || settings.businessLogo;
-    } else {
-      const newFavicon = document.createElement('link');
-      newFavicon.rel = 'icon';
-      newFavicon.href = settings.favicon || settings.businessLogo;
-      document.head.appendChild(newFavicon);
-    }
+    if (faviconLink) faviconLink.href = settings.favicon || settings.businessLogo;
+    else { const newFavicon = document.createElement('link'); newFavicon.rel = 'icon'; newFavicon.href = settings.favicon || settings.businessLogo; document.head.appendChild(newFavicon); }
   }, [settings.favicon, settings.businessLogo]);
 
-  const contextValue = React.useMemo(() => ({
-    settings,
-    updateSettings,
-    loading,
-    error,
-    refreshBranding
-  }), [settings, loading, error]);
+  const contextValue = React.useMemo(() => ({ settings, updateSettings, loading, error, refreshBranding }), [settings, loading, error]);
+  return <BrandingContext.Provider value={contextValue}>{children}</BrandingContext.Provider>;
+};
 
-  return (
-    <BrandingContext.Provider value={contextValue}>
-      {children}
-    </BrandingContext.Provider>
-  );
+export const useBranding = (): BrandingContextType => {
+  const context = useContext(BrandingContext);
+  if (!context) throw new Error('useBranding must be used within a BrandingProvider');
+  return context;
 };
