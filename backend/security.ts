@@ -24,7 +24,6 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
 
 interface RateLimitInfo { count: number; resetTime: number; }
 const ipCache = new Map<string, RateLimitInfo>();
-
 export function rateLimiterMiddleware(maxRequests: number = 100, windowMs: number = 15 * 60 * 1000) {
   return (req: Request, res: Response, next: NextFunction) => {
     const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
@@ -41,9 +40,7 @@ export function rateLimiterMiddleware(maxRequests: number = 100, windowMs: numbe
     next();
   };
 }
-
 export function userRateLimiterMiddleware(maxRequests: number = 100, windowMs: number = 15 * 60 * 1000) { return rateLimiterMiddleware(maxRequests, windowMs); }
-
 export function csrfProtectionMiddleware(req: Request, res: Response, next: NextFunction) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const authHeader = req.headers.authorization;
@@ -74,7 +71,6 @@ export function sanitizeValue(input: any, key?: string): any {
   }
   return input;
 }
-
 export function xssSanitizerMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.body) req.body = sanitizeValue(req.body);
   if (req.query) req.query = sanitizeValue(req.query);
@@ -83,9 +79,7 @@ export function xssSanitizerMiddleware(req: Request, res: Response, next: NextFu
 }
 
 import { getSupabaseClient, getServiceSupabaseClient } from './supabase.ts';
-
 export const ROLE_HIERARCHY: Record<string, number> = { customer: 1, author: 1.5, staff: 2, editor: 2.5, manager: 3, admin: 4, owner: 5 };
-
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: ['can_manage_orders','can_manage_products','can_manage_users','can_manage_inventory','can_issue_refund','can_view_reports','can_manage_settings','can_manage_blog','can_manage_support'],
   admin: ['can_manage_orders','can_manage_products','can_manage_users','can_manage_inventory','can_issue_refund','can_view_reports','can_manage_settings','can_manage_blog','can_manage_support'],
@@ -101,7 +95,6 @@ export async function syncSupabaseUser(user: any) {
   const supabase = getSupabaseClient() || serviceSupabase;
   const dbClient = serviceSupabase || supabase;
   if (!dbClient) throw new Error('Auth service unavailable.');
-
   if (typeof user === 'string') {
     const authClient = supabase || serviceSupabase;
     if (!authClient) throw new Error('Auth service unavailable.');
@@ -110,74 +103,26 @@ export async function syncSupabaseUser(user: any) {
     user = resolvedUser;
   }
   if (!user || !user.id) return null;
-
   let { data: profile } = await dbClient.from('zoal_users').select('*').eq('id', user.id).maybeSingle();
   const userEmail = (user.email && user.email.trim() !== '') ? user.email.trim().toLowerCase() : `${user.id}@no-email.zoal.com`;
-
   if (!profile && userEmail) {
     const { data: existingEmailProfile } = await dbClient.from('zoal_users').select('*').eq('email', userEmail).maybeSingle();
-    if (existingEmailProfile && existingEmailProfile.id !== user.id) {
-      // SECURITY: never rewrite a canonical user id during authentication.
-      // An email collision indicates an identity-reconciliation condition that requires
-      // explicit administrative recovery; failing closed prevents cross-account binding.
-      return null;
-    }
+    if (existingEmailProfile && existingEmailProfile.id !== user.id) return null;
   }
-
   if (!profile) {
     const metadata = user.user_metadata || {};
     const v_full_name = metadata.full_name || '';
     const v_first_name = metadata.first_name || metadata.firstName || v_full_name.split(' ')[0] || 'User';
     const v_last_name = metadata.last_name || metadata.lastName || v_full_name.substring(v_full_name.indexOf(' ') + 1) || '';
     const v_phone = metadata.phone || user.phone || '0000000000';
-
-    // SECURITY: profile recovery must never grant owner/admin privileges implicitly.
-    // Privileged roles must be provisioned explicitly; missing profiles default to customer.
-    // INITIAL_OWNER_EMAIL is intentionally not used as an authentication-time privilege grant.
     const defaultRole = 'customer';
-
-    const newProfile = {
-      id: user.id,
-      first_name: v_first_name,
-      last_name: v_last_name,
-      email: userEmail,
-      phone: v_phone || '0000000000',
-      password_hash: 'PROTECTED',
-      role: defaultRole,
-      is_verified: user.email_confirmed_at ? true : false,
-      addresses: [],
-      created_at: new Date().toISOString()
-    };
-
+    const newProfile = { id: user.id, first_name: v_first_name, last_name: v_last_name, email: userEmail, phone: v_phone || '0000000000', password_hash: 'PROTECTED', role: defaultRole, is_verified: user.email_confirmed_at ? true : false, addresses: [], created_at: new Date().toISOString() };
     const { data: upsertedProfile, error: upsertError } = await dbClient.from('zoal_users').upsert(newProfile, { onConflict: 'id' }).select().maybeSingle();
     if (!upsertError && upsertedProfile) profile = upsertedProfile;
-
     if (!profile) profile = { ...newProfile, addresses: [] };
   }
-
-  const safeProfile = {
-    id: profile?.id || user.id,
-    email: profile?.email || user.email || '',
-    first_name: profile?.first_name || 'User',
-    last_name: profile?.last_name || '',
-    role: profile?.role || 'customer',
-    phone: profile?.phone || '',
-    is_verified: profile?.is_verified || false,
-    addresses: profile?.addresses || []
-  };
-
-  return {
-    id: safeProfile.id,
-    email: safeProfile.email,
-    firstName: safeProfile.first_name,
-    lastName: safeProfile.last_name,
-    name: `${safeProfile.first_name} ${safeProfile.last_name}`.trim(),
-    phone: safeProfile.phone,
-    role: safeProfile.role,
-    isVerified: safeProfile.is_verified,
-    addresses: safeProfile.addresses,
-    permissions: ROLE_PERMISSIONS[safeProfile.role] || []
-  };
+  const safeProfile = { id: profile?.id || user.id, email: profile?.email || user.email || '', first_name: profile?.first_name || 'User', last_name: profile?.last_name || '', role: profile?.role || 'customer', phone: profile?.phone || '', is_verified: profile?.is_verified || false, addresses: profile?.addresses || [] };
+  return { id: safeProfile.id, email: safeProfile.email, firstName: safeProfile.first_name, lastName: safeProfile.last_name, name: `${safeProfile.first_name} ${safeProfile.last_name}`.trim(), phone: safeProfile.phone, role: safeProfile.role, isVerified: safeProfile.is_verified, addresses: safeProfile.addresses, permissions: ROLE_PERMISSIONS[safeProfile.role] || [] };
 }
 
 export async function authenticateRequest(req: any, res: Response, next: NextFunction) {
@@ -195,9 +140,7 @@ export async function authenticateRequest(req: any, res: Response, next: NextFun
     req.user = await syncSupabaseUser(user);
     if (!req.user) return res.status(403).json({ error: 'Forbidden', message: 'Account identity could not be reconciled safely. Administrative recovery is required.' });
     next();
-  } catch (err: any) {
-    return res.status(err.message === 'Auth service unavailable.' ? 500 : 403).json({ error: err.message === 'Auth service unavailable.' ? 'Internal Server Error' : 'Forbidden', message: err.message });
-  }
+  } catch (err: any) { return res.status(err.message === 'Auth service unavailable.' ? 500 : 403).json({ error: err.message === 'Auth service unavailable.' ? 'Internal Server Error' : 'Forbidden', message: err.message }); }
 }
 
 export async function optionalAuthenticate(req: any, res: Response, next: NextFunction) {
@@ -229,7 +172,6 @@ export function requireRole(allowedRoles: string[]) {
     next();
   };
 }
-
 export function requirePermission(permission: string) {
   return (req: any, res: any, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
@@ -237,4 +179,78 @@ export function requirePermission(permission: string) {
     if (!permissions.includes(permission)) return res.status(403).json({ error: 'Forbidden', message: `Access denied. Missing required permission: ${permission}` });
     next();
   };
+}
+export const requireSupportStaff = requirePermission('can_manage_support');
+
+const submissionCache = new Map<string, number>();
+export async function validateContactSecurity(req: any, res: Response, next: NextFunction) {
+  try {
+    if (!req.body) req.body = {};
+    const { email, message, msg, captchaToken } = req.body;
+    const finalMessage = message || msg || '';
+    const safeEmail = email || '';
+    const ip = req.ip || req.headers['x-forwarded-for'] || '0.0.0.0';
+    const now = Date.now();
+    const ipKey = `contact_ip_${ip}`;
+    const lastSubmission = submissionCache.get(ipKey) || 0;
+    const contentHash = Buffer.from(`${safeEmail}:${finalMessage}`).toString('base64').substring(0, 32);
+    const contentKey = `contact_content_${contentHash}`;
+    const lastContentSubmission = submissionCache.get(contentKey) || 0;
+    if (now - lastSubmission < 5000) return res.status(429).json({ error: 'Too Many Requests', message: 'Please wait a moment before sending another message.' });
+    if (now - lastContentSubmission < 600000) return res.status(409).json({ error: 'Conflict', message: 'Duplicate message detected. If you have more to add, please wait or use a different message.' });
+    const spamKeywords = ['crypto','bitcoin','viagra','casino','lottery','prize','invest','payout','winner'];
+    const lowercaseMsg = finalMessage.toLowerCase();
+    const isSpam = spamKeywords.some((keyword: string) => lowercaseMsg.includes(keyword));
+    const linkCount = (lowercaseMsg.match(/https?:\/\//g) || []).length;
+    if (isSpam || linkCount > 2) return res.status(403).json({ error: 'Forbidden', message: 'Your message was flagged as spam by our security filters.' });
+    if (process.env.REQUIRE_CAPTCHA === 'true' && !captchaToken) return res.status(400).json({ error: 'Bad Request', message: 'Security verification (Captcha) is required but missing.' });
+    req.securityMetadata = { ip, userAgent: req.headers['user-agent'], timestamp: new Date().toISOString(), isSpamCandidate: isSpam };
+    submissionCache.set(ipKey, now);
+    submissionCache.set(contentKey, now);
+    if (submissionCache.size > 1000) {
+      const expireTime = now - 3600000;
+      for (const [key, time] of submissionCache.entries()) if (time < expireTime) submissionCache.delete(key);
+    }
+    next();
+  } catch (err: any) { return res.status(500).json({ error: err.message || 'Security validation failed.' }); }
+}
+
+export function serveRobotsTxt(req: Request, res: Response) {
+  const host = req.headers.host || 'alzoal.com';
+  const protocol = req.secure ? 'https' : 'http';
+  const robots = ['User-agent: *','Allow: /','Disallow: /admin','Disallow: /api/','Disallow: /dashboard','',`Sitemap: ${protocol}://${host}/sitemap.xml`].join('\n');
+  res.header('Content-Type', 'text/plain');
+  res.send(robots);
+}
+
+export function serveSitemapXml(req: Request, res: Response) {
+  const host = req.headers.host || 'alzoal.com';
+  const protocol = req.secure ? 'https' : 'http';
+  const domain = `${protocol}://${host}`;
+  const now = new Date().toISOString().split('T')[0];
+  const staticUrls = [
+    { loc: '/', changefreq: 'daily', priority: '1.0' },
+    { loc: '/store', changefreq: 'daily', priority: '0.9' },
+    { loc: '/portfolio', changefreq: 'weekly', priority: '0.8' },
+    { loc: '/about', changefreq: 'monthly', priority: '0.7' },
+    { loc: '/branches', changefreq: 'monthly', priority: '0.7' },
+    { loc: '/blog', changefreq: 'weekly', priority: '0.6' },
+    { loc: '/contact', changefreq: 'monthly', priority: '0.5' },
+    { loc: '/faq', changefreq: 'monthly', priority: '0.4' },
+    { loc: '/privacy-policy', changefreq: 'yearly', priority: '0.3' },
+    { loc: '/terms-and-conditions', changefreq: 'yearly', priority: '0.3' }
+  ];
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+  staticUrls.forEach(url => {
+    xml += '  <url>\n';
+    xml += `    <loc>${domain}${url.loc}</loc>\n`;
+    xml += `    <lastmod>${now}</lastmod>\n`;
+    xml += `    <changefreq>${url.changefreq}</changefreq>\n`;
+    xml += `    <priority>${url.priority}</priority>\n`;
+    xml += '  </url>\n';
+  });
+  xml += '</urlset>\n';
+  res.header('Content-Type', 'application/xml');
+  res.send(xml);
 }
