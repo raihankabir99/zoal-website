@@ -156,3 +156,7 @@ export async function hydrateReturnsConfigFromLegal(): Promise<boolean> {
     return false;
   }
 }
+
+if (typeof window !== 'undefined') {
+  void hydrateReturnsConfigFromLegal();
+}
