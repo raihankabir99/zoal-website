@@ -102,7 +102,7 @@ export default function SecuritySettingsCenter({
 
   const fetchBackupData = useCallback(async () => {
     try {
-      const res = await fetch('/api/operations/backups');
+      const res = await fetch('/api/operations/backup');
       if (res.ok) {
         const data = await res.json();
         setBackupStatus(data);
@@ -122,59 +122,59 @@ export default function SecuritySettingsCenter({
 
   // 5. LOCAL EDITABLE BUSINESS PARAMETERS (to write to parent globalSettings)
   const [bizForm, setBizForm] = useState({
-    businessName: globalSettings.businessName || 'AL ZOAL Boutique',
-    crNumber: '1010625341', // Commercial Registration
-    vatNumber: globalSettings.taxId || '300092837200003',
-    address: globalSettings.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-    email: globalSettings.email || 'alzoal3003@gmail.com',
-    phone: globalSettings.phone || '+966 56 769 9315',
-    whatsapp: globalSettings.phone || '+966 56 769 9315',
-    workingHours: '09:00 AM - 11:00 PM (AST)',
-    timezone: 'Asia/Riyadh (AST - UTC+3)',
+    businessName: globalSettings.businessName || '',
+    crNumber: '', // Commercial Registration
+    vatNumber: globalSettings.taxId || '',
+    address: globalSettings.address || '',
+    email: globalSettings.email || '',
+    phone: globalSettings.phone || '',
+    whatsapp: globalSettings.phone || '',
+    workingHours: '',
+    timezone: '',
     currency: globalSettings.currency || 'SAR',
     language: globalSettings.language || 'en',
     // Social media
-    instagram: globalSettings.instagram || 'https://instagram.com/alzoal',
-    twitter: globalSettings.twitter || 'https://twitter.com/alzoal',
-    facebook: globalSettings.facebook || 'https://facebook.com/alzoal',
-    linkedin: 'https://linkedin.com/company/alzoal',
-    tiktok: 'https://tiktok.com/@alzoal',
-    youtube: 'https://youtube.com/c/alzoal',
-    snapchat: 'https://snapchat.com/add/alzoal'
+    instagram: globalSettings.instagram || '',
+    twitter: globalSettings.twitter || '',
+    facebook: globalSettings.facebook || '',
+    linkedin: '',
+    tiktok: '',
+    youtube: '',
+    snapchat: ''
   });
 
   // 6. PAYMENT & SHIPPING SETTINGS
   const [payForm, setPayForm] = useState({
-    moyasarSandboxKey: 'pk_sandbox_zoal_59a8c7b8d14',
+    moyasarSandboxKey: '',
     moyasarProdKey: '•••••••••••••••• (Configured via Server Environment)',
-    stripeSandboxKey: 'pk_test_51Mz...zoal',
+    stripeSandboxKey: '',
     stripeProdKey: '•••••••••••••••• (Configured via Server Environment)',
-    paypalClientId: 'Aa_zoal_sandbox_95x82b',
-    activeMode: 'sandbox', // sandbox, production
-    moyasarEnabled: true,
+    paypalClientId: '',
+    activeMode: 'server', // Actual payment mode is controlled by server configuration
+    moyasarEnabled: false,
     stripeEnabled: false,
     paypalEnabled: false,
     // Shipping rules
-    shippingZones: 'All Saudi Sectors, Gulf Cooperation Council (GCC)',
+    shippingZones: '',
     shippingRatesDefault: String(globalSettings.shippingFeeDefault || 25),
     freeShippingThreshold: String(globalSettings.shippingFreeThreshold || 500),
-    deliveryTimeDefault: '2 to 4 Business Days (Overnight Courier)',
-    primaryCourier: 'Priority Courier Express',
-    trackingProvider: 'Aramex API Integration'
+    deliveryTimeDefault: '',
+    primaryCourier: '',
+    trackingProvider: ''
   });
 
   // 7. SYSTEM SMTP CONFIGS
   const [sysForm, setSysForm] = useState({
-    smtpHost: globalSettings.smtpHost || 'smtp.zoal.com',
+    smtpHost: globalSettings.smtpHost || '',
     smtpPort: globalSettings.smtpPort || '587',
-    smtpUser: globalSettings.smtpUser || 'relay@zoal.com',
-    ipWhitelist: globalSettings.ipWhitelist || '192.168.1.*, 127.0.0.1',
+    smtpUser: globalSettings.smtpUser || '',
+    ipWhitelist: globalSettings.ipWhitelist || '',
     sessionExpirationMinutes: String(globalSettings.sessionExpirationMinutes || 60),
-    fileUploadLimitMb: '10 MB',
-    cacheOptimizationEnabled: true,
-    mediaOptimizationEnabled: true,
+    fileUploadLimitMb: '',
+    cacheOptimizationEnabled: false,
+    mediaOptimizationEnabled: false,
     maintenanceModeActive: globalSettings.maintenanceMode || false,
-    environmentValidation: 'Production Container Block V3'
+    environmentValidation: 'Server-side validation required'
   });
 
   // Password visibility states
@@ -201,7 +201,7 @@ export default function SecuritySettingsCenter({
         setIsInviteOpen(false);
         setInviteForm({ name: '', email: '', role: 'staff' });
         fetchRoster();
-        alert("Grand invitation link successfully compiled and dispatched to " + inviteForm.email);
+        alert("Pending administrator account created. Invitation email dispatch is not configured by this endpoint.");
       } else {
         const err = await res.json();
         alert(`Failed to invite admin: ${err.message || err.error}`);
@@ -287,7 +287,7 @@ export default function SecuritySettingsCenter({
 
     setGlobalSettings(updatedGlobal);
     addLog("Synchronized comprehensive business and SMTP keys", "Global Settings");
-    alert("Boutique configurations verified, synced, and cryptographically locked!");
+    alert("Configuration changes submitted to the authoritative settings service.");
   };
 
   return (

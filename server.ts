@@ -680,7 +680,7 @@ app.get('/api/ai/translations/pack/export', aiTranslationsModule.exportLanguageP
 app.post('/api/ai/translations/pack/import', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.importLanguagePack);
 app.get('/api/ai/translations/memory', aiTranslationsModule.getTranslationMemory);
 app.get('/api/operations/health', operationsModule.getHealthData);
-app.get('/api/operations/backup', operationsModule.getBackupData);
+app.get('/api/operations/backup', authenticateRequest, requireRole(['admin', 'owner']), operationsModule.getBackupData);
 app.get('/api/operations/alerts', operationsModule.getAlertData);
 app.get('/api/operations/certification', operationsModule.getCertificationData);
 
@@ -692,6 +692,7 @@ app.get('/api/admin/audit-logs', authenticateRequest, requireRole(['admin', 'own
 app.get('/api/admin/active-sessions', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getActiveSessions);
 app.get('/api/admin/rbac-matrix', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getRbacMatrix);
 app.delete('/api/admin/sessions/:token', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeSession);
+app.post('/api/admin/invite', authenticateRequest, requireRole(['admin', 'owner']), adminModule.inviteAdmin);
 
 // ENDPOINTS
 

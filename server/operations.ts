@@ -37,24 +37,13 @@ export async function getHealthData(req: Request, res: Response) {
 }
 
 export async function getBackupData(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
-  let lastBackup = 'Never';
-  let status = 'Not Configured';
-  
-  try {
-    if (supabase) {
-      const { data: settings } = await supabase.from('branding_settings').select('auto_backup_frequency, updated_at').eq('id', 1).single();
-      if (settings?.auto_backup_frequency && settings?.auto_backup_frequency !== 'none') {
-        status = 'Active';
-        lastBackup = settings.updated_at || 'Unknown';
-      }
-    }
-  } catch (err) {}
-
-  res.json({
-    lastBackup,
-    status,
-    scheduled: 'Managed by Infrastructure'
+  // The application does not own the infrastructure backup ledger. Do not
+  // present branding_settings.updated_at as a completed backup timestamp.
+  return res.json({
+    lastBackup: null,
+    status: 'Infrastructure Managed',
+    scheduled: 'Managed by Infrastructure',
+    verifiedByApplication: false
   });
 }
 
