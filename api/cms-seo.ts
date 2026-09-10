@@ -34,7 +34,7 @@ app.put('/api/cms-seo', authenticateRequest, requireRole(['staff', 'manager', 'a
   }
 
   const canonical = typeof value.canonical === 'string' ? value.canonical.trim() : '';
-  if (canonical && !/^https?:\\/\\//i.test(canonical)) {
+  if (canonical && !/^https?:\/\//i.test(canonical)) {
     return res.status(400).json({ error: 'Canonical URL must be an absolute http(s) URL.' });
   }
 
