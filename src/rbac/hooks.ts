@@ -1,36 +1,36 @@
 import { Role, RoleHierarchy, RolePermissions, Permission } from './constants';
 
+const KNOWN_ROLES = new Set<Role>(['customer', 'staff', 'manager', 'admin', 'owner']);
+
+const normalizeRole = (userRole?: string): Role => {
+  const candidate = (userRole || '').trim().toLowerCase() as Role;
+  return KNOWN_ROLES.has(candidate) ? candidate : 'customer';
+};
+
 export const useAccess = (userRole?: string) => {
-  const role = (userRole || 'customer') as Role;
+  const role = normalizeRole(userRole);
 
   const hasRole = (requiredRole: Role) => {
-    return RoleHierarchy[role] >= RoleHierarchy[requiredRole];
-  };
-
-  const getAllPermissions = (currentRole: Role): Permission[] => {
-    const roles: Role[] = ['customer', 'staff', 'manager', 'admin', 'owner'];
-    const currentHierarchy = RoleHierarchy[currentRole];
-    let allPermissions: Permission[] = [];
-    
-    roles.forEach(r => {
-      if (RoleHierarchy[r] <= currentHierarchy) {
-        allPermissions = [...allPermissions, ...RolePermissions[r].required];
-      }
-    });
-    return Array.from(new Set(allPermissions));
+    const requiredLevel = RoleHierarchy[requiredRole];
+    const currentLevel = RoleHierarchy[role];
+    if (typeof requiredLevel !== 'number' || typeof currentLevel !== 'number') return false;
+    return currentLevel >= requiredLevel;
   };
 
   const hasPermission = (permission: Permission) => {
-    // 1. Check if blocked for current role
-    if (RolePermissions[role].blocked.includes(permission)) return false;
-    
-    // 2. Check if explicitly allowed (required) or inherited
-    const allPermissions = getAllPermissions(role);
-    return allPermissions.includes(permission);
+    const matrix = RolePermissions[role];
+    if (!matrix) return false;
+
+    // Explicit deny always wins.
+    if (matrix.blocked.includes(permission)) return false;
+
+    // Permission grants are explicit. Do not infer permissions from role hierarchy.
+    return matrix.required.includes(permission);
   };
-  
+
   const isHidden = (permission: Permission) => {
-    return RolePermissions[role].hidden.includes(permission);
+    const matrix = RolePermissions[role];
+    return matrix ? matrix.hidden.includes(permission) : false;
   };
 
   return { hasRole, hasPermission, isHidden, role };
