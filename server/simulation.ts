@@ -3,13 +3,6 @@ import { logActivityAsync } from './auth_db';
 import { buildExecutiveForecast } from './forecasting';
 import { Request, Response } from 'express';
 
-const DEFAULT_MODELS = [
-  { name: 'Pricing Scenario', type: 'Pricing', configuration: { description: 'Scenario analysis using live transactional revenue as the baseline. Results are planning scenarios, not forecasts.', variables: { multiplier: 1.0, discountRate: 0 } } },
-  { name: 'Warehouse Scenario', type: 'Warehouse', configuration: { description: 'Scenario analysis for warehouse capacity and operating cost inputs using live transactional revenue as the baseline.', variables: { capacity: 1000, monthlyRent: 0 } } },
-  { name: 'Discount Scenario', type: 'Discount', configuration: { description: 'Scenario analysis for discount changes using live transactional revenue as the baseline.', variables: { discountRate: 0, sensitivity: 1.0 } } },
-  { name: 'Inventory Scenario', type: 'Inventory', configuration: { description: 'Scenario analysis for inventory assumptions using live transactional revenue as the baseline.', variables: { capacity: 1000, monthlyCost: 0 } } }
-] as const;
-
 function mapModel(row: any) {
   const configuration = row?.configuration || {};
   return { id: row.id, name: row.name, description: configuration.description || `Authoritative ${row.type || 'decision'} scenario model.`, variables: configuration.variables || {}, risk_weight: Number(configuration.risk_weight ?? 5), type: row.type };
@@ -21,12 +14,7 @@ export async function getDecisionModels(req: Request, res: Response) {
   try {
     const { data, error } = await supabase.from('zoal_decision_models').select('id,name,type,configuration,created_at').order('created_at', { ascending: true });
     if (error) throw error;
-    if (!data || data.length === 0) {
-      const { data: seeded, error: seedError } = await supabase.from('zoal_decision_models').insert(DEFAULT_MODELS.map(model => ({ name: model.name, type: model.type, configuration: model.configuration }))).select('id,name,type,configuration,created_at');
-      if (seedError) throw seedError;
-      return res.json((seeded || []).map(mapModel));
-    }
-    return res.json(data.map(mapModel));
+    return res.json((data || []).map(mapModel));
   } catch (err: any) { console.error('Decision model registry error:', err); return res.status(500).json({ error: 'Failed to load decision model registry.' }); }
 }
 
