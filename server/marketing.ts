@@ -6,6 +6,50 @@ function getClient() {
   return getServiceSupabaseClient() || getSupabaseClient();
 }
 
+async function requireMarketingReadAccess(req: Request, res: Response): Promise<boolean> {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const token = typeof headerValue === 'string' && headerValue.startsWith('Bearer ')
+    ? headerValue.substring(7)
+    : '';
+
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+
+  const supabase = getSupabaseClient();
+  const serviceSupabase = getServiceSupabaseClient();
+  if (!supabase || !serviceSupabase) {
+    res.status(500).json({ error: 'MARKETING_AUTH_UNAVAILABLE' });
+    return false;
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+
+  const { data: profile, error: profileError } = await serviceSupabase
+    .from('zoal_users')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    res.status(500).json({ error: 'MARKETING_AUTH_UNAVAILABLE' });
+    return false;
+  }
+
+  if (!profile || !['admin', 'manager', 'staff'].includes(profile.role)) {
+    res.status(403).json({ error: 'Forbidden' });
+    return false;
+  }
+
+  return true;
+}
+
 const DEFAULT_CAMPAIGNS = [
   { id: 'camp-1', name: 'Ramadan Specialty Coffee Promo', channel: 'Email & SMS', status: 'active', target_audience: 'VIP Customers', conversion_rate: '14.2%', discountPercent: 15, category: 'coffee', created_at: new Date().toISOString() },
   { id: 'camp-2', name: 'Summer Bespoke Thobe Launch', channel: 'Instagram & WhatsApp', status: 'scheduled', target_audience: 'All Registered', conversion_rate: '8.7%', discountPercent: 20, category: 'fashion', created_at: new Date().toISOString() }
@@ -119,6 +163,8 @@ export async function getMarketingData(req: Request, res: Response) {
 }
 
 export async function getCampaigns(req: Request, res: Response) {
+  if (!(await requireMarketingReadAccess(req, res))) return;
+
   const isProd = process.env.NODE_ENV === 'production';
   const supabase = getClient();
   if (!supabase) {
@@ -252,6 +298,8 @@ export async function deleteCampaign(req: Request, res: Response) {
 }
 
 export async function getCoupons(req: Request, res: Response) {
+  if (!(await requireMarketingReadAccess(req, res))) return;
+
   const isProd = process.env.NODE_ENV === 'production';
   const supabase = getClient();
   if (!supabase) {
@@ -385,14 +433,10 @@ export async function deleteCoupon(req: Request, res: Response) {
 }
 
 export async function sendEmailCampaign(req: Request, res: Response) {
-  const supabase = getClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
-
-  const { campaign_id, subject, body } = req.body;
-  const { data, error } = await supabase.from('zoal_email_campaigns').insert({
-    campaign_id, subject, body, status: 'Sent', sent_at: new Date().toISOString()
-  }).select().single();
-  
-  if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json(data);
+  // The existing handler only inserted a row and labeled it "Sent"; it did not
+  // connect to the project's real SMTP transport. Never report false delivery.
+  return res.status(501).json({
+    error: 'MARKETING_EMAIL_TRANSPORT_NOT_CONFIGURED',
+    message: 'Marketing email delivery is not configured. No email was sent and no campaign was marked as sent.'
+  });
 }
