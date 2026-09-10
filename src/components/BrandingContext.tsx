@@ -168,7 +168,6 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateSettings = async (newSettingsOrFn: GlobalSettings | ((prev: GlobalSettings) => GlobalSettings)): Promise<boolean> => {
     const previousSettings = settings;
     const nextSettings = typeof newSettingsOrFn === 'function' ? newSettingsOrFn(settings) : newSettingsOrFn;
-    const sanitizedLocal = sanitizeSettingsForClient(nextSettings);
     const token = getAuthToken();
 
     if (!token) {
@@ -257,18 +256,4 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       {children}
     </BrandingContext.Provider>
   );
-};
-
-export const useBranding = () => {
-  const context = useContext(BrandingContext);
-  if (context === undefined) {
-    return {
-      settings: DEFAULT_SETTINGS,
-      updateSettings: async () => false,
-      loading: false,
-      error: null,
-      refreshBranding: async () => {}
-    };
-  }
-  return context;
 };
