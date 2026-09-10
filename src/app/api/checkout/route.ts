@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
     const items = body.items || [];
     let subtotal = 0;
 
-    // Calculate subtotal from products in database to ensure safety
     for (const item of items) {
       const { data: prod } = await supabase
         .from('zoal_products')
@@ -32,7 +31,6 @@ export async function POST(req: NextRequest) {
       subtotal += activePrice * item.quantity;
     }
 
-    // Apply Shipping Cost
     let shippingCost = 0;
     const { data: shipping } = await supabase
       .from('zoal_shipping')
@@ -44,7 +42,6 @@ export async function POST(req: NextRequest) {
       shippingCost = Number(shipping.cost);
     }
 
-    // Apply Coupon Code
     let discountAmount = 0;
     let couponId = null;
     if (body.couponCode) {
@@ -76,7 +73,7 @@ export async function POST(req: NextRequest) {
           } else {
             discountAmount = Number(coupon.discount_value);
           }
-          discountAmount = Math.min(discountAmount, subtotal); // can't exceed subtotal
+          discountAmount = Math.min(Math.max(0, discountAmount), subtotal);
         } else if (!isUsageAvailable) {
           return apiError('Coupon usage limit has been reached', 400);
         } else if (!isDateValid) {
@@ -89,9 +86,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Tax calculation (15% Saudi VAT standard)
-    const taxableAmount = subtotal - discountAmount;
-    const taxAmount = Number((taxableAmount * 0.15).toFixed(2));
+    const taxableAmount = Math.max(0, subtotal - discountAmount);
+    const now = new Date().toISOString();
+    const { data: activeTaxRate, error: taxRateError } = await supabase
+      .from('zoal_tax_rates')
+      .select('id, name, rate_percentage, tax_type, start_date, end_date, is_active')
+      .eq('is_active', true)
+      .lte('start_date', now)
+      .or(`end_date.is.null,end_date.gte.${now}`)
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (taxRateError) return apiError(`Unable to resolve tax configuration: ${taxRateError.message}`, 500);
+    if (!activeTaxRate) {
+      return apiError('Tax configuration is not available. Checkout is temporarily unavailable until an active tax rate is configured.', 503);
+    }
+
+    const ratePercentage = Number(activeTaxRate.rate_percentage);
+    const taxAmount = activeTaxRate.tax_type === 'Exempt' || activeTaxRate.tax_type === 'Zero Rated'
+      ? 0
+      : Number((taxableAmount * ratePercentage / 100).toFixed(2));
     const totalAmount = Number((taxableAmount + taxAmount + shippingCost).toFixed(2));
 
     return apiResponse({
@@ -101,7 +116,13 @@ export async function POST(req: NextRequest) {
       taxAmount,
       totalAmount,
       couponId,
-      customerId: user.id
+      customerId: user.id,
+      tax: {
+        id: activeTaxRate.id,
+        name: activeTaxRate.name,
+        type: activeTaxRate.tax_type,
+        ratePercentage
+      }
     });
 
   } catch (err: any) {
