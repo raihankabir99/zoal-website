@@ -1,8 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 
-// -------------------------------------------------------------
-// 1. CONTENT SECURITY POLICY (CSP) & SECURITY HEADERS
-// -------------------------------------------------------------
 export function securityHeadersMiddleware(req: Request, res: Response, next: NextFunction) {
   const isProd = process.env.NODE_ENV === 'production';
   const cspDirectives = [
@@ -120,9 +117,10 @@ export async function syncSupabaseUser(user: any) {
   if (!profile && userEmail) {
     const { data: existingEmailProfile } = await dbClient.from('zoal_users').select('*').eq('email', userEmail).maybeSingle();
     if (existingEmailProfile && existingEmailProfile.id !== user.id) {
-      const { data: updatedProfile, error: updateError } = await dbClient.from('zoal_users').update({ id: user.id }).eq('id', existingEmailProfile.id).select().maybeSingle();
-      if (!updateError && updatedProfile) profile = updatedProfile;
-      else profile = existingEmailProfile;
+      // SECURITY: never rewrite a canonical user id during authentication.
+      // An email collision indicates an identity-reconciliation condition that requires
+      // explicit administrative recovery; failing closed prevents cross-account binding.
+      return null;
     }
   }
 
@@ -195,6 +193,7 @@ export async function authenticateRequest(req: any, res: Response, next: NextFun
     const { data: { user }, error } = await authClient.auth.getUser(token);
     if (error || !user) return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
     req.user = await syncSupabaseUser(user);
+    if (!req.user) return res.status(403).json({ error: 'Forbidden', message: 'Account identity could not be reconciled safely. Administrative recovery is required.' });
     next();
   } catch (err: any) {
     return res.status(err.message === 'Auth service unavailable.' ? 500 : 403).json({ error: err.message === 'Auth service unavailable.' ? 'Internal Server Error' : 'Forbidden', message: err.message });
@@ -214,6 +213,7 @@ export async function optionalAuthenticate(req: any, res: Response, next: NextFu
     const { data: { user }, error } = await authClient.auth.getUser(token);
     if (error || !user) return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
     req.user = await syncSupabaseUser(user);
+    if (!req.user) return res.status(403).json({ error: 'Forbidden', message: 'Account identity could not be reconciled safely. Administrative recovery is required.' });
     next();
   } catch (err: any) { return res.status(401).json({ error: 'Unauthorized', message: err?.message || 'Authentication failed.' }); }
 }
@@ -237,82 +237,4 @@ export function requirePermission(permission: string) {
     if (!permissions.includes(permission)) return res.status(403).json({ error: 'Forbidden', message: `Access denied. Missing required permission: ${permission}` });
     next();
   };
-}
-
-export const requireSupportStaff = requirePermission('can_manage_support');
-
-const submissionCache = new Map<string, number>();
-
-export async function validateContactSecurity(req: any, res: Response, next: NextFunction) {
-  try {
-    if (!req.body) req.body = {};
-    const { name, email, message, msg, captchaToken } = req.body;
-    const finalMessage = message || msg || '';
-    const safeEmail = email || '';
-    const ip = req.ip || req.headers['x-forwarded-for'] || '0.0.0.0';
-    const now = Date.now();
-    const ipKey = `contact_ip_${ip}`;
-    const lastSubmission = submissionCache.get(ipKey) || 0;
-    const contentHash = Buffer.from(`${safeEmail}:${finalMessage}`).toString('base64').substring(0, 32);
-    const contentKey = `contact_content_${contentHash}`;
-    const lastContentSubmission = submissionCache.get(contentKey) || 0;
-    if (now - lastSubmission < 5000) return res.status(429).json({ error: 'Too Many Requests', message: 'Please wait a moment before sending another message.' });
-    if (now - lastContentSubmission < 600000) return res.status(409).json({ error: 'Conflict', message: 'Duplicate message detected. If you have more to add, please wait or use a different message.' });
-    const spamKeywords = ['crypto','bitcoin','viagra','casino','lottery','prize','invest','payout','winner'];
-    const lowercaseMsg = finalMessage.toLowerCase();
-    const isSpam = spamKeywords.some(keyword => lowercaseMsg.includes(keyword));
-    const linkCount = (lowercaseMsg.match(/https?:\/\//g) || []).length;
-    if (isSpam || linkCount > 2) return res.status(403).json({ error: 'Forbidden', message: 'Your message was flagged as spam by our security filters.' });
-    if (process.env.REQUIRE_CAPTCHA === 'true' && !captchaToken) return res.status(400).json({ error: 'Bad Request', message: 'Security verification (Captcha) is required but missing.' });
-    req.securityMetadata = { ip, userAgent: req.headers['user-agent'], timestamp: new Date().toISOString(), isSpamCandidate: isSpam };
-    submissionCache.set(ipKey, now);
-    submissionCache.set(contentKey, now);
-    if (submissionCache.size > 1000) {
-      const expireTime = now - 3600000;
-      for (const [key, time] of submissionCache.entries()) if (time < expireTime) submissionCache.delete(key);
-    }
-    next();
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Security validation failed.' });
-  }
-}
-
-export function serveRobotsTxt(req: Request, res: Response) {
-  const host = req.headers.host || 'alzoal.com';
-  const protocol = req.secure ? 'https' : 'http';
-  const robots = ['User-agent: *','Allow: /','Disallow: /admin','Disallow: /api/','Disallow: /dashboard','',`Sitemap: ${protocol}://${host}/sitemap.xml`].join('\n');
-  res.header('Content-Type', 'text/plain');
-  res.send(robots);
-}
-
-export function serveSitemapXml(req: Request, res: Response) {
-  const host = req.headers.host || 'alzoal.com';
-  const protocol = req.secure ? 'https' : 'http';
-  const domain = `${protocol}://${host}`;
-  const now = new Date().toISOString().split('T')[0];
-  const staticUrls = [
-    { loc: '/', changefreq: 'daily', priority: '1.0' },
-    { loc: '/store', changefreq: 'daily', priority: '0.9' },
-    { loc: '/portfolio', changefreq: 'weekly', priority: '0.8' },
-    { loc: '/about', changefreq: 'monthly', priority: '0.7' },
-    { loc: '/branches', changefreq: 'monthly', priority: '0.7' },
-    { loc: '/blog', changefreq: 'weekly', priority: '0.6' },
-    { loc: '/contact', changefreq: 'monthly', priority: '0.5' },
-    { loc: '/faq', changefreq: 'monthly', priority: '0.4' },
-    { loc: '/privacy-policy', changefreq: 'yearly', priority: '0.3' },
-    { loc: '/terms-and-conditions', changefreq: 'yearly', priority: '0.3' }
-  ];
-  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-  staticUrls.forEach(url => {
-    xml += '  <url>\n';
-    xml += `    <loc>${domain}${url.loc}</loc>\n`;
-    xml += `    <lastmod>${now}</lastmod>\n`;
-    xml += `    <changefreq>${url.changefreq}</changefreq>\n`;
-    xml += `    <priority>${url.priority}</priority>\n`;
-    xml += '  </url>\n';
-  });
-  xml += '</urlset>\n';
-  res.header('Content-Type', 'application/xml');
-  res.send(xml);
 }
