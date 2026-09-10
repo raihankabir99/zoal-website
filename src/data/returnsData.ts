@@ -18,6 +18,22 @@ export interface ReturnsConfig {
   nonReturnableAr: string[];
 }
 
+export interface ReturnsPolicySection {
+  id: string;
+  num: string;
+  titleEn: string;
+  titleAr: string;
+  contentEn: string;
+  contentAr: string;
+  bulletsEn?: string[];
+  bulletsAr?: string[];
+}
+
+export interface ReturnsPolicyContent {
+  config: ReturnsConfig;
+  sections: ReturnsPolicySection[];
+}
+
 export const DEFAULT_RETURNS_CONFIG: ReturnsConfig = {
   returnWindowDays: 7,
   returnWindowDaysPromo: 14,
@@ -32,16 +48,8 @@ export const DEFAULT_RETURNS_CONFIG: ReturnsConfig = {
   supportAddressAr: "طريق أبو بكر الصديق، المعلمين، الهفوف 36361، المملكة العربية السعودية",
   supportHoursEn: "Daily: 9:00 AM – 11:00 PM (AST)",
   supportHoursAr: "يومياً: 9:00 صباحاً – 11:00 مساءً",
-  exchangeOptionsEn: [
-    "Different Size",
-    "Different Color",
-    "Replacement Item (subject to stock availability)"
-  ],
-  exchangeOptionsAr: [
-    "مقاس مختلف",
-    "لون مختلف",
-    "منتج بديل (خاضع لتوفر المخزون)"
-  ],
+  exchangeOptionsEn: ["Different Size", "Different Color", "Replacement Item (subject to stock availability)"],
+  exchangeOptionsAr: ["مقاس مختلف", "لون مختلف", "منتج بديل (خاضع لتوفر المخزون)"],
   nonReturnableEn: [
     "Food & Beverage (Fresh bakery, bread, cakes, pastries, cookies, opened coffee or tea)",
     "Cosmetics & Personal Care (Opened beauty, skincare, makeup, perfumes)",
@@ -59,6 +67,7 @@ export const DEFAULT_RETURNS_CONFIG: ReturnsConfig = {
 };
 
 const RETURNS_CONFIG_STORAGE_KEY = 'zoal_returns_config';
+const RETURNS_POLICY_STORAGE_KEY = 'zoal_returns_policy_content';
 
 function isValidReturnsConfig(value: unknown): value is ReturnsConfig {
   if (!value || typeof value !== 'object') return false;
@@ -81,6 +90,21 @@ function isValidReturnsConfig(value: unknown): value is ReturnsConfig {
     Array.isArray(config.exchangeOptionsAr) &&
     Array.isArray(config.nonReturnableEn) &&
     Array.isArray(config.nonReturnableAr)
+  );
+}
+
+function isValidReturnsPolicySection(value: unknown): value is ReturnsPolicySection {
+  if (!value || typeof value !== 'object') return false;
+  const section = value as Partial<ReturnsPolicySection>;
+  return (
+    typeof section.id === 'string' &&
+    typeof section.num === 'string' &&
+    typeof section.titleEn === 'string' &&
+    typeof section.titleAr === 'string' &&
+    typeof section.contentEn === 'string' &&
+    typeof section.contentAr === 'string' &&
+    (section.bulletsEn === undefined || Array.isArray(section.bulletsEn)) &&
+    (section.bulletsAr === undefined || Array.isArray(section.bulletsAr))
   );
 }
 
@@ -110,10 +134,44 @@ export function saveReturnsConfig(config: ReturnsConfig): void {
   }
 }
 
-// The Legal CMS is the authoritative source. localStorage remains only as a
-// compatibility cache so existing admin screens and the return-request UI do
-// not regress while the published Legal document is being fetched.
-export async function hydrateReturnsConfigFromLegal(): Promise<boolean> {
+export function getReturnsPolicyContent(): ReturnsPolicySection[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = localStorage.getItem(RETURNS_POLICY_STORAGE_KEY);
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed) || parsed.length !== 10 || !parsed.every(isValidReturnsPolicySection)) {
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    console.error('Error reading zoal_returns_policy_content from localStorage', e);
+    return null;
+  }
+}
+
+function parseReturnsPolicyPayload(value: unknown): ReturnsPolicyContent | null {
+  if (!value || typeof value !== 'object') return null;
+  const payload = value as { config?: unknown; sections?: unknown };
+
+  // Backward-compatible support for the old config-only Legal payload.
+  if (isValidReturnsConfig(value)) {
+    return { config: value, sections: [] };
+  }
+
+  if (!isValidReturnsConfig(payload.config)) return null;
+  if (!Array.isArray(payload.sections)) return null;
+  if (payload.sections.length !== 10 || !payload.sections.every(isValidReturnsPolicySection)) return null;
+
+  return {
+    config: payload.config,
+    sections: payload.sections
+  };
+}
+
+// The Legal CMS is authoritative. localStorage remains only as a compatibility
+// cache so existing admin screens and the return-request UI do not regress.
+export async function hydrateReturnsPolicyFromLegal(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
   try {
@@ -121,7 +179,6 @@ export async function hydrateReturnsConfigFromLegal(): Promise<boolean> {
       headers: { Accept: 'application/json' },
       credentials: 'same-origin'
     });
-
     if (!response.ok) {
       throw new Error(`Legal returns document request failed (HTTP ${response.status})`);
     }
@@ -142,21 +199,27 @@ export async function hydrateReturnsConfigFromLegal(): Promise<boolean> {
     const parsed = typeof currentVersion.content === 'string'
       ? JSON.parse(currentVersion.content)
       : currentVersion.content;
-
-    if (!isValidReturnsConfig(parsed)) {
-      throw new Error('Published Legal returns document has an invalid configuration payload');
+    const payload = parseReturnsPolicyPayload(parsed);
+    if (!payload) {
+      throw new Error('Published Legal returns document has an invalid policy payload');
     }
 
-    saveReturnsConfig(parsed);
+    saveReturnsConfig(payload.config);
+    if (payload.sections.length === 10) {
+      localStorage.setItem(RETURNS_POLICY_STORAGE_KEY, JSON.stringify(payload.sections));
+      window.dispatchEvent(new Event('zoal-returns-policy-changed'));
+    }
     return true;
   } catch (e) {
-    // Keep the last known local cache as a compatibility fallback. Never invent
-    // new policy values when the authoritative Legal document cannot be read.
-    console.error('Error hydrating returns config from Legal CMS:', e);
+    console.error('Error hydrating returns policy from Legal CMS:', e);
     return false;
   }
 }
 
+export async function hydrateReturnsConfigFromLegal(): Promise<boolean> {
+  return hydrateReturnsPolicyFromLegal();
+}
+
 if (typeof window !== 'undefined') {
-  void hydrateReturnsConfigFromLegal();
+  void hydrateReturnsPolicyFromLegal();
 }
