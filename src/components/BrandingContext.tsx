@@ -57,6 +57,13 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   theme: 'dark'
 };
 
+const getValidLogo = (logoPath: any): string => {
+  if (typeof logoPath === 'string' && logoPath.trim() !== '' && !logoPath.includes('logo.svg') && !logoPath.includes('zoal-logo.jpg') && !logoPath.includes('zoal-logo-4.jpg')) {
+    return logoPath;
+  }
+  return BRANDING.LOGO;
+};
+
 /**
  * Sanitizes settings before storage or client consumption to ensure no sensitive credentials
  * (SMTP passwords, private keys, API secrets) ever persist in browser storage or component state.
@@ -68,7 +75,7 @@ export const sanitizeSettingsForClient = (raw: any): GlobalSettings => {
 
   const validLogo = getValidLogo(raw.businessLogo);
 
-  const sanitized: GlobalSettings = {
+  return {
     businessName: typeof raw.businessName === 'string' && raw.businessName.trim() ? raw.businessName : DEFAULT_SETTINGS.businessName,
     businessLogo: validLogo,
     favicon: BRANDING.FAVICON,
@@ -96,8 +103,6 @@ export const sanitizeSettingsForClient = (raw: any): GlobalSettings => {
     doubleAuthEnabled: typeof raw.doubleAuthEnabled === 'boolean' ? raw.doubleAuthEnabled : false,
     maintenanceMode: typeof raw.maintenanceMode === 'boolean' ? raw.maintenanceMode : false
   };
-
-  return sanitized;
 };
 
 interface BrandingContextType {
@@ -108,23 +113,16 @@ interface BrandingContextType {
   refreshBranding: () => Promise<void>;
 }
 
-const getValidLogo = (logoPath: any): string => {
-  if (typeof logoPath === 'string' && logoPath.trim() !== '' && !logoPath.includes('logo.svg') && !logoPath.includes('zoal-logo.jpg') && !logoPath.includes('zoal-logo-4.jpg')) {
-    return logoPath;
-  }
-  return BRANDING.LOGO;
-};
-
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
 export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<GlobalSettings>(() => {
+    if (typeof window === 'undefined') return DEFAULT_SETTINGS;
     const saved = localStorage.getItem('zoal_admin_global_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         const sanitized = sanitizeSettingsForClient(parsed);
-        // Clean out legacy secret fields from localStorage immediately if present
         if ('smtpPass' in parsed || 'smtp_pass' in parsed || 'password' in parsed || 'secret' in parsed) {
           localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitized));
         }
@@ -139,10 +137,19 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const getAuthToken = () => localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+
   const refreshBranding = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/branding');
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required to load authoritative branding settings.');
+      }
+
+      const res = await fetch('/api/branding', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (!res.ok) {
         throw new Error(`Failed to load branding: ${res.statusText}`);
       }
@@ -151,7 +158,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSettings(sanitized);
       localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitized));
     } catch (err: any) {
-      console.warn('⚠️ Supabase/Backend branding unavailable, using offline cache:', err.message || err);
+      console.warn('⚠️ Authoritative branding unavailable; retaining last known client state:', err.message || err);
       setError(err.message || String(err));
     } finally {
       setLoading(false);
@@ -159,24 +166,13 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateSettings = async (newSettingsOrFn: GlobalSettings | ((prev: GlobalSettings) => GlobalSettings)): Promise<boolean> => {
-    // Determine the next settings
-    let nextSettings: GlobalSettings;
-    if (typeof newSettingsOrFn === 'function') {
-      nextSettings = newSettingsOrFn(settings);
-    } else {
-      nextSettings = newSettingsOrFn;
-    }
-
+    const previousSettings = settings;
+    const nextSettings = typeof newSettingsOrFn === 'function' ? newSettingsOrFn(settings) : newSettingsOrFn;
     const sanitizedLocal = sanitizeSettingsForClient(nextSettings);
+    const token = getAuthToken();
 
-    // 1. Optimistically update local state & offline sanitized cache
-    setSettings(sanitizedLocal);
-    localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitizedLocal));
-
-    // 2. Persist to Supabase via REST API
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
     if (!token) {
-      console.warn('⚠️ No auth token found. Branding saved to local offline cache only.');
+      setError('Authentication required to persist branding settings.');
       return false;
     }
 
@@ -191,52 +187,52 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to persist branding settings to Supabase.');
+        let message = 'Failed to persist branding settings.';
+        try {
+          const errData = await response.json();
+          message = errData.error || errData.message || message;
+        } catch (_) {}
+        throw new Error(message);
       }
 
       const data = await response.json();
-      if (data.success && data.settings) {
-        const sanitizedServer = sanitizeSettingsForClient(data.settings);
-        setSettings(sanitizedServer);
-        localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitizedServer));
-        return true;
+      if (!data.success || !data.settings) {
+        throw new Error('Branding persistence returned an invalid server response.');
       }
-      return false;
+
+      const sanitizedServer = sanitizeSettingsForClient(data.settings);
+      setSettings(sanitizedServer);
+      localStorage.setItem('zoal_admin_global_settings', JSON.stringify(sanitizedServer));
+      setError(null);
+      return true;
     } catch (err: any) {
-      console.error('❌ Failed to update branding on Supabase:', err.message || err);
+      // Never leave a failed optimistic mutation looking persisted.
+      setSettings(previousSettings);
+      setError(err.message || String(err));
+      console.error('❌ Failed to persist branding on server:', err.message || err);
       return false;
     }
   };
 
-  // Synchronize on startup and setup network event handlers for automatic recovery
   useEffect(() => {
     refreshBranding();
 
     const handleOnline = () => {
-      console.log('🌐 Network back online. Synchronizing branding settings with Supabase...');
       refreshBranding();
     };
 
     window.addEventListener('online', handleOnline);
-
-    // Periodically poll to sync when backend becomes reachable again (automatic synchronization)
     const interval = setInterval(() => {
-      if (error) {
-        console.log('🔄 Retrying branding synchronization with Supabase...');
-        refreshBranding();
-      }
-    }, 20000); // retry every 20 seconds if in error/offline state
+      if (error) refreshBranding();
+    }, 20000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       clearInterval(interval);
     };
-  }, []); // Only run on mount. Retries are handled by online event and interval.
+  }, []);
 
-  // Synchronize favicon and document title
   useEffect(() => {
-    // Update favicon
     const faviconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
     if (faviconLink) {
       faviconLink.href = settings.favicon || settings.businessLogo;
