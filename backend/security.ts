@@ -5,9 +5,6 @@ import { Request, Response, NextFunction } from 'express';
 // -------------------------------------------------------------
 export function securityHeadersMiddleware(req: Request, res: Response, next: NextFunction) {
   const isProd = process.env.NODE_ENV === 'production';
-
-  // Content Security Policy
-  // Configured precisely to not break Vite/HMR in dev, and allow essential connections (Supabase, Google Fonts, Unsplash, and AI Studio Frame Wrapper)
   const cspDirectives = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.supabase.in https://*.googleapis.com",
@@ -18,347 +15,128 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
     "frame-src 'self' https://*.supabase.co https://www.google.com https://maps.google.com https://*.google.com",
     `frame-ancestors 'self' https://ai.studio https://*.google.com https://*.run.app${!isProd ? ' *' : ''}`
   ];
-
   res.setHeader('Content-Security-Policy', cspDirectives.join('; '));
-
-  // HTTP Strict Transport Security (HSTS)
-  if (isProd) {
-    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-  }
-
-  // Prevent Clickjacking (using both modern frame-ancestors and legacy SAMEORIGIN for wide browser support)
-  // Note: we let frame-ancestors allow AI Studio, while restricting general frame loading
-  if (isProd) {
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  }
-
-  // Disable MIME sniffing
+  if (isProd) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  if (isProd) res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-
-  // Referrer Policy
   res.setHeader('Referrer-Policy', 'no-referrer-when-downgrade');
-
-  // Prevent XSS in older legacy browsers
   res.setHeader('X-XSS-Protection', '1; mode=block');
-
-  // Permissions Policy
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
-
   next();
 }
 
-// -------------------------------------------------------------
-// 2. RATE LIMITER (SLIDING WINDOW IN-MEMORY CACHE)
-// -------------------------------------------------------------
-interface RateLimitInfo {
-  count: number;
-  resetTime: number;
-}
-
+interface RateLimitInfo { count: number; resetTime: number; }
 const ipCache = new Map<string, RateLimitInfo>();
 
 export function rateLimiterMiddleware(maxRequests: number = 100, windowMs: number = 15 * 60 * 1000) {
   return (req: Request, res: Response, next: NextFunction) => {
-    // Safely extract client IP taking proxies into account
     const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
     const ip = Array.isArray(rawIp) ? rawIp[0] : (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown');
-    
     const now = Date.now();
-
     let limitInfo = ipCache.get(ip);
-    if (!limitInfo || now > limitInfo.resetTime) {
-      limitInfo = {
-        count: 0,
-        resetTime: now + windowMs
-      };
-    }
-
+    if (!limitInfo || now > limitInfo.resetTime) limitInfo = { count: 0, resetTime: now + windowMs };
     limitInfo.count++;
     ipCache.set(ip, limitInfo);
-
-    // Set standard rate-limiting metadata headers
     res.setHeader('X-RateLimit-Limit', maxRequests);
     res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - limitInfo.count));
     res.setHeader('X-RateLimit-Reset', Math.ceil(limitInfo.resetTime / 1000));
-
-    if (limitInfo.count > maxRequests) {
-      return res.status(429).json({
-        error: 'Too Many Requests',
-        message: 'Too many requests originating from this source. Protection rate limit exceeded. Please retry in 15 minutes.'
-      });
-    }
-
+    if (limitInfo.count > maxRequests) return res.status(429).json({ error: 'Too Many Requests', message: 'Too many requests originating from this source. Protection rate limit exceeded. Please retry in 15 minutes.' });
     next();
   };
 }
 
-export function userRateLimiterMiddleware(maxRequests: number = 100, windowMs: number = 15 * 60 * 1000) {
-  return rateLimiterMiddleware(maxRequests, windowMs);
-}
+export function userRateLimiterMiddleware(maxRequests: number = 100, windowMs: number = 15 * 60 * 1000) { return rateLimiterMiddleware(maxRequests, windowMs); }
 
-// -------------------------------------------------------------
-// 3. CSRF INTEGRITY PROTECTION
-// -------------------------------------------------------------
 export function csrfProtectionMiddleware(req: Request, res: Response, next: NextFunction) {
-  // Safe HTTP operations do not mutate state and are allowed immediately
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-    return next();
-  }
-
-  // Token-based authentication (Bearer authorization headers) is naturally secure against CSRF
-  // since custom headers are not automatically attached by browsers (unlike cookies)
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const authHeader = req.headers.authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-  if (headerValue && headerValue.startsWith('Bearer ')) {
-    return next();
-  }
-
-  // Fallback validation for other requests (e.g., matching origin and hosts)
+  if (headerValue && headerValue.startsWith('Bearer ')) return next();
   const origin = req.headers.origin;
   const host = req.headers.host;
-
-  if (origin && host && !origin.includes(host)) {
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'CSRF Check Failed: Requester origin is untrusted.'
-    });
-  }
-
+  if (origin && host && !origin.includes(host)) return res.status(403).json({ error: 'Forbidden', message: 'CSRF Check Failed: Requester origin is untrusted.' });
   next();
 }
 
-// -------------------------------------------------------------
-// 4. XSS PREVENTION (RECURSIVE INPUT SANITIZATION)
-// -------------------------------------------------------------
 export function sanitizeValue(input: any, key?: string): any {
   if (typeof input === 'string') {
-    // List of fields that should not have forward slashes encoded
-    const skipSlashFields = new Set([
-      'desktop_image', 'mobile_image', 'hero_image_desktop', 'hero_image_mobile',
-      'image', 'image_url', 'thumbnail', 'thumbnail_url',
-      'banner', 'banner_image', 'logo', 'logo_url',
-      'icon', 'avatar', 'og_image', 'canonical_url', 'url', 'src', 'background_image',
-      'images', 'image_urls', 'images360', 'gallery', 'image_urls_arr'
-    ]);
-
-    // Check if key is in skip list, OR if string value itself is a URL / image / asset path
-    const isUrlValue =
-      (key && skipSlashFields.has(key)) ||
-      input.startsWith('http://') ||
-      input.startsWith('https://') ||
-      input.startsWith('blob:') ||
-      input.startsWith('data:') ||
-      input.startsWith('/') ||
-      input.includes('supabase.co') ||
-      input.includes('storage/v1/object') ||
-      /&#x2F;/i.test(input);
-
+    const skipSlashFields = new Set(['desktop_image','mobile_image','hero_image_desktop','hero_image_mobile','image','image_url','thumbnail','thumbnail_url','banner','banner_image','logo','logo_url','icon','avatar','og_image','canonical_url','url','src','background_image','images','image_urls','images360','gallery','image_urls_arr']);
+    const isUrlValue = (key && skipSlashFields.has(key)) || input.startsWith('http://') || input.startsWith('https://') || input.startsWith('blob:') || input.startsWith('data:') || input.startsWith('/') || input.includes('supabase.co') || input.includes('storage/v1/object') || /&#x2F;/i.test(input);
     if (isUrlValue) {
-      // Unescape any previously corrupted slashes
       let cleaned = input.replace(/&#x2F;/gi, '/');
-      // If the URL string contains dangerous script tags or HTML characters, sanitize them without altering slashes
-      if (/[<>"']/.test(cleaned)) {
-        cleaned = cleaned
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#x27;');
-      }
+      if (/[<>"']/.test(cleaned)) cleaned = cleaned.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
       return cleaned;
     }
-
-    // Transform characters used in HTML/JS injection attacks into safe HTML entities
-    const sanitized = input
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#x27;')
-      .replace(/\//g, '&#x2F;');
-
-    return sanitized;
+    return input.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/\//g,'&#x2F;');
   }
-
-  if (Array.isArray(input)) {
-    return input.map(item => sanitizeValue(item, key));
-  }
-
+  if (Array.isArray(input)) return input.map(item => sanitizeValue(item, key));
   if (typeof input === 'object' && input !== null) {
     const sanitizedObj: any = {};
-    for (const k in input) {
-      if (Object.prototype.hasOwnProperty.call(input, k)) {
-        sanitizedObj[k] = sanitizeValue(input[k], k);
-      }
-    }
+    for (const k in input) if (Object.prototype.hasOwnProperty.call(input, k)) sanitizedObj[k] = sanitizeValue(input[k], k);
     return sanitizedObj;
   }
-
   return input;
 }
 
 export function xssSanitizerMiddleware(req: Request, res: Response, next: NextFunction) {
-  if (req.body) {
-    req.body = sanitizeValue(req.body);
-  }
+  if (req.body) req.body = sanitizeValue(req.body);
   if (req.query) req.query = sanitizeValue(req.query);
   if (req.params) req.params = sanitizeValue(req.params);
   next();
 }
 
-// -------------------------------------------------------------
-// 5. AUTHENTICATION & RBAC MIDDLEWARE
-// -------------------------------------------------------------
 import { getSupabaseClient, getServiceSupabaseClient } from './supabase.ts';
 
-export const ROLE_HIERARCHY: Record<string, number> = {
-  'customer': 1,
-  'author': 1.5,
-  'staff': 2,
-  'editor': 2.5,
-  'manager': 3,
-  'admin': 4,
-  'owner': 5
-};
+export const ROLE_HIERARCHY: Record<string, number> = { customer: 1, author: 1.5, staff: 2, editor: 2.5, manager: 3, admin: 4, owner: 5 };
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
-  'owner': [
-    'can_manage_orders',
-    'can_manage_products',
-    'can_manage_users',
-    'can_manage_inventory',
-    'can_issue_refund',
-    'can_view_reports',
-    'can_manage_settings',
-    'can_manage_blog',
-    'can_manage_support'
-  ],
-  'admin': [
-    'can_manage_orders',
-    'can_manage_products',
-    'can_manage_users',
-    'can_manage_inventory',
-    'can_issue_refund',
-    'can_view_reports',
-    'can_manage_settings',
-    'can_manage_blog',
-    'can_manage_support'
-  ],
-  'manager': [
-    'can_manage_orders',
-    'can_manage_products',
-    'can_manage_inventory',
-    'can_view_reports',
-    'can_manage_blog',
-    'can_manage_support'
-  ],
-  'staff': [
-    'can_manage_orders',
-    'can_manage_products',
-    'can_manage_inventory',
-    'can_manage_blog',
-    'can_manage_support'
-  ],
-  'editor': [
-    'can_edit_all_blog'
-  ],
-  'author': [
-    'can_create_blog_draft',
-    'can_edit_own_blog_draft'
-  ],
-  'customer': []
+  owner: ['can_manage_orders','can_manage_products','can_manage_users','can_manage_inventory','can_issue_refund','can_view_reports','can_manage_settings','can_manage_blog','can_manage_support'],
+  admin: ['can_manage_orders','can_manage_products','can_manage_users','can_manage_inventory','can_issue_refund','can_view_reports','can_manage_settings','can_manage_blog','can_manage_support'],
+  manager: ['can_manage_orders','can_manage_products','can_manage_inventory','can_view_reports','can_manage_blog','can_manage_support'],
+  staff: ['can_manage_orders','can_manage_products','can_manage_inventory','can_manage_blog','can_manage_support'],
+  editor: ['can_edit_all_blog'],
+  author: ['can_create_blog_draft','can_edit_own_blog_draft'],
+  customer: []
 };
 
 export async function syncSupabaseUser(user: any) {
   const serviceSupabase = getServiceSupabaseClient();
   const supabase = getSupabaseClient() || serviceSupabase;
   const dbClient = serviceSupabase || supabase;
-  
-  if (!dbClient) {
-    throw new Error('Auth service unavailable.');
-  }
+  if (!dbClient) throw new Error('Auth service unavailable.');
 
-  // Handle case where raw token is passed instead of user object
   if (typeof user === 'string') {
     const authClient = supabase || serviceSupabase;
-    if (!authClient) {
-      throw new Error('Auth service unavailable.');
-    }
+    if (!authClient) throw new Error('Auth service unavailable.');
     const { data: { user: resolvedUser }, error } = await authClient.auth.getUser(user);
-    if (error || !resolvedUser) {
-      console.error('❌ syncSupabaseUser: Failed to resolve token to user:', error);
-      return null;
-    }
+    if (error || !resolvedUser) return null;
     user = resolvedUser;
   }
+  if (!user || !user.id) return null;
 
-  if (!user || !user.id) {
-    console.error('❌ syncSupabaseUser: Invalid user object or token provided');
-    return null;
-  }
+  let { data: profile } = await dbClient.from('zoal_users').select('*').eq('id', user.id).maybeSingle();
+  const userEmail = (user.email && user.email.trim() !== '') ? user.email.trim().toLowerCase() : `${user.id}@no-email.zoal.com`;
 
-  // Retrieve full profile to check roles from public.zoal_users
-  let { data: profile, error: profileError } = await dbClient
-    .from('zoal_users')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const userEmail = (user.email && user.email.trim() !== '')
-    ? user.email.trim().toLowerCase()
-    : `${user.id}@no-email.zoal.com`;
-
-  // If profile is not found by ID, let's check if there is an existing profile with the same email under a different ID
   if (!profile && userEmail) {
-    const { data: existingEmailProfile } = await dbClient
-      .from('zoal_users')
-      .select('*')
-      .eq('email', userEmail)
-      .maybeSingle();
-
+    const { data: existingEmailProfile } = await dbClient.from('zoal_users').select('*').eq('email', userEmail).maybeSingle();
     if (existingEmailProfile && existingEmailProfile.id !== user.id) {
-      console.warn(`🔄 Found existing profile with email ${userEmail} under ID ${existingEmailProfile.id}. Updating ID to ${user.id} to recover user profile...`);
-      const { data: updatedProfile, error: updateError } = await dbClient
-        .from('zoal_users')
-        .update({ id: user.id })
-        .eq('id', existingEmailProfile.id)
-        .select()
-        .maybeSingle();
-
-      if (!updateError && updatedProfile) {
-        profile = updatedProfile;
-        console.log(`✅ Profile ID successfully recovered and updated from ${existingEmailProfile.id} to ${user.id}.`);
-      } else {
-        console.error(`❌ Failed to update ID of existing profile for email ${userEmail}:`, updateError);
-        // Fall back to using the existing email profile
-        profile = existingEmailProfile;
-      }
+      const { data: updatedProfile, error: updateError } = await dbClient.from('zoal_users').update({ id: user.id }).eq('id', existingEmailProfile.id).select().maybeSingle();
+      if (!updateError && updatedProfile) profile = updatedProfile;
+      else profile = existingEmailProfile;
     }
   }
 
-  // PHASE 2 — PROFILE RECOVERY: If profile missing, auto-create or restore it immediately
   if (!profile) {
-    console.warn(`⚠️ Profile missing for user ${user.id} (${user.email || 'unknown'}). Starting Profile Recovery...`);
     const metadata = user.user_metadata || {};
     const v_full_name = metadata.full_name || '';
     const v_first_name = metadata.first_name || metadata.firstName || v_full_name.split(' ')[0] || 'User';
     const v_last_name = metadata.last_name || metadata.lastName || v_full_name.substring(v_full_name.indexOf(' ') + 1) || '';
     const v_phone = metadata.phone || user.phone || '0000000000';
-    
-    // Determine default role (check INITIAL_OWNER_EMAIL logic)
-    let defaultRole = 'customer';
-    const initialOwnerEmail = (process.env.INITIAL_OWNER_EMAIL || 'owner@alzoal.com').trim().toLowerCase();
-    if (userEmail === initialOwnerEmail) {
-      defaultRole = 'owner';
-    } else {
-      // Double check count of owners
-      const { count, error: countError } = await dbClient
-        .from('zoal_users')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'owner');
-      if (!countError && count === 0) {
-        defaultRole = 'owner';
-      }
-    }
+
+    // SECURITY: profile recovery must never grant owner/admin privileges implicitly.
+    // Privileged roles must be provisioned explicitly; missing profiles default to customer.
+    // INITIAL_OWNER_EMAIL is intentionally not used as an authentication-time privilege grant.
+    const defaultRole = 'customer';
 
     const newProfile = {
       id: user.id,
@@ -373,50 +151,12 @@ export async function syncSupabaseUser(user: any) {
       created_at: new Date().toISOString()
     };
 
-    // Attempt upsert to prevent unique key violations
-    const { data: upsertedProfile, error: upsertError } = await dbClient
-      .from('zoal_users')
-      .upsert(newProfile, { onConflict: 'id' })
-      .select()
-      .maybeSingle();
+    const { data: upsertedProfile, error: upsertError } = await dbClient.from('zoal_users').upsert(newProfile, { onConflict: 'id' }).select().maybeSingle();
+    if (!upsertError && upsertedProfile) profile = upsertedProfile;
 
-    if (upsertError) {
-      console.error('❌ Profile Recovery upsert failed:', JSON.stringify(upsertError, null, 2));
-      
-      // Handle potential check constraint on 'owner' or 'manager' roles
-      if (upsertError.message?.includes('constraint') && defaultRole === 'owner') {
-        console.warn('⚠️ Role check constraint violation. Retrying profile creation with safe fallback "admin" role...');
-        newProfile.role = 'admin';
-        const { data: retryProfile, error: retryError } = await dbClient
-          .from('zoal_users')
-          .upsert(newProfile, { onConflict: 'id' })
-          .select()
-          .maybeSingle();
-        
-        if (retryError) {
-          console.error('❌ Profile Recovery fallback retry failed:', JSON.stringify(retryError, null, 2));
-        } else if (retryProfile) {
-          profile = retryProfile;
-        }
-      }
-    } else if (upsertedProfile) {
-      profile = upsertedProfile;
-    }
-
-    // Fallback: If we couldn't fetch the record after write (due to RLS or other select policy restrictions on global client),
-    // but the write did not throw a blocking error, we can safely fall back to using the constructed profile in memory!
-    if (!profile) {
-      console.warn('⚠️ Profile could not be read after write (likely due to SELECT Row Level Security). Using in-memory fallback profile.');
-      profile = {
-        ...newProfile,
-        addresses: []
-      };
-    } else {
-      console.log(`✅ Profile Recovery complete for ${user.email} (Assigned Role: ${profile.role}).`);
-    }
+    if (!profile) profile = { ...newProfile, addresses: [] };
   }
 
-  // Ensure safe fields
   const safeProfile = {
     id: profile?.id || user.id,
     email: profile?.email || user.email || '',
@@ -445,222 +185,102 @@ export async function syncSupabaseUser(user: any) {
 export async function authenticateRequest(req: any, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-  
-  if (!headerValue || !headerValue.startsWith('Bearer ')) {
-    return res.status(401).json({ 
-      error: 'Unauthorized', 
-      message: 'Access denied. No valid authentication token provided.' 
-    });
-  }
-
+  if (!headerValue || !headerValue.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized', message: 'Access denied. No valid authentication token provided.' });
   const token = headerValue.substring(7);
   const serviceSupabase = getServiceSupabaseClient();
   const supabase = getSupabaseClient() || serviceSupabase;
   const authClient = supabase || serviceSupabase;
-  
-  if (!authClient) {
-    return res.status(500).json({ error: 'Internal Server Error', message: 'Auth service unavailable.' });
-  }
-
+  if (!authClient) return res.status(500).json({ error: 'Internal Server Error', message: 'Auth service unavailable.' });
   try {
     const { data: { user }, error } = await authClient.auth.getUser(token);
-    if (error || !user) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
-    }
-
+    if (error || !user) return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
     req.user = await syncSupabaseUser(user);
     next();
   } catch (err: any) {
-    return res.status(err.message === 'Auth service unavailable.' ? 500 : 403).json({ 
-      error: err.message === 'Auth service unavailable.' ? 'Internal Server Error' : 'Forbidden', 
-      message: err.message 
-    });
+    return res.status(err.message === 'Auth service unavailable.' ? 500 : 403).json({ error: err.message === 'Auth service unavailable.' ? 'Internal Server Error' : 'Forbidden', message: err.message });
   }
 }
 
 export async function optionalAuthenticate(req: any, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-
-  if (!headerValue || !headerValue.startsWith('Bearer ')) {
-    req.user = null;
-    return next();
-  }
-
+  if (!headerValue || !headerValue.startsWith('Bearer ')) { req.user = null; return next(); }
   const token = headerValue.substring(7);
   const serviceSupabase = getServiceSupabaseClient();
   const supabase = getSupabaseClient() || serviceSupabase;
   const authClient = supabase || serviceSupabase;
-
-  if (!authClient) {
-    req.user = null;
-    return next();
-  }
-
+  if (!authClient) { req.user = null; return next(); }
   try {
     const { data: { user }, error } = await authClient.auth.getUser(token);
-    if (error || !user) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
-    }
-
+    if (error || !user) return res.status(401).json({ error: 'Unauthorized', message: 'Session expired or invalid token.' });
     req.user = await syncSupabaseUser(user);
     next();
-  } catch (err: any) {
-    return res.status(401).json({ error: 'Unauthorized', message: err?.message || 'Authentication failed.' });
-  }
+  } catch (err: any) { return res.status(401).json({ error: 'Unauthorized', message: err?.message || 'Authentication failed.' }); }
 }
-
 
 export function requireRole(allowedRoles: string[]) {
   return (req: any, res: any, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
-    }
-
-    const userLevel = ROLE_HIERARCHY[req.user.role] || 0;
-    const minRequiredLevel = Math.min(...allowedRoles.map(r => ROLE_HIERARCHY[r] || 0));
-
-    if (userLevel < minRequiredLevel && !allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        error: 'Forbidden', 
-        message: `Access denied. Requires role/hierarchy of: ${allowedRoles.join(', ')}` 
-      });
-    }
-
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
+    const userLevel = ROLE_HIERARCHY[req.user.role];
+    const allowedLevels = allowedRoles.map(r => ROLE_HIERARCHY[r]).filter(level => typeof level === 'number');
+    if (typeof userLevel !== 'number' || allowedLevels.length === 0) return res.status(403).json({ error: 'Forbidden', message: 'Access denied. Invalid role policy.' });
+    const minRequiredLevel = Math.min(...allowedLevels);
+    if (userLevel < minRequiredLevel && !allowedRoles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden', message: `Access denied. Requires role/hierarchy of: ${allowedRoles.join(', ')}` });
     next();
   };
 }
 
 export function requirePermission(permission: string) {
   return (req: any, res: any, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
-    }
-
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
     const permissions = req.user.permissions || [];
-    if (!permissions.includes(permission)) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: `Access denied. Missing required permission: ${permission}`
-      });
-    }
-
+    if (!permissions.includes(permission)) return res.status(403).json({ error: 'Forbidden', message: `Access denied. Missing required permission: ${permission}` });
     next();
   };
 }
 
 export const requireSupportStaff = requirePermission('can_manage_support');
 
-// -------------------------------------------------------------
-// 7. CONTACT FORM SECURITY & SPAM PREVENTION
-// -------------------------------------------------------------
-
-// Simple in-memory cache for duplicate submission prevention (TTL 5 minutes)
 const submissionCache = new Map<string, number>();
 
 export async function validateContactSecurity(req: any, res: Response, next: NextFunction) {
   try {
-    if (!req.body) {
-      req.body = {};
-    }
+    if (!req.body) req.body = {};
     const { name, email, message, msg, captchaToken } = req.body;
     const finalMessage = message || msg || '';
     const safeEmail = email || '';
     const ip = req.ip || req.headers['x-forwarded-for'] || '0.0.0.0';
-
-    // 1. IP Rate Limiting (Simple check for now, can be expanded)
-    // 5 requests per 15 minutes per IP
     const now = Date.now();
     const ipKey = `contact_ip_${ip}`;
     const lastSubmission = submissionCache.get(ipKey) || 0;
-    
-    // 2. Duplicate Submission Prevention (Same content/email within 10 minutes)
     const contentHash = Buffer.from(`${safeEmail}:${finalMessage}`).toString('base64').substring(0, 32);
     const contentKey = `contact_content_${contentHash}`;
     const lastContentSubmission = submissionCache.get(contentKey) || 0;
-
-    if (now - lastSubmission < 5000) { // 5 seconds between any submission from same IP
-      return res.status(429).json({ 
-        error: 'Too Many Requests', 
-        message: 'Please wait a moment before sending another message.' 
-      });
-    }
-
-    if (now - lastContentSubmission < 600000) { // 10 minutes for identical content
-      return res.status(409).json({ 
-        error: 'Conflict', 
-        message: 'Duplicate message detected. If you have more to add, please wait or use a different message.' 
-      });
-    }
-
-    // 3. Spam Detection
-    const spamKeywords = ['crypto', 'bitcoin', 'viagra', 'casino', 'lottery', 'prize', 'invest', 'payout', 'winner'];
+    if (now - lastSubmission < 5000) return res.status(429).json({ error: 'Too Many Requests', message: 'Please wait a moment before sending another message.' });
+    if (now - lastContentSubmission < 600000) return res.status(409).json({ error: 'Conflict', message: 'Duplicate message detected. If you have more to add, please wait or use a different message.' });
+    const spamKeywords = ['crypto','bitcoin','viagra','casino','lottery','prize','invest','payout','winner'];
     const lowercaseMsg = finalMessage.toLowerCase();
     const isSpam = spamKeywords.some(keyword => lowercaseMsg.includes(keyword));
-    
-    // Link density check (spam usually has many links)
     const linkCount = (lowercaseMsg.match(/https?:\/\//g) || []).length;
-    
-    if (isSpam || linkCount > 2) {
-      console.warn(`🛡️ SPAM ALERT: Blocked submission from ${safeEmail} (IP: ${ip}). Reason: Spam keywords or excessive links detected.`);
-      return res.status(403).json({ 
-        error: 'Forbidden', 
-        message: 'Your message was flagged as spam by our security filters.' 
-      });
-    }
-
-    // 4. Captcha Check (Architecture Ready)
-    if (process.env.REQUIRE_CAPTCHA === 'true' && !captchaToken) {
-      return res.status(400).json({ 
-        error: 'Bad Request', 
-        message: 'Security verification (Captcha) is required but missing.' 
-      });
-    }
-
-    // 5. Track IP and Metadata
-    req.securityMetadata = {
-      ip,
-      userAgent: req.headers['user-agent'],
-      timestamp: new Date().toISOString(),
-      isSpamCandidate: isSpam
-    };
-
-    // Update caches
+    if (isSpam || linkCount > 2) return res.status(403).json({ error: 'Forbidden', message: 'Your message was flagged as spam by our security filters.' });
+    if (process.env.REQUIRE_CAPTCHA === 'true' && !captchaToken) return res.status(400).json({ error: 'Bad Request', message: 'Security verification (Captcha) is required but missing.' });
+    req.securityMetadata = { ip, userAgent: req.headers['user-agent'], timestamp: new Date().toISOString(), isSpamCandidate: isSpam };
     submissionCache.set(ipKey, now);
     submissionCache.set(contentKey, now);
-
-    // Clean up cache periodically (every 100 requests)
     if (submissionCache.size > 1000) {
-      const expireTime = now - 3600000; // 1 hour
-      for (const [key, time] of submissionCache.entries()) {
-        if (time < expireTime) submissionCache.delete(key);
-      }
+      const expireTime = now - 3600000;
+      for (const [key, time] of submissionCache.entries()) if (time < expireTime) submissionCache.delete(key);
     }
-
     next();
   } catch (err: any) {
-    console.error('Error in validateContactSecurity middleware:', err);
     return res.status(500).json({ error: err.message || 'Security validation failed.' });
   }
 }
 
-// -------------------------------------------------------------
-// 8. SEO SITEMAP.XML & ROBOTS.TXT GENERATION ENDPOINTS
-// -------------------------------------------------------------
-
 export function serveRobotsTxt(req: Request, res: Response) {
   const host = req.headers.host || 'alzoal.com';
   const protocol = req.secure ? 'https' : 'http';
-  const robots = [
-    'User-agent: *',
-    'Allow: /',
-    'Disallow: /admin',
-    'Disallow: /api/',
-    'Disallow: /dashboard',
-    '',
-    `Sitemap: ${protocol}://${host}/sitemap.xml`
-  ].join('\n');
-
+  const robots = ['User-agent: *','Allow: /','Disallow: /admin','Disallow: /api/','Disallow: /dashboard','',`Sitemap: ${protocol}://${host}/sitemap.xml`].join('\n');
   res.header('Content-Type', 'text/plain');
   res.send(robots);
 }
@@ -670,7 +290,6 @@ export function serveSitemapXml(req: Request, res: Response) {
   const protocol = req.secure ? 'https' : 'http';
   const domain = `${protocol}://${host}`;
   const now = new Date().toISOString().split('T')[0];
-
   const staticUrls = [
     { loc: '/', changefreq: 'daily', priority: '1.0' },
     { loc: '/store', changefreq: 'daily', priority: '0.9' },
@@ -683,10 +302,8 @@ export function serveSitemapXml(req: Request, res: Response) {
     { loc: '/privacy-policy', changefreq: 'yearly', priority: '0.3' },
     { loc: '/terms-and-conditions', changefreq: 'yearly', priority: '0.3' }
   ];
-
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
   xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-
   staticUrls.forEach(url => {
     xml += '  <url>\n';
     xml += `    <loc>${domain}${url.loc}</loc>\n`;
@@ -695,9 +312,7 @@ export function serveSitemapXml(req: Request, res: Response) {
     xml += `    <priority>${url.priority}</priority>\n`;
     xml += '  </url>\n';
   });
-
   xml += '</urlset>\n';
-
   res.header('Content-Type', 'application/xml');
   res.send(xml);
 }
