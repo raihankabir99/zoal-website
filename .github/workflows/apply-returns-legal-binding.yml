@@ -1,0 +1,41 @@
+name: Bind Returns Legal CMS
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[returns-legal-binder]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bind published Legal sections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/ReturnRefundPolicy.tsx')
+          s = p.read_text()
+          anchor = "  const [returnsConfig, setReturnsConfig] = useState<ReturnsConfig>(() => getReturnsConfig());\n"
+          inject = anchor + """  const [legalPolicySections, setLegalPolicySections] = useState<Array<{ id: string; num: string; titleEn: string; titleAr: string; contentEn: string; contentAr: string; bulletsEn?: string[]; bulletsAr?: string[] }> | null>(null);\n\n  useEffect(() => {\n    let cancelled = false;\n    const hydrateLegalPolicy = async () => {\n      try {\n        const response = await fetch('/api/legal/documents/returns', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });\n        if (!response.ok) return;\n        const document = await response.json();\n        const currentVersion = document?.current_version;\n        if (!currentVersion || currentVersion.status !== 'Published') return;\n        const parsed = typeof currentVersion.content === 'string' ? JSON.parse(currentVersion.content) : currentVersion.content;\n        if (!Array.isArray(parsed?.sections) || parsed.sections.length !== 10) return;\n        if (!cancelled) setLegalPolicySections(parsed.sections);\n      } catch (error) {\n        console.error('Error hydrating published Returns Legal sections:', error);\n      }\n    };\n    void hydrateLegalPolicy();\n    return () => { cancelled = true; };\n  }, []);\n"""
+          if "const [legalPolicySections" not in s:
+              s = s.replace(anchor, inject, 1)
+          start = s.index("  const policySections = useMemo(() => {")
+          end_marker = "  }, [returnsConfig]);"
+          end = s.index(end_marker, start) + len(end_marker)
+          block = s[start:end].replace("  const policySections = useMemo(() => {\n    return [", "  const policySections = useMemo(() => {\n    const fallbackSections = [", 1)
+          old_end = "    ];\n  }, [returnsConfig]);"
+          if old_end not in block: raise SystemExit('policy block ending not found')
+          tail = """    ];\n\n    if (!legalPolicySections?.length) return fallbackSections;\n\n    const resolveText = (value: string) => value.replace(/\\{\\{([A-Za-z0-9_]+)\\}\\}/g, (_match, key: string) => {\n      const configValue = (returnsConfig as unknown as Record<string, unknown>)[key];\n      return configValue == null ? '' : String(configValue);\n    });\n\n    return legalPolicySections.map((legalSection) => {\n      const fallback = fallbackSections.find((section) => section.id === legalSection.id);\n      return {\n        ...(fallback || {}),\n        id: legalSection.id,\n        num: legalSection.num,\n        titleEn: resolveText(legalSection.titleEn),\n        titleAr: resolveText(legalSection.titleAr),\n        contentEn: resolveText(legalSection.contentEn),\n        contentAr: resolveText(legalSection.contentAr),\n        bulletsEn: (legalSection.bulletsEn || (legalSection.id === 'non-returnable' ? returnsConfig.nonReturnableEn : legalSection.id === 'exchange-policy' ? returnsConfig.exchangeOptionsEn : fallback?.bulletsEn) || []).map(resolveText),\n        bulletsAr: (legalSection.bulletsAr || (legalSection.id === 'non-returnable' ? returnsConfig.nonReturnableAr : legalSection.id === 'exchange-policy' ? returnsConfig.exchangeOptionsAr : fallback?.bulletsAr) || []).map(resolveText)\n      };\n    });\n  }, [returnsConfig, legalPolicySections]);"""
+          block = block.replace(old_end, tail, 1)
+          s = s[:start] + block + s[end:]
+          p.write_text(s)
+          PY
+          grep -q "legalPolicySections" src/components/ReturnRefundPolicy.tsx
+          rm .github/workflows/apply-returns-legal-binding.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/ReturnRefundPolicy.tsx .github/workflows/apply-returns-legal-binding.yml
+          git commit -m "fix(legal): bind returns policy to published CMS sections [returns-legal-binder]"
+          git push
