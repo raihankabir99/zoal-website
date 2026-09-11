@@ -1,0 +1,27 @@
+name: one-time-admin-sections-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'stage admin sections audit')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory hardcoded/admin fallback scan
+        run: |
+          set -e
+          echo '=== AdminDashboard legacy sources ==='
+          grep -nE "localStorage\.(getItem|setItem)|Math\.random\(|127\.0\.0\.1|192\.168\.|DEFAULT_|hardcoded|fake|mock|synthetic" src/components/AdminDashboard.tsx | head -n 120 || true
+          echo '=== StaffDashboard legacy sources ==='
+          grep -nE "localStorage\.(getItem|setItem)|Math\.random\(|127\.0\.0\.1|192\.168\.|fake|mock|synthetic" src/components/StaffDashboard.tsx | head -n 80 || true
+          echo '=== Inventory ==='
+          grep -nE "localStorage\.(getItem|setItem)|Math\.random\(|fake|mock|synthetic|refreshProducts" src/components/EnterpriseInventoryManagement.tsx | head -n 120 || true
+          echo '=== Brands ==='
+          find src/app/api -path '*brand*' -o -path '*brands*' | sort
+          grep -RniE "zoal_admin_brands|hardcoded.*brand|DEFAULT.*BRAND" src/components src/app/api server --exclude-dir=node_modules | head -n 100 || true
+          echo '=== Build ==='
+          npm run build
