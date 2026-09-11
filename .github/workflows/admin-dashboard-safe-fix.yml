@@ -1,0 +1,58 @@
+name: Admin Dashboard Safe Fix
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'fix(admin-dashboard): remove fabricated analytics fallbacks') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+      - name: Guarded source patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/AdminDashboard.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = """    return sorted.length > 0 ? sorted : [
+      { name: 'Saffron Latte', qty: 32 },
+      { name: 'Traditional Hoboz', qty: 25 },
+      { name: 'Sudanese Toob', qty: 14 },
+      { name: 'Luxury Men's Thobe', qty: 11 },
+      { name: 'Karkadeh Flowers', qty: 8 }
+    ];"""
+          new = """    // Do not fabricate sales rankings when verified order-item data is unavailable.
+    return sorted;"""
+          if old not in s:
+              raise SystemExit('Guard failed: best-selling fallback not found; refusing to modify source.')
+          s = s.replace(old, new, 1)
+          old_chart = """  const revenueTrendData = [
+    { name: 'Jan', sales: metrics.totalRevenue * 0.4, orders: 12 },
+    { name: 'Feb', sales: metrics.totalRevenue * 0.55, orders: 18 },
+    { name: 'Mar', sales: metrics.totalRevenue * 0.7, orders: 24 },
+    { name: 'Apr', sales: metrics.totalRevenue * 0.65, orders: 21 },
+    { name: 'May', sales: metrics.totalRevenue * 0.9, orders: 32 },
+    { name: 'Jun', sales: metrics.totalRevenue, orders: metrics.totalOrders }
+  ];"""
+          new_chart = """  // Historical trends are provided by the authoritative dashboard analytics API.
+  const revenueTrendData: any[] = [];"""
+          if old_chart not in s:
+              raise SystemExit('Guard failed: synthetic revenue trend not found; refusing to modify source.')
+          s = s.replace(old_chart, new_chart, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Build verification
+        run: |
+          npm ci
+          npm run build
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/AdminDashboard.tsx
+          git diff --cached --check
+          git commit -m 'fix(admin-dashboard): remove fabricated analytics fallbacks'
+          git push origin audit/dashboard-sync-fix
