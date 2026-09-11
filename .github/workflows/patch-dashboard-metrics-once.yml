@@ -6,6 +6,7 @@ on:
       - '.github/workflows/patch-dashboard-metrics-once.yml'
   workflow_dispatch:
 
+# One-time production-safe audit patch. The workflow self-removes after success.
 jobs:
   patch:
     runs-on: ubuntu-latest
@@ -21,7 +22,6 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           path = Path('src/components/AdminDashboard.tsx')
           text = path.read_text(encoding='utf-8')
@@ -94,15 +94,12 @@ jobs:
 
   const revenueTrendData = serverDashboardData?.revenueTrendData || [];
   const categoryPerformanceData = serverDashboardData?.categoryPerformanceData || [];
-
-  // No fabricated fallback data: until the authoritative endpoint responds, the chart is empty.
   const bestSellingProductsData: { name: string; qty: number }[] = [];
 '''
           text = text[:metrics_start] + replacement + text[metrics_end:]
 
           path.write_text(text, encoding='utf-8')
 
-          # Guardrails: old synthetic dashboard metric block and fabricated chart seeds must be gone.
           banned = [
               "const monthlySales = totalRevenue;",
               "const totalStaff = 5;",
