@@ -833,7 +833,7 @@ async function sendEmailWithRetry(
 
 // ENDPOINTS
 
-import crypto from 'crypto';
+import crypto, { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
 // ==========================================
 // AL ZOAL SOVEREIGN AUTHENTICATION SYSTEM API
