@@ -19,7 +19,7 @@ import { downloadHtmlAsPdf } from '../lib/pdf';
 import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
 
 import { useNotificationEngine } from '../lib/notificationStore';
-import supabaseClient from '../lib/supabaseClient';
+import { supabaseClient } from '../lib/supabaseClient';
 
 interface StaffDashboardProps {
   currentUser: any;
