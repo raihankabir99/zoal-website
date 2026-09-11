@@ -1,0 +1,56 @@
+name: One-time Returns CMS Binding
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+permissions:
+  contents: write
+jobs:
+  bind:
+    if: "!contains(github.event.head_commit.message, '[returns-cms-bind]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch ReturnRefundPolicy
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/components/ReturnRefundPolicy.tsx")
+          s=p.read_text()
+          old="  const policySections = useMemo(() => {\n    return ["
+          if old not in s: raise SystemExit("policySections start not found")
+          s=s.replace(old,"  const policySections = useMemo(() => {\n    const fallbackSections = [",1)
+          old2="  }, [returnsConfig]);"
+          if old2 not in s: raise SystemExit("policySections dependency not found")
+          replacement="""    ];
+    if (!legalPolicySections?.length) return fallbackSections;
+    const resolveText = (value: string) => value.replace(/\\{\\{([A-Za-z0-9_]+)\\}\\}/g, (_m, key: string) => {
+      const value = (returnsConfig as unknown as Record<string, unknown>)[key];
+      return value == null ? '' : String(value);
+    });
+    return legalPolicySections.map((legalSection) => {
+      const fallback = fallbackSections.find((section) => section.id === legalSection.id);
+      const bulletsEn = legalSection.bulletsEn ?? fallback?.bulletsEn ?? [];
+      const bulletsAr = legalSection.bulletsAr ?? fallback?.bulletsAr ?? [];
+      return {
+        ...(fallback || {}),
+        id: legalSection.id,
+        num: legalSection.num,
+        titleEn: resolveText(legalSection.titleEn),
+        titleAr: resolveText(legalSection.titleAr),
+        contentEn: resolveText(legalSection.contentEn),
+        contentAr: resolveText(legalSection.contentAr),
+        bulletsEn: bulletsEn.map(resolveText),
+        bulletsAr: bulletsAr.map(resolveText)
+      };
+    });
+  }, [returnsConfig, legalPolicySections]);"""
+          s=s.replace(old2,replacement,1)
+          p.write_text(s)
+          PY
+          grep -q "return legalPolicySections.map" src/components/ReturnRefundPolicy.tsx
+          rm .github/workflows/returns-cms-bind-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/ReturnRefundPolicy.tsx .github/workflows/returns-cms-bind-once.yml
+          git commit -m "fix(legal): bind returns policy to published CMS sections [returns-cms-bind]"
+          git push origin audit/dashboard-sync-fix
