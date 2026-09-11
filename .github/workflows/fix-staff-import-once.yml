@@ -1,4 +1,4 @@
-name: One-time StaffDashboard import fix
+name: One-time StaffDashboard import and lockfile fix
 
 on:
   push:
@@ -16,12 +16,14 @@ jobs:
         with:
           ref: audit/dashboard-sync-fix
           fetch-depth: 0
-      - name: Apply exact import correction
+      - name: Apply exact StaffDashboard import correction
         shell: bash
         run: |
           set -euo pipefail
           file="src/components/StaffDashboard.tsx"
-          grep -Fq "import supabaseClient from '../lib/supabaseClient';" "$file"
+          old="import supabaseClient from '../lib/supabaseClient';"
+          new="import { supabaseClient } from '../lib/supabaseClient';"
+          grep -Fq "$old" "$file"
           python - <<'PY'
           from pathlib import Path
           p = Path('src/components/StaffDashboard.tsx')
@@ -32,16 +34,19 @@ jobs:
               raise SystemExit('Expected exactly one legacy Supabase import')
           p.write_text(s.replace(old, new), encoding='utf-8')
           PY
-          grep -Fq "import { supabaseClient } from '../lib/supabaseClient';" "$file"
-      - name: Build verification
+          grep -Fq "$new" "$file"
+      - name: Synchronize package lockfile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Clean install and build verification
         run: npm ci && npm run build
-      - name: Commit exact fix and remove workflow
+      - name: Commit verified fixes and remove workflow
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/fix-staff-import-once.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/StaffDashboard.tsx .github/workflows/fix-staff-import-once.yml
-          git commit -m "fix(staff): correct Supabase client import after build verification"
+          git add src/components/StaffDashboard.tsx package-lock.json .github/workflows/fix-staff-import-once.yml
+          git diff --cached --check
+          git commit -m "fix(build): sync lockfile and StaffDashboard Supabase import"
           git push origin audit/dashboard-sync-fix
