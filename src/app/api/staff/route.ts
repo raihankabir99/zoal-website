@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
 import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, validateFields } from '../helpers';
 
 /**
@@ -67,7 +68,7 @@ export async function PUT(req: NextRequest) {
 
     // Add activity log
     await supabase.from('zoal_activity_logs').insert({
-      id: 'ACT-' + Math.floor(100000 + Math.random() * 900000),
+      id: randomUUID(),
       user_id: auth.user.id,
       email: auth.user.email,
       action: `Updated order ${body.orderId} status to ${body.status}`
