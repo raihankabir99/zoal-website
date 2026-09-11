@@ -1,0 +1,44 @@
+name: one-time-staff-import-fix
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'stage staff import fix')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch exact import
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/StaffDashboard.tsx')
+          s = p.read_text()
+          old = "import supabaseClient from '../lib/supabaseClient';"
+          new = "import { supabaseClient } from '../lib/supabaseClient';"
+          count = s.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one old import, found {count}')
+          p.write_text(s.replace(old, new))
+          PY
+      - name: Verify import
+        run: |
+          set -euo pipefail
+          grep -nF "import { supabaseClient } from '../lib/supabaseClient';" src/components/StaffDashboard.tsx
+          if grep -nF "import supabaseClient from '../lib/supabaseClient';" src/components/StaffDashboard.tsx; then exit 1; fi
+      - name: Build verification
+        run: npm run build
+      - name: Commit patch and remove workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-time-staff-import-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/StaffDashboard.tsx .github/workflows/one-time-staff-import-fix.yml
+          git commit -m 'fix(staff): correct Supabase client import after build verification'
+          git push origin HEAD:audit/dashboard-sync-fix
