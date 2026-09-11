@@ -19,6 +19,7 @@ import { downloadHtmlAsPdf } from '../lib/pdf';
 import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
 
 import { useNotificationEngine } from '../lib/notificationStore';
+import supabaseClient from '../lib/supabaseClient';
 
 interface StaffDashboardProps {
   currentUser: any;
@@ -112,34 +113,58 @@ export default function StaffDashboard({
     return (localStorage.getItem('zoal_staff_duty_status') as any) || 'active';
   });
 
-  // Simulated Logs
-  const [staffLogs, setStaffLogs] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_staff_logs');
-      return raw ? JSON.parse(raw) : [
-        { id: 'log-1', action: 'Order Status Update', target: 'Order #ORD-9481', timestamp: new Date(Date.now() - 3600000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' },
-        { id: 'log-2', action: 'Stock Level Changed', target: 'Premium Blue Thobe (+50)', timestamp: new Date(Date.now() - 7200000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' },
-        { id: 'log-3', action: 'System Login', target: 'Authorized Portal Session', timestamp: new Date(Date.now() - 14400000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' }
-      ];
-    } catch (e) {
-      return [];
-    }
-  });
+  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.
+  const [staffLogs, setStaffLogs] = useState<any[]>([]);
+  const [staffMemberCount, setStaffMemberCount] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadStaffOperations = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/logs', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (cancelled) return;
+        setStaffLogs(Array.isArray(payload?.logs) ? payload.logs : []);
+        setStaffMemberCount(typeof payload?.staffMemberCount === 'number' ? payload.staffMemberCount : null);
+      } catch {
+        if (!cancelled) {
+          setStaffLogs([]);
+          setStaffMemberCount(null);
+        }
+      }
+    };
+    void loadStaffOperations();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
 
   const addStaffLog = (action: string, target: string) => {
-    const newLog = {
-      id: `log-${Date.now()}`,
-      action,
-      target,
-      timestamp: new Date().toLocaleString(),
-      staff: currentUser?.name || 'Staff Member',
-      ip: '192.168.1.105'
-    };
-    setStaffLogs((prev) => {
-      const nextLogs = [newLog, ...prev];
-      localStorage.setItem('zoal_staff_logs', JSON.stringify(nextLogs));
-      return nextLogs;
-    });
+    void (async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/logs', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action, target })
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (payload?.log) setStaffLogs((prev) => [payload.log, ...prev]);
+      } catch {
+        // Do not create a local or synthetic audit record when the authoritative API is unavailable.
+      }
+    })();
   };
 
 
@@ -152,7 +177,7 @@ export default function StaffDashboard({
         map.set(o.phone, {
           name: o.customerName,
           phone: o.phone,
-          email: `${(o.customerName || 'customer').toLowerCase().replace(/\s+/g, '')}@zoal-customer.sa`,
+          email: null,
           address: o.address,
           totalOrders: orders.filter(x => x.phone === o.phone).length,
           totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),
@@ -163,7 +188,7 @@ export default function StaffDashboard({
     return Array.from(map.values());
   }, [orders]);
 
-  const simulatedEmployeesCount = 4;
+  const staffMemberCount = staffMemberCount;
 
   return (
     <div className="space-y-1 lg:space-y-6 text-left animate-fade-in">
@@ -1446,7 +1471,7 @@ export default function StaffDashboard({
                 <div className="bg-zinc-950 border border-white/5 p-5 rounded-sm text-center relative overflow-hidden">
                   <Users className="w-5 h-5 text-gold-pure absolute top-4 left-4" />
                   <span className="text-[10px] tracking-widest text-zinc-500 uppercase block mb-1">Active Labor Roster</span>
-                  <span className="text-2xl font-mono text-white font-bold">{simulatedEmployeesCount} Dedicated Artisans</span>
+                  <span className="text-2xl font-mono text-white font-bold">{staffMemberCount} Dedicated Artisans</span>
                   <span className="text-[9px] text-zinc-500 block mt-1">Branch B & Al Hofuf branches active</span>
                 </div>
 
