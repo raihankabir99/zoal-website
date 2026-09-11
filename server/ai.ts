@@ -67,6 +67,25 @@ export async function logAiAction(req: Request, res: Response) {
   const metaData = req.body?.meta_data && typeof req.body.meta_data === 'object' ? req.body.meta_data : {};
   if (!actionType) return res.status(400).json({ error: 'action_type is required.' });
 
+  let prompt = null;
+
+  if (actionType === 'CustomPrompt') {
+    const promptText = typeof metaData.prompt_text === 'string' ? metaData.prompt_text.trim() : '';
+    if (!promptText) return res.status(400).json({ error: 'prompt_text is required for CustomPrompt.' });
+
+    const { data: promptData, error: promptError } = await access.service
+      .from('zoal_ai_prompts')
+      .insert({
+        user_id: access.user.id,
+        prompt_text: promptText
+      })
+      .select()
+      .single();
+
+    if (promptError) return res.status(500).json({ error: promptError.message });
+    prompt = promptData;
+  }
+
   const { data, error } = await access.service.from('zoal_ai_history').insert({
     user_id: access.user.id,
     action_type: actionType,
@@ -74,7 +93,7 @@ export async function logAiAction(req: Request, res: Response) {
   }).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
-  return res.status(201).json(data);
+  return res.status(201).json({ history: data, prompt });
 }
 
 export async function executeAiPrompt(req: Request, res: Response) {
