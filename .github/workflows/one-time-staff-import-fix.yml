@@ -1,44 +1,78 @@
-name: one-time-staff-import-fix
-
+name: one-time-brands-production-fix
 on:
   push:
     branches: [audit/dashboard-sync-fix]
 
 jobs:
   patch:
-    if: contains(github.event.head_commit.message, 'stage staff import fix')
+    if: contains(github.event.head_commit.message, 'stage brands production fix')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Patch exact import
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply exact Brands remediation
+        shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          p = Path('src/components/StaffDashboard.tsx')
-          s = p.read_text()
-          old = "import supabaseClient from '../lib/supabaseClient';"
-          new = "import { supabaseClient } from '../lib/supabaseClient';"
-          count = s.count(old)
-          if count != 1:
-              raise SystemExit(f'Expected exactly one old import, found {count}')
-          p.write_text(s.replace(old, new))
+          p=Path('src/app/api/brands/route.ts')
+          p.write_text('''import { NextRequest } from 'next/server';\nimport { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole } from '../helpers';\n\nconst ADMIN_ROLES = ['owner', 'admin', 'manager', 'staff'] as const;\n\nfunction mapBrandPayload(body: any) {\n  const map: Record<string,string> = {name:'name',slug:'slug',description:'description',logoUrl:'logo_url',nameAr:'name_ar',coverBannerUrl:'cover_banner_url',country:'country',website:'website',supportEmail:'support_email',supportPhone:'support_phone',brandStory:'brand_story',brandStoryAr:'brand_story_ar',featuredToggle:'featured_toggle',status:'status',seoTitle:'seo_title',seoDescription:'seo_description',seoKeywords:'seo_keywords',canonicalUrl:'canonical_url',openGraphImage:'open_graph_image',structuredData:'structured_data',galleryImages:'gallery_images',brandVideos:'brand_videos'};\n  return Object.fromEntries(Object.entries(map).filter(([k]) => body[k] !== undefined).map(([k,v]) => [v, body[k]]));\n}\n\nexport async function GET(req: NextRequest) {\n  if (!checkRateLimit(req)) return apiError('Too many requests',429);\n  const {data,error}=await supabase.from('zoal_brands').select('*').order('name',{ascending:true});\n  if(error) return apiError(error.message,500);\n  return apiResponse(data||[]);\n}\n\nexport async function POST(req: NextRequest) {\n  if (!checkRateLimit(req)) return apiError('Too many requests',429);\n  const auth=await verifyAuthAndRole(req,ADMIN_ROLES as any); if(auth.error) return auth.error;\n  const body=await req.json(); if(!body?.name||!body?.slug) return apiError('Missing brand name or slug credentials',400);\n  const {data,error}=await supabase.from('zoal_brands').insert(mapBrandPayload(body)).select().single();\n  if(error) return error.code==='23505'?apiError('A brand with this name or slug already exists',409):apiError(error.message,500);\n  return apiResponse(data,201);\n}\n\nexport async function PUT(req: NextRequest) {\n  if (!checkRateLimit(req)) return apiError('Too many requests',429);\n  const auth=await verifyAuthAndRole(req,ADMIN_ROLES as any); if(auth.error) return auth.error;\n  const body=await req.json(); if(!body?.id) return apiError('Brand id is required',400);\n  const payload=mapBrandPayload(body); if(!Object.keys(payload).length) return apiError('No brand fields supplied',400);\n  const {data,error}=await supabase.from('zoal_brands').update(payload).eq('id',body.id).select().single();\n  if(error){if(error.code==='23505')return apiError('A brand with this name or slug already exists',409);if(error.code==='PGRST116')return apiError('Brand not found',404);return apiError(error.message,500);}\n  return apiResponse(data);\n}\n\nexport async function DELETE(req: NextRequest) {\n  if (!checkRateLimit(req)) return apiError('Too many requests',429);\n  const auth=await verifyAuthAndRole(req,ADMIN_ROLES as any); if(auth.error) return auth.error;\n  const body=await req.json(); if(!body?.id) return apiError('Brand id is required',400);\n  const {data,error}=await supabase.from('zoal_brands').delete().eq('id',body.id).select().single();\n  if(error){if(error.code==='PGRST116')return apiError('Brand not found',404);return apiError(error.message,500);}\n  return apiResponse(data);\n}\n''')
+
+          p=Path('src/components/BrandManagement.tsx'); s=p.read_text()
+          anchor='  // Search & Filters\n'
+          insert='''  const getBrandAuthHeaders = () => { const token=localStorage.getItem('zoal_auth_token')||sessionStorage.getItem('zoal_auth_token')||''; return token?{Authorization:`Bearer ${token}`}:{ }; };\n  const mapApiBrand = (b:any): Brand => ({id:String(b.id),name:b.name||'',nameAr:b.name_ar||'',slug:b.slug||'',logoUrl:b.logo_url||'',coverBannerUrl:b.cover_banner_url||'',description:b.description||'',country:b.country||'',website:b.website||'',supportEmail:b.support_email||'',supportPhone:b.support_phone||'',brandStory:b.brand_story||'',featuredToggle:Boolean(b.featured_toggle),status:b.status||'Published',seoTitle:b.seo_title||'',seoDescription:b.seo_description||'',seoKeywords:b.seo_keywords||'',canonicalUrl:b.canonical_url||'',openGraphImage:b.open_graph_image||'',structuredData:b.structured_data||'',galleryImages:Array.isArray(b.gallery_images)?b.gallery_images:[],brandVideos:Array.isArray(b.brand_videos)?b.brand_videos:[],createdAt:b.created_at||new Date().toISOString()});\n  const mapUiBrandToApi=(b:Partial<Brand>)=>({name:b.name,slug:b.slug,description:b.description,logoUrl:b.logoUrl,nameAr:b.nameAr,coverBannerUrl:b.coverBannerUrl,country:b.country,website:b.website,supportEmail:b.supportEmail,supportPhone:b.supportPhone,brandStory:b.brandStory,brandStoryAr:(b as any).brandStoryAr,featuredToggle:b.featuredToggle,status:b.status,seoTitle:b.seoTitle,seoDescription:b.seoDescription,seoKeywords:b.seoKeywords,canonicalUrl:b.canonicalUrl,openGraphImage:b.openGraphImage,structuredData:b.structuredData,galleryImages:b.galleryImages||[],brandVideos:b.brandVideos||[]});\n  const refreshBrandsFromServer=async()=>{const r=await fetch('/api/brands',{cache:'no-store'});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Brand fetch failed (${r.status})`);const list=Array.isArray(x?.data)?x.data.map(mapApiBrand):[];setBrands(list);return list;};\n  useEffect(()=>{let cancelled=false;(async()=>{try{const r=await fetch('/api/brands',{cache:'no-store'});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Brand fetch failed (${r.status})`);if(!cancelled)setBrands(Array.isArray(x?.data)?x.data.map(mapApiBrand):[]);}catch(e){console.error('Brand management server sync failed:',e);}})();return()=>{cancelled=true;};},[setBrands]);\n\n'''
+          assert s.count(anchor)==1
+          s=s.replace(anchor,insert+anchor,1)
+
+          a,b=s.index('  // Save brand\n'),s.index('  // Delete a brand\n')
+          save='''  // Save brand\n  const handleSaveBrand = async (e: React.FormEvent) => {\n    e.preventDefault(); if(activeRole==='customer'){alert('Permission Denied: Read-only Website Access. Customers cannot register or modify brands.');return;}\n    if(!name||!slug){alert('Brand Name (English) and Slug are required fields.');return;}\n    if(brands.some(b=>b.name.toLowerCase()===name.toLowerCase()&&(!editingBrand||b.id!==editingBrand.id))){alert(`Duplicate Brand Name Error: A brand named "${name}" already exists.`);return;}\n    if(brands.some(b=>b.slug.toLowerCase()===slug.toLowerCase()&&(!editingBrand||b.id!==editingBrand.id))){alert(`Duplicate Slug Error: The brand slug "${slug}" is already in use.`);return;}\n    const brandData:any={id:editingBrand?editingBrand.id:undefined,name,nameAr,slug,logoUrl,coverBannerUrl,description,descriptionAr,country,website,supportEmail,supportPhone,brandStory,brandStoryAr,featuredToggle,status,seoTitle,seoDescription,seoKeywords,canonicalUrl,openGraphImage,structuredData,galleryImages:galleryInput?galleryInput.split(',').map(s=>s.trim()).filter(Boolean):[],brandVideos:videoInput?videoInput.split(',').map(s=>s.trim()).filter(Boolean):[]};\n    try{const r=await fetch('/api/brands',{method:editingBrand?'PUT':'POST',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify(editingBrand?brandData:mapUiBrandToApi(brandData))});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Brand save failed (${r.status})`);await refreshBrandsFromServer();addLog(editingBrand?`Updated Luxury Brand: ${name}`:`Registered Luxury Brand: ${name}`,editingBrand?`ID: ${editingBrand.id}`:`Slug: ${slug}`);setIsFormOpen(false);}catch(error:any){console.error('Brand save failed:',error);alert(error?.message||'Brand could not be saved. No local-only save was performed.');}\n  };\n\n'''
+          s=s[:a]+save+s[b:]
+
+          a,b=s.index('  // Delete a brand\n'),s.index('  // Duplicate a brand\n')
+          delete='''  // Delete a brand\n  const handleDelete = async (id:string,brandName:string) => {\n    if(activeRole==='customer'){alert('Permission Denied: Read-only Website Access. Customers cannot delete brands.');return;} if(activeRole==='staff'){alert('Permission Denied: Staff level users are restricted from deleting brands.');return;} if(!window.confirm(`Are you absolutely sure you want to delete the premium brand "${brandName}"?`))return;\n    try{const r=await fetch('/api/brands',{method:'DELETE',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify({id})});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Brand delete failed (${r.status})`);await refreshBrandsFromServer();setSelectedIds(prev=>prev.filter(i=>i!==id));addLog(`Deleted Luxury Brand: ${brandName}`,`ID: ${id}`);}catch(error:any){console.error('Brand delete failed:',error);alert(error?.message||'Brand could not be deleted.');}\n  };\n\n'''
+          s=s[:a]+delete+s[b:]
+
+          a,b=s.index('  // Duplicate a brand\n'),s.index('  // Archive a brand\n')
+          dup='''  // Duplicate a brand\n  const handleDuplicate = async (brand:Brand) => { try{const d={...brand,name:`${brand.name} (Copy)`,nameAr:brand.nameAr?`${brand.nameAr} (نسخة)`:'',slug:`${brand.slug}-copy`};const r=await fetch('/api/brands',{method:'POST',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify(mapUiBrandToApi(d))});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Brand duplicate failed (${r.status})`);await refreshBrandsFromServer();addLog(`Duplicated Brand List: ${brand.name}`,`New Slug: ${d.slug}`);}catch(e:any){console.error('Brand duplicate failed:',e);alert(e?.message||'Brand could not be duplicated.');} };\n\n'''
+          s=s[:a]+dup+s[b:]
+
+          a,b=s.index('  // Archive a brand\n'),s.index('  // Bulk Actions\n')
+          status='''  // Archive / restore a brand\n  const updateBrandStatus=async(id:string,brandName:string,nextStatus:Brand['status'])=>{try{const r=await fetch('/api/brands',{method:'PUT',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify({id,status:nextStatus})});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Brand status update failed (${r.status})`);await refreshBrandsFromServer();addLog(`${nextStatus==='Archived'?'Archived':'Restored'} Brand: ${brandName}`,`Status shifted to ${nextStatus}`);}catch(e:any){console.error('Brand status update failed:',e);alert(e?.message||'Brand status could not be updated.');}};\n  const handleArchive=(id:string,brandName:string)=>updateBrandStatus(id,brandName,'Archived');\n  const handleRestore=(id:string,brandName:string)=>updateBrandStatus(id,brandName,'Published');\n\n'''
+          s=s[:a]+status+s[b:]
+
+          a,b=s.index('  const handleBulkPublish ='),s.index('  const handleBulkExport =')
+          bulk='''  const handleBulkPublish=async()=>{if(!selectedIds.length)return;try{await Promise.all(selectedIds.map(id=>fetch('/api/brands',{method:'PUT',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify({id,status:'Published'})}).then(async r=>{const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||'Bulk publish failed');})));const n=selectedIds.length;await refreshBrandsFromServer();setSelectedIds([]);addLog(`Bulk Published ${n} Brands`);alert(`Successfully published ${n} premium brands.`);}catch(e:any){console.error('Bulk publish failed:',e);alert(e?.message||'Bulk publish failed.');}};\n  const handleBulkHide=async()=>{if(!selectedIds.length)return;try{await Promise.all(selectedIds.map(id=>fetch('/api/brands',{method:'PUT',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify({id,status:'Hidden'})}).then(async r=>{const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||'Bulk hide failed');})));const n=selectedIds.length;await refreshBrandsFromServer();setSelectedIds([]);addLog(`Bulk Hid ${n} Brands`);alert(`Successfully hidden ${n} premium brands.`);}catch(e:any){console.error('Bulk hide failed:',e);alert(e?.message||'Bulk hide failed.');}};\n\n'''
+          s=s[:a]+bulk+s[b:]
+
+          a,b=s.index('  const handleBulkImport ='),s.index('  // Media Asset Auto-Optimization')
+          imp='''  const handleBulkImport=async()=>{const rawInput=prompt('Paste brand portfolio JSON array data here:');if(!rawInput)return;try{const imported=JSON.parse(rawInput);if(!Array.isArray(imported)){alert('Invalid format. Input must be a valid JSON array of brands.');return;}let created=0;for(const item of imported){const r=await fetch('/api/brands',{method:'POST',headers:{'Content-Type':'application/json',...getBrandAuthHeaders()},body:JSON.stringify(mapUiBrandToApi(item))});const x=await r.json();if(!r.ok||x?.success===false)throw new Error(x?.error||`Import failed for ${item?.name||'brand'}`);created++;}await refreshBrandsFromServer();addLog(`Imported ${created} Brands to authoritative database`);alert(`Successfully imported ${created} brands.`);}catch(e:any){console.error('Brand import failed:',e);alert(e?.message||'Error importing brand data. No local-only import was performed.');}};\n\n'''
+          s=s[:a]+imp+s[b:]
+          p.write_text(s)
           PY
-      - name: Verify import
+      - name: Verify and build
         run: |
           set -euo pipefail
-          grep -nF "import { supabaseClient } from '../lib/supabaseClient';" src/components/StaffDashboard.tsx
-          if grep -nF "import supabaseClient from '../lib/supabaseClient';" src/components/StaffDashboard.tsx; then exit 1; fi
-      - name: Build verification
-        run: npm run build
-      - name: Commit patch and remove workflow
+          git diff --check
+          grep -q "verifyAuthAndRole" src/app/api/brands/route.ts
+          grep -q "refreshBrandsFromServer" src/components/BrandManagement.tsx
+          npm ci
+          npm run build
+      - name: Commit and clean temporary workflows
         run: |
           set -euo pipefail
-          rm .github/workflows/one-time-staff-import-fix.yml
+          rm -f .github/workflows/patch-brands-production.yml audit/brands-patch-trigger.md
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/components/StaffDashboard.tsx .github/workflows/one-time-staff-import-fix.yml
-          git commit -m 'fix(staff): correct Supabase client import after build verification'
+          git add src/app/api/brands/route.ts src/components/BrandManagement.tsx .github/workflows/one-time-staff-import-fix.yml .github/workflows/patch-brands-production.yml audit/brands-patch-trigger.md
+          git diff --cached --check
+          git commit -m 'fix(admin): bind brands to authoritative database after build verification'
           git push origin HEAD:audit/dashboard-sync-fix
