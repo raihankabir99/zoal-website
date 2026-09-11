@@ -3,18 +3,27 @@ import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { logAuditEvent } from './audit';
 import { authenticateRequest } from '../backend/security';
 
+type AuthenticatedRequest = Request & {
+  user?: {
+    id?: string;
+    role?: string;
+    email?: string;
+    [key: string]: unknown;
+  } | null;
+};
+
 function getClient() {
   return getServiceSupabaseClient() || getSupabaseClient();
 }
 
-function requireTaxAdmin(req: Request, res: Response) {
+function requireTaxAdmin(req: AuthenticatedRequest, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
     return false;
   }
 
   const allowed = new Set(['owner', 'admin', 'manager', 'staff']);
-  if (!allowed.has(req.user.role)) {
+  if (!allowed.has(req.user.role || '')) {
     res.status(403).json({ error: 'Forbidden' });
     return false;
   }
@@ -22,7 +31,7 @@ function requireTaxAdmin(req: Request, res: Response) {
   return true;
 }
 
-export async function getTaxData(req: Request, res: Response) {
+export async function getTaxData(req: AuthenticatedRequest, res: Response) {
   if (!requireTaxAdmin(req, res)) return;
 
   const supabase = getClient();
@@ -51,9 +60,9 @@ export async function getTaxData(req: Request, res: Response) {
   res.json({ rates: rates || [], regions: regions || [], activeRates });
 }
 
-export async function updateTaxRate(req: Request, res: Response) {
+export async function updateTaxRate(req: AuthenticatedRequest, res: Response) {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-  if (!new Set(['owner', 'admin', 'manager']).has(req.user.role)) {
+  if (!new Set(['owner', 'admin', 'manager']).has(req.user.role || '')) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
