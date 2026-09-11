@@ -1,0 +1,90 @@
+name: Inventory authoritative remediation
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Apply targeted inventory remediation
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/components/EnterpriseInventoryManagement.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          # Inventory mutations must carry the token already retrieved by each handler.
+          text = text.replace("headers: { 'Content-Type': 'application/json' },\n        credentials: 'include',\n        body: JSON.stringify({\n          productId: prod.id,", "headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },\n        credentials: 'include',\n        body: JSON.stringify({\n          productId: prod.id,", 1)
+
+          # CSV import has an existing token variable; add the bearer header only there.
+          text = text.replace("headers: { 'Content-Type': 'application/json' },\n          credentials: 'include',\n          body: JSON.stringify({\n            productId: matched.id,", "headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },\n          credentials: 'include',\n          body: JSON.stringify({\n            productId: matched.id,", 1)
+
+          # Bulk stock mutation: obtain token and send it to the authoritative API.
+          old = """        try {\n          const response = await fetch('/api/inventory', {\n            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',\n            body: JSON.stringify({ productId: id, operation: 'adjust', quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })\n          });"""
+          new = """        try {\n          const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n          if (!token) { failed++; continue; }\n          const response = await fetch('/api/inventory', {\n            method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, credentials: 'include',\n            body: JSON.stringify({ productId: id, operation: 'adjust', quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })\n          });"""
+          if old not in text:
+              raise SystemExit('Expected bulk inventory mutation block was not found; aborting.')
+          text = text.replace(old, new, 1)
+
+          # Remove the legacy client-side reservation writer. Reservation remains server/DB authoritative.
+          reservation = re.compile(r"\n  // AUTOMATIC ORDER-TO-INVENTORY REALTIME SYNCHRONIZATION ENGINE\n  useEffect\(\(\) => \{.*?\n  \}, \[orders, products\]\);\n", re.S)
+          text, count = reservation.subn("\n", text, count=1)
+          if count != 1:
+              raise SystemExit('Expected legacy reservation synchronization block was not found; aborting.')
+
+          # Do not expose fabricated local batch, purchase-order, or transaction records.
+          batches = re.compile(r"  // Batch details state\n  const \[batches, setBatches\] = useState<BatchRecord\[\]>\(\(\) => \{.*?\n  \}, \[batches\]\);\n", re.S)
+          text, count = batches.subn("  // Batch/expiry data is not provisioned by the current authoritative backend.\n  const [batches, setBatches] = useState<BatchRecord[]>([]);\n", text, count=1)
+          if count != 1:
+              raise SystemExit('Expected batch localStorage/seed block was not found; aborting.')
+
+          purchases = re.compile(r"  // Purchase records state\n  const \[purchaseOrders, setPurchaseOrders\] = useState<PurchaseOrder\[\]>\(\(\) => \{.*?\n  \}, \[purchaseOrders\]\);\n", re.S)
+          text, count = purchases.subn("  // Purchase-order data is not provisioned by the current authoritative backend.\n  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);\n", text, count=1)
+          if count != 1:
+              raise SystemExit('Expected purchase-order localStorage/seed block was not found; aborting.')
+
+          transactions = re.compile(r"  // Transaction state\n  const \[transactions, setTransactions\] = useState<InventoryTransaction\[\]>\(\(\) => \{.*?\n  \}, \[transactions\]\);\n", re.S)
+          text, count = transactions.subn("  // Transaction history is rendered from the authoritative activity panel; no client seed/localStorage fallback.\n  const [transactions] = useState<InventoryTransaction[]>([]);\n", text, count=1)
+          if count != 1:
+              raise SystemExit('Expected transaction localStorage/seed block was not found; aborting.')
+
+          # These imports are no longer needed by this component after removing legacy local writers.
+          text = text.replace("import { updateProductInventory, updateProductFields, SafeImage, normalizeCategory } from '../imageRegistry';", "import { SafeImage, normalizeCategory } from '../imageRegistry';")
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Verify no legacy inventory local writers remain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -q "localStorage.getItem('zoal_batches')" src/components/EnterpriseInventoryManagement.tsx
+          ! grep -q "localStorage.getItem('zoal_purchase_orders')" src/components/EnterpriseInventoryManagement.tsx
+          ! grep -q "localStorage.getItem('zoal_inventory_transactions')" src/components/EnterpriseInventoryManagement.tsx
+          ! grep -q "updateProductFields(p.id, { reservedStock" src/components/EnterpriseInventoryManagement.tsx
+          grep -q "Authorization: \`Bearer \${token}\`" src/components/EnterpriseInventoryManagement.tsx
+
+      - name: Commit targeted remediation and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/inventory-authoritative-remediation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/EnterpriseInventoryManagement.tsx .github/workflows/inventory-authoritative-remediation.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(inventory): remove client-side seeded inventory state"
+          git push origin audit/dashboard-sync-fix
