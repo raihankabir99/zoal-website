@@ -188,7 +188,6 @@ export default function StaffDashboard({
     return Array.from(map.values());
   }, [orders]);
 
-  const staffMemberCount = staffMemberCount;
 
   return (
     <div className="space-y-1 lg:space-y-6 text-left animate-fade-in">
