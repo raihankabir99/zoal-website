@@ -1,10 +1,12 @@
 name: Admin Dashboard Authority Fix
 on:
-  workflow_dispatch:
+  push:
+    branches: [audit/dashboard-sync-fix]
 permissions:
   contents: write
 jobs:
   patch:
+    if: ${{ !contains(github.event.head_commit.message, 'fix(admin-dashboard): remove client fixtures and synthetic identity data') && !contains(github.event.head_commit.message, 'remove temporary admin authority remediation workflow') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,53 +20,36 @@ jobs:
           s = p.read_text(encoding='utf-8')
           old = "import React, { useState, useMemo, useEffect, useRef } from 'react';"
           new = "import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';"
-          if old not in s:
-              raise SystemExit('Guard failed: React import signature not found.')
+          if old not in s: raise SystemExit('Guard failed: React import signature not found.')
           s = s.replace(old, new, 1)
           old = """  // Local state for categories (loaded from localStorage or default)\n  const [categories, setCategories] = useState<any[]>(() => {"""
           start = s.find(old)
-          if start < 0:
-              raise SystemExit('Guard failed: categories state block not found.')
-          end_marker = "\n\n  // Local state for brands"
-          end = s.find(end_marker, start)
-          if end < 0:
-              raise SystemExit('Guard failed: categories block boundary not found.')
-          replacement = """  // Categories are hydrated by CategoryManagement from the authoritative API.\n  // Keep initial state empty so localStorage/default fixtures can never become authority.\n  const [categories, setCategories] = useState<any[]>([]);"""
-          s = s[:start] + replacement + s[end:]
+          if start < 0: raise SystemExit('Guard failed: categories state block not found.')
+          end = s.find("\n\n  // Local state for brands", start)
+          if end < 0: raise SystemExit('Guard failed: categories block boundary not found.')
+          s = s[:start] + """  // Categories are hydrated by CategoryManagement from the authoritative API.\n  // Keep initial state empty so localStorage/default fixtures can never become authority.\n  const [categories, setCategories] = useState<any[]>([]);""" + s[end:]
           old = """  // Local state for brands\n  const [brands, setBrands] = useState<any[]>(() => {"""
           start = s.find(old)
-          if start < 0:
-              raise SystemExit('Guard failed: brands state block not found.')
-          end_marker = "\n\n  // ENTERPRISE STATES & OVERRIDES"
-          end = s.find(end_marker, start)
-          if end < 0:
-              raise SystemExit('Guard failed: brands block boundary not found.')
-          replacement = """  // Brands are hydrated by BrandManagement from the authoritative API.\n  // Keep initial state empty so localStorage/default fixtures can never become authority.\n  const [brands, setBrands] = useState<any[]>([]);"""
-          s = s[:start] + replacement + s[end:]
+          if start < 0: raise SystemExit('Guard failed: brands state block not found.')
+          end = s.find("\n\n  // ENTERPRISE STATES & OVERRIDES", start)
+          if end < 0: raise SystemExit('Guard failed: brands block boundary not found.')
+          s = s[:start] + """  // Brands are hydrated by BrandManagement from the authoritative API.\n  // Keep initial state empty so localStorage/default fixtures can never become authority.\n  const [brands, setBrands] = useState<any[]>([]);""" + s[end:]
           old = "ip: l.ip || '127.0.0.1',"
-          new = "ip: l.ip || 'Unavailable',"
-          if old not in s:
-              raise SystemExit('Guard failed: synthetic audit-log IP fallback not found.')
-          s = s.replace(old, new, 1)
+          if old not in s: raise SystemExit('Guard failed: synthetic audit-log IP fallback not found.')
+          s = s.replace(old, "ip: l.ip || 'Unavailable',", 1)
           old = """    const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;"""
+          if old not in s: raise SystemExit('Guard failed: synthetic log ID generator not found.')
           new = """    const uniqueId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'\n      ? `log-${crypto.randomUUID()}`\n      : `log-${Date.now()}`;"""
-          if old not in s:
-              raise SystemExit('Guard failed: synthetic log ID generator not found.')
           s = s.replace(old, new, 1)
           old = "ip: '127.0.0.1',"
-          if old not in s:
-              raise SystemExit('Guard failed: synthetic local IP value not found.')
+          if old not in s: raise SystemExit('Guard failed: synthetic local IP value not found.')
           s = s.replace(old, "ip: 'Unavailable',", 1)
           old = """  const totalCustomers = new Set(orders.map(o => o.email)).size || 1;\n    const totalStaff = 5;"""
-          new = """  const totalCustomers = new Set(orders.map(o => o.email).filter(Boolean)).size;\n    const totalStaff = staffList.filter((staff: any) => staff?.status !== 'inactive').length;"""
-          if old not in s:
-              raise SystemExit('Guard failed: hardcoded totalStaff metric not found.')
-          s = s.replace(old, new, 1)
-          old_dep = """  }, [orders, allProducts]);\n\n  // Chart Data preparation"""
-          new_dep = """  }, [orders, allProducts, staffList]);\n\n  // Chart Data preparation"""
-          if old_dep not in s:
-              raise SystemExit('Guard failed: metrics dependency boundary not found.')
-          s = s.replace(old_dep, new_dep, 1)
+          if old not in s: raise SystemExit('Guard failed: hardcoded totalStaff metric not found.')
+          s = s.replace(old, """  const totalCustomers = new Set(orders.map(o => o.email).filter(Boolean)).size;\n    const totalStaff = staffList.filter((staff: any) => staff?.status !== 'inactive').length;""", 1)
+          old = """  }, [orders, allProducts]);\n\n  // Chart Data preparation"""
+          if old not in s: raise SystemExit('Guard failed: metrics dependency boundary not found.')
+          s = s.replace(old, """  }, [orders, allProducts, staffList]);\n\n  // Chart Data preparation""", 1)
           p.write_text(s, encoding='utf-8')
       - name: Verify diff and build
         run: |
