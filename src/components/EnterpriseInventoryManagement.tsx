@@ -798,6 +798,8 @@ export default function EnterpriseInventoryManagement({
     if (!prod) return;
     const currentInv = prod.inventory || 0;
     const delta = (adjustType === 'Stock In' || adjustType === 'Return') ? adjustQty : -adjustQty;
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('Authentication is required to adjust inventory.'); return; }
     try {
       const response = await fetch('/api/inventory', {
         method: 'PATCH',
@@ -929,6 +931,8 @@ export default function EnterpriseInventoryManagement({
       const delta = targetStock - currentStock;
       if (delta === 0) { successCount++; continue; }
       try {
+        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+        if (!token) { errorCount++; continue; }
         const response = await fetch('/api/inventory', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
