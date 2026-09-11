@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Order, Product } from '../types';
 import { updateProductInventory, updateProductFields, SafeImage, normalizeCategory } from '../imageRegistry';
+import { triggerProductFetch } from '../lib/productSync';
 import { formatCurrency } from '../utils';
 import { supabaseClient } from '../lib/supabaseClient';
 import { useNotificationEngine } from '../lib/notificationStore';
@@ -110,6 +111,11 @@ export default function EnterpriseInventoryManagement({
   const userRole = currentUser?.role || 'customer';
   const isStaff = userRole === 'staff' || userRole === 'admin';
   const isAdmin = userRole === 'admin';
+
+  // Re-read authoritative product state after inventory mutations.
+  const refreshProducts = async () => {
+    await triggerProductFetch(true);
+  };
 
   // State Management
   const [loading, setLoading] = useState(true);
