@@ -1,0 +1,138 @@
+name: Customer Dashboard Orders Remediation
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+      - name: Apply targeted remediation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('src/App.tsx')
+          s = p.read_text()
+
+          old_state = """  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('zoal_orders');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to restore orders list:', e);
+      }
+    }
+    return (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) ? [] : SEED_MOCK_ORDERS;
+  });"""
+          new_state = """  // Orders are authoritative in the authenticated orders API; localStorage is not an order source.
+  const [orders, setOrders] = useState<Order[]>([]);"""
+          if old_state not in s:
+              raise SystemExit('orders state block not found')
+          s = s.replace(old_state, new_state, 1)
+
+          old_persist = """  useEffect(() => {
+    localStorage.setItem('zoal_orders', JSON.stringify(orders));
+  }, [orders]);
+"""
+          if old_persist not in s:
+              raise SystemExit('orders persistence effect not found')
+          s = s.replace(old_persist, '', 1)
+
+          marker = "  const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);"
+          effect = r'''  // Customer orders are loaded from the authenticated server source of truth.
+  useEffect(() => {
+    if (!currentUser || String((currentUser as any).role || '').toLowerCase() !== 'customer') return;
+
+    let cancelled = false;
+    const loadCustomerOrders = async () => {
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      if (!token) return;
+
+      try {
+        const response = await fetch('/api/orders?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data?.orders)
+          ? payload.data.orders
+          : Array.isArray(payload?.orders)
+            ? payload.orders
+            : [];
+
+        const statusMap: Record<string, Order['status']> = {
+          pending: 'Pending',
+          confirmed: 'Confirmed',
+          processing: 'Processing',
+          preparing: 'Preparing',
+          packed: 'Packed',
+          ready_for_shipping: 'Ready for Shipping',
+          shipped: 'Shipped',
+          out_for_delivery: 'Out for Delivery',
+          delivered: 'Delivered',
+          completed: 'Completed',
+          cancelled: 'Cancelled',
+          returned: 'Returned',
+          refund_requested: 'Refund Requested',
+          refund_approved: 'Refund Approved',
+          refund_completed: 'Refund Completed'
+        };
+
+        const mappedOrders: Order[] = rows.map((row: any) => ({
+          id: String(row.id),
+          date: row.created_at || row.date || '',
+          items: Array.isArray(row.items) ? row.items : [],
+          subtotal: Number(row.subtotal || 0),
+          shipping: Number(row.shipping_cost || 0),
+          discount: Number(row.discount_amount || 0),
+          total: Number(row.total_amount || 0),
+          status: statusMap[String(row.status || '').toLowerCase()] || 'Pending',
+          customerName: currentUser.name || '',
+          email: currentUser.email || '',
+          phone: currentUser.phone || '',
+          address: currentUser.address || '',
+          paymentMethod: row.payment_method || '—',
+          trackingNumber: row.tracking_number || ''
+        }));
+
+        if (!cancelled) setOrders(mappedOrders);
+      } catch (error) {
+        console.error('Failed to load customer orders from API:', error);
+      }
+    };
+
+    loadCustomerOrders();
+    return () => { cancelled = true; };
+  }, [currentUser]);
+
+'''
+          if marker not in s:
+              raise SystemExit('auth modal marker not found')
+          s = s.replace(marker, effect + marker, 1)
+
+          p.write_text(s)
+          PY
+      - name: Verify targeted changes
+        run: |
+          grep -n "Orders are authoritative in the authenticated orders API" src/App.tsx
+          grep -n "loadCustomerOrders" src/App.tsx
+          grep -n "zoal_orders.*JSON.stringify" src/App.tsx && exit 1 || true
+      - name: Commit remediation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.tsx
+          git diff --cached --check
+          git commit -m "fix(customer-dashboard): bind orders to authenticated API" || exit 0
+          git push origin audit/dashboard-sync-fix
+      - name: Remove temporary workflow
+        if: always()
+        run: |
+          git rm -f .github/workflows/customer-dashboard-orders-remediation.yml || true
+          git commit -m "chore(audit): remove temporary remediation workflow" || true
+          git push origin audit/dashboard-sync-fix || true
