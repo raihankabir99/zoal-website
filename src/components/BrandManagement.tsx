@@ -324,21 +324,45 @@ export const BrandManagement: React.FC<BrandManagementProps> = ({
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  const handleBulkPublish = () => {
-    if (selectedIds.length === 0) return;
-    setBrands(prev => prev.map(b => selectedIds.includes(b.id) ? { ...b, status: 'Published' } : b));
-    addLog(`Bulk Published ${selectedIds.length} Brands`);
+  const handleBulkPublish = async () => {
+  if (selectedIds.length === 0) return;
+  try {
+    const headers = getBrandAuthHeaders();
+    await Promise.all(selectedIds.map(async (id) => {
+      const response = await fetch('/api/brands', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ id, status: 'Published' }),
+      });
+      if (!response.ok) throw new Error(`Failed to publish brand ${id}`);
+    }));
+    await refreshBrandsFromServer();
     setSelectedIds([]);
-    alert(`Successfully published ${selectedIds.length} premium brands.`);
-  };
+  } catch (error) {
+    console.error('Bulk publish failed:', error);
+    alert('Bulk publish failed. No local-only fallback was applied.');
+  }
+};
 
-  const handleBulkHide = () => {
-    if (selectedIds.length === 0) return;
-    setBrands(prev => prev.map(b => selectedIds.includes(b.id) ? { ...b, status: 'Hidden' } : b));
-    addLog(`Bulk Hid ${selectedIds.length} Brands`);
+  const handleBulkHide = async () => {
+  if (selectedIds.length === 0) return;
+  try {
+    const headers = getBrandAuthHeaders();
+    await Promise.all(selectedIds.map(async (id) => {
+      const response = await fetch('/api/brands', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ id, status: 'Hidden' }),
+      });
+      if (!response.ok) throw new Error(`Failed to hide brand ${id}`);
+    }));
+    await refreshBrandsFromServer();
     setSelectedIds([]);
-    alert(`Successfully hidden ${selectedIds.length} premium brands.`);
-  };
+  } catch (error) {
+    console.error('Bulk hide failed:', error);
+    alert('Bulk hide failed. No local-only fallback was applied.');
+  }
+};
 
   const handleBulkExport = () => {
     const exportBrands = brands.filter(b => selectedIds.length === 0 || selectedIds.includes(b.id));
@@ -352,25 +376,31 @@ export const BrandManagement: React.FC<BrandManagementProps> = ({
     addLog(`Exported ${exportBrands.length} Brands portfolio as JSON`);
   };
 
-  const handleBulkImport = () => {
-    const rawInput = prompt('Paste brand portfolio JSON array data here:');
-    if (!rawInput) return;
-    try {
-      const imported = JSON.parse(rawInput);
-      if (Array.isArray(imported)) {
-        setBrands(prev => {
-          const filteredPrev = prev.filter(p => !imported.some(i => i.slug === p.slug));
-          return [...filteredPrev, ...imported];
-        });
-        addLog(`Imported ${imported.length} Brands to luxury database`);
-        alert(`Successfully imported ${imported.length} brands!`);
-      } else {
-        alert('Invalid format. Input must be a valid JSON array of brands.');
+  const handleBulkImport = async () => {
+  if (!rawInput.trim()) return;
+  try {
+    const imported = JSON.parse(rawInput);
+    if (!Array.isArray(imported)) throw new Error('Import payload must be an array.');
+    const headers = getBrandAuthHeaders();
+    for (const item of imported) {
+      const payload = mapUiBrandToApi(item);
+      const response = await fetch('/api/brands', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`Brand import failed: ${detail}`);
       }
-    } catch (e) {
-      alert('Error parsing JSON content. Ensure valid luxury schema is pasted.');
     }
-  };
+    await refreshBrandsFromServer();
+    setRawInput('');
+  } catch (error) {
+    console.error('Bulk import failed:', error);
+    alert(error instanceof Error ? error.message : 'Bulk import failed.');
+  }
+};
 
   // Media Asset Auto-Optimization sequence simulation
   const triggerAutoOptimization = () => {
