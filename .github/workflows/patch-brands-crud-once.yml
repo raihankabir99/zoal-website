@@ -1,0 +1,256 @@
+name: One-time Brands CRUD Production Patch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply targeted Brands CRUD patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/BrandManagement.tsx')
+          s = p.read_text()
+
+          old_import = "import { Product } from '../types';"
+          new_import = "import { Product } from '../types';\nimport { supabaseClient } from '../lib/supabaseClient';"
+          if old_import not in s or "from '../lib/supabaseClient'" in s:
+              raise SystemExit('Brands import marker mismatch; refusing unsafe patch')
+          s = s.replace(old_import, new_import, 1)
+
+          marker = "  // Save brand\n"
+          helpers = '''  const mapApiBrand = (b: any): Brand => ({
+    id: String(b.id),
+    name: b.name || '',
+    nameAr: b.name_ar || '',
+    slug: b.slug || '',
+    logoUrl: b.logo_url || '',
+    coverBannerUrl: b.cover_banner_url || '',
+    description: b.description || '',
+    descriptionAr: b.description_ar || '',
+    country: b.country || '',
+    website: b.website || '',
+    supportEmail: b.support_email || '',
+    supportPhone: b.support_phone || '',
+    brandStory: b.brand_story || '',
+    brandStoryAr: b.brand_story_ar || '',
+    featuredToggle: Boolean(b.featured_toggle),
+    status: b.status || 'Published',
+    seoTitle: b.seo_title || '',
+    seoDescription: b.seo_description || '',
+    seoKeywords: b.seo_keywords || '',
+    canonicalUrl: b.canonical_url || '',
+    openGraphImage: b.open_graph_image || '',
+    structuredData: b.structured_data || '',
+    galleryImages: Array.isArray(b.gallery_images) ? b.gallery_images : [],
+    brandVideos: Array.isArray(b.brand_videos) ? b.brand_videos : [],
+    createdAt: b.created_at || new Date().toISOString(),
+  });
+
+  const getBrandAccessToken = async () => {
+    const { data } = await supabaseClient.auth.getSession();
+    return data.session?.access_token || '';
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAuthoritativeBrands = async () => {
+      try {
+        const response = await fetch('/api/brands', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Brands load failed (${response.status})`);
+        const payload = await response.json();
+        const rows = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
+        if (!cancelled) setBrands(rows.map(mapApiBrand));
+      } catch (error) {
+        console.error('Failed to load authoritative brands:', error);
+      }
+    };
+    loadAuthoritativeBrands();
+    return () => { cancelled = true; };
+  }, [setBrands]);
+
+'''
+          if marker not in s:
+              raise SystemExit('Save marker not found; refusing unsafe patch')
+          s = s.replace(marker, helpers + marker, 1)
+
+          start = s.index(marker)
+          end = s.index("\n  // Delete a brand", start)
+          new_save = '''  // Save brand
+  const handleSaveBrand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeRole === 'customer') {
+      alert('Permission Denied: Read-only Website Access. Customers cannot register or modify brands.');
+      return;
+    }
+    if (!name || !slug) {
+      alert('Brand Name (English) and Slug are required fields.');
+      return;
+    }
+    const duplicateName = brands.some(b => b.name.toLowerCase() === name.toLowerCase() && (!editingBrand || b.id !== editingBrand.id));
+    if (duplicateName) {
+      alert(`Duplicate Brand Name Error: A brand named "${name}" already exists.`);
+      return;
+    }
+    const duplicateSlug = brands.some(b => b.slug.toLowerCase() === slug.toLowerCase() && (!editingBrand || b.id !== editingBrand.id));
+    if (duplicateSlug) {
+      alert(`Duplicate Slug Error: The brand slug "${slug}" is already in use.`);
+      return;
+    }
+
+    const galleryImages = galleryInput ? galleryInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const brandVideos = videoInput ? videoInput.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const brandPayload: any = {
+      name, nameAr, slug, logoUrl, coverBannerUrl, description, descriptionAr, country,
+      website, supportEmail, supportPhone, brandStory, brandStoryAr, featuredToggle, status,
+      seoTitle, seoDescription, seoKeywords, canonicalUrl, openGraphImage, structuredData,
+      galleryImages, brandVideos,
+    };
+
+    try {
+      const token = await getBrandAccessToken();
+      if (!token) throw new Error('Authentication session is required to manage brands.');
+      const response = await fetch('/api/brands', {
+        method: editingBrand ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(editingBrand ? { ...brandPayload, id: editingBrand.id } : brandPayload),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Brand save failed (${response.status})`);
+      const saved = mapApiBrand(payload?.data ?? payload);
+      if (editingBrand) {
+        setBrands(prev => prev.map(b => b.id === saved.id ? saved : b));
+        addLog(`Updated Luxury Brand: ${saved.name}`, `ID: ${saved.id}`);
+      } else {
+        setBrands(prev => [...prev.filter(b => b.id !== saved.id), saved]);
+        addLog(`Registered Luxury Brand: ${saved.name}`, `Slug: ${saved.slug}`);
+      }
+      setIsFormOpen(false);
+    } catch (error: any) {
+      console.error('Brand save failed:', error);
+      alert(error?.message || 'Unable to save brand. No local-only fallback was used.');
+    }
+  };
+'''
+          s = s[:start] + new_save + s[end:]
+
+          start = s.index("  // Delete a brand")
+          end = s.index("\n  // Duplicate a brand", start)
+          new_delete = '''  // Delete a brand
+  const handleDelete = async (id: string, brandName: string) => {
+    if (activeRole === 'customer') {
+      alert('Permission Denied: Read-only Website Access. Customers cannot delete brands.');
+      return;
+    }
+    if (activeRole === 'staff') {
+      alert('Permission Denied: Staff level users are restricted from deleting brands.');
+      return;
+    }
+    if (!window.confirm(`Are you absolutely sure you want to delete the premium brand "${brandName}"?`)) return;
+    try {
+      const token = await getBrandAccessToken();
+      if (!token) throw new Error('Authentication session is required to delete brands.');
+      const response = await fetch('/api/brands', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Brand delete failed (${response.status})`);
+      setBrands(prev => prev.filter(b => b.id !== id));
+      setSelectedIds(prev => prev.filter(i => i !== id));
+      addLog(`Deleted Luxury Brand: ${brandName}`, `ID: ${id}`);
+    } catch (error: any) {
+      console.error('Brand delete failed:', error);
+      alert(error?.message || 'Unable to delete brand.');
+    }
+  };
+'''
+          s = s[:start] + new_delete + s[end:]
+
+          start = s.index("  // Archive a brand")
+          end = s.index("\n  // Restore a brand", start)
+          new_archive = '''  // Archive a brand
+  const handleArchive = async (id: string, brandName: string) => {
+    try {
+      const token = await getBrandAccessToken();
+      if (!token) throw new Error('Authentication session is required to archive brands.');
+      const response = await fetch('/api/brands', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, status: 'Archived' }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || payload?.message || 'Brand archive failed');
+      const saved = mapApiBrand(payload?.data ?? payload);
+      setBrands(prev => prev.map(b => b.id === saved.id ? saved : b));
+      addLog(`Archived Brand: ${brandName}`, 'Status shifted to Archived');
+    } catch (error: any) {
+      console.error('Brand archive failed:', error);
+      alert(error?.message || 'Unable to archive brand.');
+    }
+  };
+'''
+          s = s[:start] + new_archive + s[end:]
+
+          start = s.index("  // Restore a brand")
+          end = s.index("\n  // Bulk Actions", start)
+          new_restore = '''  // Restore a brand
+  const handleRestore = async (id: string, brandName: string) => {
+    try {
+      const token = await getBrandAccessToken();
+      if (!token) throw new Error('Authentication session is required to restore brands.');
+      const response = await fetch('/api/brands', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, status: 'Published' }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || payload?.message || 'Brand restore failed');
+      const saved = mapApiBrand(payload?.data ?? payload);
+      setBrands(prev => prev.map(b => b.id === saved.id ? saved : b));
+      addLog(`Restored Brand: ${brandName}`, 'Status shifted back to Published');
+    } catch (error: any) {
+      console.error('Brand restore failed:', error);
+      alert(error?.message || 'Unable to restore brand.');
+    }
+  };
+'''
+          s = s[:start] + new_restore + s[end:]
+
+          # Disable misleading simulated media optimization claim.
+          old_opt = "  // Media Asset Auto-Optimization sequence simulation\n"
+          if old_opt in s:
+              s = s.replace(old_opt, "  // Media Asset Optimization UI\n", 1)
+
+          p.write_text(s)
+      - name: Verify diff and build
+        run: |
+          git diff --check
+          npm ci
+          npm run build
+
+      - name: Commit only after successful verification
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/BrandManagement.tsx .github/workflows/patch-brands-crud-once.yml
+          git diff --cached --check
+          git commit -m "fix(admin): bind brands management to authoritative API"
+          git rm .github/workflows/patch-brands-crud-once.yml
+          git commit -m "chore(audit): remove one-time brands CRUD patch workflow"
+          git push origin audit/dashboard-sync-fix
