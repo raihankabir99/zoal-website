@@ -1,0 +1,49 @@
+name: Repair Brands CRUD
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply Brands CRUD patch
+        run: node .github/scripts/patch-brands-crud.mjs
+
+      - name: Verify diff
+        run: git diff --check
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production build verification
+        run: npm run build
+
+      - name: Commit verified patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/BrandManagement.tsx .github/scripts/patch-brands-crud.mjs .github/workflows/repair-brands-crud.yml
+          git diff --cached --check
+          git commit -m "fix(admin): bind brands management to authoritative API"
+          git rm .github/scripts/patch-brands-crud.mjs .github/workflows/repair-brands-crud.yml
+          git commit -m "chore(audit): remove temporary brands repair tooling"
+          git push origin audit/dashboard-sync-fix
