@@ -1,21 +1,30 @@
 import { Request, Response } from 'express';
 import { getServiceSupabaseClient } from './supabase';
 
+type AuthenticatedRequest = Request & {
+  user?: {
+    id?: string;
+    role?: string;
+    email?: string;
+    [key: string]: unknown;
+  } | null;
+};
+
 const FINANCIAL_ROLES = new Set(['owner', 'admin', 'manager']);
 
-function requireFinancialAccess(req: Request, res: Response) {
+function requireFinancialAccess(req: AuthenticatedRequest, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' });
     return false;
   }
-  if (!FINANCIAL_ROLES.has(req.user.role)) {
+  if (!FINANCIAL_ROLES.has(req.user.role || '')) {
     res.status(403).json({ error: 'Forbidden', message: 'Financial access is restricted.' });
     return false;
   }
   return true;
 }
 
-export async function getFinancialIntelligence(req: Request, res: Response) {
+export async function getFinancialIntelligence(req: AuthenticatedRequest, res: Response) {
   if (!requireFinancialAccess(req, res)) return;
   const supabase = getServiceSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase service client not initialized.' });
