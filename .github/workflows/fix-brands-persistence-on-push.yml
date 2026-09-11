@@ -1,0 +1,170 @@
+name: One-time Brands Persistence Repair
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+    paths:
+      - '.github/workflows/fix-brands-persistence-on-push.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch only bulk brand persistence handlers
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/components/BrandManagement.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_const_function(source, name, replacement):
+              marker = f"const {name} ="
+              start = source.find(marker)
+              if start < 0:
+                  raise SystemExit(f'Missing handler: {name}')
+              brace = source.find('{', start)
+              if brace < 0:
+                  raise SystemExit(f'Missing function body: {name}')
+              depth = 0
+              in_single = in_double = in_template = False
+              escaped = False
+              for i in range(brace, len(source)):
+                  ch = source[i]
+                  if escaped:
+                      escaped = False
+                      continue
+                  if ch == '\\' and (in_single or in_double or in_template):
+                      escaped = True
+                      continue
+                  if ch == "'" and not in_double and not in_template:
+                      in_single = not in_single
+                      continue
+                  if ch == '"' and not in_single and not in_template:
+                      in_double = not in_double
+                      continue
+                  if ch == '`' and not in_single and not in_double:
+                      in_template = not in_template
+                      continue
+                  if in_single or in_double or in_template:
+                      continue
+                  if ch == '{':
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          if end < len(source) and source[end] == ';':
+                              end += 1
+                          return source[:start] + replacement + source[end:]
+              raise SystemExit(f'Unbalanced handler: {name}')
+
+          bulk_publish = '''const handleBulkPublish = async () => {
+            if (selectedIds.length === 0) return;
+            try {
+              const headers = getBrandAuthHeaders();
+              await Promise.all(selectedIds.map(async (id) => {
+                const response = await fetch('/api/brands', {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({ id, status: 'Published' }),
+                });
+                if (!response.ok) throw new Error(`Failed to publish brand ${id}`);
+              }));
+              await refreshBrandsFromServer();
+              setSelectedIds([]);
+            } catch (error) {
+              console.error('Bulk publish failed:', error);
+              alert('Bulk publish failed. No local-only fallback was applied.');
+            }
+          };'''
+
+          bulk_hide = '''const handleBulkHide = async () => {
+            if (selectedIds.length === 0) return;
+            try {
+              const headers = getBrandAuthHeaders();
+              await Promise.all(selectedIds.map(async (id) => {
+                const response = await fetch('/api/brands', {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({ id, status: 'Hidden' }),
+                });
+                if (!response.ok) throw new Error(`Failed to hide brand ${id}`);
+              }));
+              await refreshBrandsFromServer();
+              setSelectedIds([]);
+            } catch (error) {
+              console.error('Bulk hide failed:', error);
+              alert('Bulk hide failed. No local-only fallback was applied.');
+            }
+          };'''
+
+          bulk_import = '''const handleBulkImport = async () => {
+            if (!rawInput.trim()) return;
+            try {
+              const imported = JSON.parse(rawInput);
+              if (!Array.isArray(imported)) throw new Error('Import payload must be an array.');
+              const headers = getBrandAuthHeaders();
+              for (const item of imported) {
+                const payload = mapUiBrandToApi(item);
+                const response = await fetch('/api/brands', {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                  const detail = await response.text();
+                  throw new Error(`Brand import failed: ${detail}`);
+                }
+              }
+              await refreshBrandsFromServer();
+              setRawInput('');
+            } catch (error) {
+              console.error('Bulk import failed:', error);
+              alert(error instanceof Error ? error.message : 'Bulk import failed.');
+            }
+          };'''
+
+          for name, replacement in [
+              ('handleBulkPublish', bulk_publish),
+              ('handleBulkHide', bulk_hide),
+              ('handleBulkImport', bulk_import),
+          ]:
+              text = replace_const_function(text, name, replacement)
+
+          path.write_text(text, encoding='utf-8')
+          print('Patched:', path)
+
+      - name: Verify no local-only bulk mutation remains
+        run: |
+          grep -n "const handleBulkPublish\|const handleBulkHide\|const handleBulkImport" src/components/BrandManagement.tsx
+          if grep -A22 "const handleBulkPublish" src/components/BrandManagement.tsx | grep -q "setBrands(prev"; then exit 1; fi
+          if grep -A22 "const handleBulkHide" src/components/BrandManagement.tsx | grep -q "setBrands(prev"; then exit 1; fi
+          if grep -A30 "const handleBulkImport" src/components/BrandManagement.tsx | grep -q "setBrands(prev"; then exit 1; fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build verification
+        run: npm run build
+
+      - name: Commit verified patch and remove one-time workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-brands-persistence-on-push.yml
+          git add src/components/BrandManagement.tsx
+          git commit -m "fix(admin): persist brand bulk actions and imports"
+          git push origin audit/dashboard-sync-fix
