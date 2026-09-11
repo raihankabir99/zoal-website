@@ -13,7 +13,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { Order, Product } from '../types';
-import { updateProductInventory, updateProductFields, SafeImage, normalizeCategory } from '../imageRegistry';
+import { SafeImage, normalizeCategory } from '../imageRegistry';
 import { triggerProductFetch } from '../lib/productSync';
 import { formatCurrency } from '../utils';
 import { supabaseClient } from '../lib/supabaseClient';
@@ -145,111 +145,11 @@ export default function EnterpriseInventoryManagement({
       .catch(err => console.error('Failed fetching warehouses in EnterpriseInventoryManagement:', err));
   }, []);
 
-  // Batch details state
-  const [batches, setBatches] = useState<BatchRecord[]>(() => {
-    const saved = localStorage.getItem('zoal_batches');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      {
-        id: 'B-101',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        batchNumber: 'BAT-COF-2026A',
-        supplierBatch: 'SUP-ROAST-99A',
-        manufacturingDate: '2026-06-01',
-        expiryDate: '2026-12-01',
-        initialQty: 100,
-        availableQty: 85,
-        warehouse: 'Branch B Hub',
-        status: 'Active'
-      },
-      {
-        id: 'B-102',
-        productId: 'p-bak-1',
-        productName: 'Saffron Cardamom Brioche',
-        sku: 'ALZ-BAK-002',
-        batchNumber: 'BAT-SFF-449X',
-        supplierBatch: 'SUP-BAKERY-31',
-        manufacturingDate: '2026-07-14',
-        expiryDate: '2026-07-18',
-        initialQty: 40,
-        availableQty: 12,
-        warehouse: 'Al Hofuf Gourmet Kitchen',
-        status: 'Expiring Soon'
-      },
-      {
-        id: 'B-103',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        batchNumber: 'BAT-COF-2025D',
-        supplierBatch: 'SUP-ROAST-44D',
-        manufacturingDate: '2025-05-01',
-        expiryDate: '2025-11-01',
-        initialQty: 120,
-        availableQty: 0,
-        warehouse: 'Branch B Hub',
-        status: 'Expired'
-      }
-    ];
-  });
+  // Batch/expiry data is not provisioned by the current authoritative backend.
+  const [batches, setBatches] = useState<BatchRecord[]>([]);
 
-  useEffect(() => {
-    localStorage.setItem('zoal_batches', JSON.stringify(batches));
-  }, [batches]);
-
-  // Purchase records state
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
-    const saved = localStorage.getItem('zoal_purchase_orders');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      {
-        id: 'PO-2026-001',
-        supplierName: 'Branch A Coffee Beans Co.',
-        dateRaised: '2026-07-01',
-        deliveryDate: '2026-07-04',
-        invoiceNumber: 'INV-RCF-9921',
-        amountSAR: 45000,
-        status: 'Received',
-        cargoDescription: 'Imperial Coffee Beans - 500 bags',
-        receivingNotes: 'Cargo received in pristine order. Checked by Raed Al-Fahad.',
-        itemsList: [
-          { productId: 'p-cof-1', name: 'Imperial Dark Roast', sku: 'ALZ-COF-001', qtyOrdered: 500, qtyReceived: 500 }
-        ]
-      },
-      {
-        id: 'PO-2026-002',
-        supplierName: 'Paris Artisanal Flours',
-        dateRaised: '2026-07-05',
-        invoiceNumber: 'INV-PAF-3829',
-        amountSAR: 18500,
-        status: 'In Transit',
-        cargoDescription: 'French Pastry Flour - 200 bags',
-        itemsList: [
-          { productId: 'p-bak-1', name: 'Saffron Cardamom Brioche', sku: 'ALZ-BAK-002', qtyOrdered: 200 }
-        ]
-      },
-      {
-        id: 'PO-2026-003',
-        supplierName: 'Branch A Couture Textiles',
-        dateRaised: '2026-07-10',
-        invoiceNumber: 'INV-RCT-0492',
-        amountSAR: 120000,
-        status: 'Pending',
-        cargoDescription: 'Cashmere Wool Bolt - 80 rolls',
-        itemsList: []
-      }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_purchase_orders', JSON.stringify(purchaseOrders));
-  }, [purchaseOrders]);
+  // Purchase-order data is not provisioned by the current authoritative backend.
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   // Systemic notifications engine
   const notificationEngine = useNotificationEngine(currentUser);
@@ -326,73 +226,8 @@ export default function EnterpriseInventoryManagement({
   const [scannerActive, setScannerActive] = useState(true);
   const [scannerAlert, setScannerAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Transaction state
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>(() => {
-    const saved = localStorage.getItem('zoal_inventory_transactions');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to restore inventory logs list:', e);
-      }
-    }
-
-    // Default Seed transactions if empty
-    return [
-      {
-        id: 'TX-1001',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        type: 'Stock In',
-        quantityChange: 150,
-        stockBefore: 0,
-        stockAfter: 150,
-        warehouse: 'Branch B Hub',
-        shelfLocation: 'Aisle 3 - Shelf B',
-        operator: 'Raed Al-Fahad',
-        reason: 'Initial shipment reception',
-        timestamp: new Date(Date.now() - 3600000 * 24 * 3).toLocaleString(),
-        batchNumber: 'B-DR-2026'
-      },
-      {
-        id: 'TX-1002',
-        productId: 'p-bak-1',
-        productName: 'Saffron Cardamom Brioche',
-        sku: 'ALZ-BAK-002',
-        type: 'Stock In',
-        quantityChange: 80,
-        stockBefore: 0,
-        stockAfter: 80,
-        warehouse: 'Al Hofuf Kitchen',
-        shelfLocation: 'Cold Room - Rack A',
-        operator: 'Jean-Luc Vagner',
-        reason: 'Fresh morning artisanal batch baking',
-        timestamp: new Date(Date.now() - 3600000 * 2).toLocaleString(),
-        batchNumber: 'B-SFF-449'
-      },
-      {
-        id: 'TX-1003',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        type: 'Reservation',
-        quantityChange: -2,
-        stockBefore: 150,
-        stockAfter: 148,
-        warehouse: 'Branch B Hub',
-        shelfLocation: 'Aisle 3 - Shelf B',
-        operator: 'System Automations',
-        reason: 'Order #ORD-9482 Reserved',
-        timestamp: new Date(Date.now() - 1800000).toLocaleString(),
-        referenceId: 'ORD-9482'
-      }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_inventory_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+  // Transaction history is rendered from the authoritative activity panel; no client seed/localStorage fallback.
+  const [transactions] = useState<InventoryTransaction[]>([]);
 
   // Handle systemic delay for professional high-end loading skeletons
   useEffect(() => {
@@ -434,44 +269,6 @@ export default function EnterpriseInventoryManagement({
 
   // Inventory identifiers and thresholds are authoritative data; never synthesize production values client-side.
 
-  // AUTOMATIC ORDER-TO-INVENTORY REALTIME SYNCHRONIZATION ENGINE
-  useEffect(() => {
-    // 1. Calculate reserved stock for each product based on current orders.
-    // An item is "Reserved" if the order is Pending, Confirmed, Processing, Preparing, Packed or Ready for Shipping
-    const reservedCounts: Record<string, number> = {};
-    const stockDeductedCounts: Record<string, number> = {}; // Official deductions (Shipped / Delivered / Completed)
-    const returnedRestoreCounts: Record<string, number> = {}; // Returned item counts
-
-    orders.forEach((order) => {
-      const isReserved = ['Pending', 'Confirmed', 'Processing', 'Preparing', 'Packed', 'Ready for Shipping'].includes(order.status);
-      const isDeducted = ['Shipped', 'Out for Delivery', 'Delivered', 'Completed'].includes(order.status);
-      const isReturned = ['Returned', 'Refund Completed'].includes(order.status);
-
-      order.items?.forEach((item) => {
-        const prodId = item.productId;
-        if (!prodId) return;
-
-        if (isReserved) {
-          reservedCounts[prodId] = (reservedCounts[prodId] || 0) + (item.quantity || 0);
-        }
-        if (isDeducted) {
-          stockDeductedCounts[prodId] = (stockDeductedCounts[prodId] || 0) + (item.quantity || 0);
-        }
-        if (isReturned) {
-          returnedRestoreCounts[prodId] = (returnedRestoreCounts[prodId] || 0) + (item.quantity || 0);
-        }
-      });
-    });
-
-    // 2. Safely sync counts into product overrides
-    products.forEach((p) => {
-      const currentReserved = reservedCounts[p.id] || 0;
-      if (p.reservedStock !== currentReserved) {
-        updateProductFields(p.id, { reservedStock: currentReserved });
-      }
-    });
-
-  }, [orders, products]);
 
   // USB Barcode Scanner keystroke simulator listener
   useEffect(() => {
@@ -803,7 +600,7 @@ export default function EnterpriseInventoryManagement({
     try {
       const response = await fetch('/api/inventory', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         credentials: 'include',
         body: JSON.stringify({
           productId: prod.id,
@@ -935,7 +732,7 @@ export default function EnterpriseInventoryManagement({
         if (!token) { errorCount++; continue; }
         const response = await fetch('/api/inventory', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           credentials: 'include',
           body: JSON.stringify({
             productId: matched.id,
@@ -969,8 +766,10 @@ export default function EnterpriseInventoryManagement({
         const delta = targetStock - (prod.inventory || 0);
         if (delta === 0) { succeeded++; continue; }
         try {
+          const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+          if (!token) { failed++; continue; }
           const response = await fetch('/api/inventory', {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+            method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, credentials: 'include',
             body: JSON.stringify({ productId: id, operation: 'adjust', quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })
           });
           if (!response.ok) throw new Error('Inventory update failed');
