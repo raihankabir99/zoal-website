@@ -1,0 +1,64 @@
+name: One-time Staff Dashboard Remediation
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply safe staff dashboard remediation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/components/StaffDashboard.tsx')
+          text = path.read_text()
+
+          old_import = "import { useNotificationEngine } from '../lib/notificationStore';"
+          new_import = old_import + "\nimport supabaseClient from '../lib/supabaseClient';"
+          if old_import in text and "../lib/supabaseClient" not in text:
+              text = text.replace(old_import, new_import, 1)
+
+          old_logs = '''  // Simulated Logs\n  const [staffLogs, setStaffLogs] = useState<any[]>(() => {\n    try {\n      const raw = localStorage.getItem('zoal_staff_logs');\n      return raw ? JSON.parse(raw) : [\n        { id: 'log-1', action: 'Order Status Update', target: 'Order #ORD-9481', timestamp: new Date(Date.now() - 3600000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' },\n        { id: 'log-2', action: 'Stock Level Changed', target: 'Premium Blue Thobe (+50)', timestamp: new Date(Date.now() - 7200000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' },\n        { id: 'log-3', action: 'System Login', target: 'Authorized Portal Session', timestamp: new Date(Date.now() - 14400000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' }\n      ];\n    } catch (e) {\n      return [];\n    }\n  });\n\n  const addStaffLog = (action: string, target: string) => {\n    const newLog = {\n      id: `log-${Date.now()}`,\n      action,\n      target,\n      timestamp: new Date().toLocaleString(),\n      staff: currentUser?.name || 'Staff Member',\n      ip: '192.168.1.105'\n    };\n    setStaffLogs((prev) => {\n      const nextLogs = [newLog, ...prev];\n      localStorage.setItem('zoal_staff_logs', JSON.stringify(nextLogs));\n      return nextLogs;\n    });\n  };'''
+
+          new_logs = '''  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.\n  const [staffLogs, setStaffLogs] = useState<any[]>([]);\n  const [staffMemberCount, setStaffMemberCount] = useState<number | null>(null);\n\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadStaffOperations = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) return;\n        const response = await fetch('/api/staff/logs', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) return;\n        const payload = await response.json();\n        if (cancelled) return;\n        setStaffLogs(Array.isArray(payload?.logs) ? payload.logs : []);\n        setStaffMemberCount(typeof payload?.staffMemberCount === 'number' ? payload.staffMemberCount : null);\n      } catch {\n        if (!cancelled) {\n          setStaffLogs([]);\n          setStaffMemberCount(null);\n        }\n      }\n    };\n    void loadStaffOperations();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n\n  const addStaffLog = (action: string, target: string) => {\n    void (async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) return;\n        const response = await fetch('/api/staff/logs', {\n          method: 'POST',\n          headers: {\n            Authorization: `Bearer ${token}`,\n            'Content-Type': 'application/json'\n          },\n          body: JSON.stringify({ action, target })\n        });\n        if (!response.ok) return;\n        const payload = await response.json();\n        if (payload?.log) setStaffLogs((prev) => [payload.log, ...prev]);\n      } catch {\n        // Do not create a local or synthetic audit record when the authoritative API is unavailable.\n      }\n    })();\n  };'''
+
+          if old_logs not in text:
+              raise SystemExit('Expected simulated staff log block was not found; refusing unsafe edit.')
+          text = text.replace(old_logs, new_logs, 1)
+
+          old_customers = '''          email: `${(o.customerName || 'customer').toLowerCase().replace(/\\s+/g, '')}@zoal-customer.sa`,'''
+          new_customers = '''          email: null,'''
+          if old_customers not in text:
+              raise SystemExit('Expected fabricated customer email expression was not found; refusing unsafe edit.')
+          text = text.replace(old_customers, new_customers, 1)
+
+          text = text.replace('  const simulatedEmployeesCount = 4;', '  const simulatedEmployeesCount = staffMemberCount;')
+          text = text.replace('simulatedEmployeesCount', 'staffMemberCount')
+
+          path.write_text(text)
+
+          route = Path('src/app/api/staff/logs/route.ts')
+          route.parent.mkdir(parents=True, exist_ok=True)
+          route.write_text('''import { NextRequest } from 'next/server';\nimport { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole } from '../../helpers';\n\n/**\n * GET /api/staff/logs\n * Read authoritative staff activity logs. No fabricated/localStorage fallback.\n */\nexport async function GET(req: NextRequest) {\n  if (!checkRateLimit(req)) return apiError('Too many requests', 429);\n\n  try {\n    const auth = await verifyAuthAndRole(req, ['staff', 'admin', 'owner', 'manager']);\n    if (auth.error) return auth.error;\n\n    const [{ data: logs, error: logsError }, { count: staffMemberCount, error: staffError }] = await Promise.all([\n      supabase\n        .from('zoal_activity_logs')\n        .select('*')\n        .order('timestamp', { ascending: false })\n        .limit(50),\n      supabase\n        .from('zoal_users')\n        .select('id', { count: 'exact', head: true })\n        .in('role', ['staff', 'manager', 'admin', 'owner'])\n    ]);\n\n    if (logsError) return apiError(logsError.message, 500);\n    if (staffError) return apiError(staffError.message, 500);\n\n    return apiResponse({ logs: logs || [], staffMemberCount: staffMemberCount || 0 });\n  } catch (err: any) {\n    return apiError(err.message || 'Staff activity logs unavailable', 500);\n  }\n}\n\n/**\n * POST /api/staff/logs\n * Create an authoritative activity log for a staff operation.\n */\nexport async function POST(req: NextRequest) {\n  if (!checkRateLimit(req)) return apiError('Too many requests', 429);\n\n  try {\n    const auth = await verifyAuthAndRole(req, ['staff', 'admin', 'owner', 'manager']);\n    if (auth.error) return auth.error;\n\n    const body = await req.json();\n    const action = typeof body?.action === 'string' ? body.action.trim() : '';\n    const target = typeof body?.target === 'string' ? body.target.trim() : '';\n    if (!action || !target || action.length > 200 || target.length > 500) {\n      return apiError('Valid action and target are required.', 400);\n    }\n\n    const log = {\n      id: crypto.randomUUID(),\n      user_id: auth.user.id,\n      email: auth.user.email,\n      action: `${action} — ${target}`\n    };\n    const { error } = await supabase.from('zoal_activity_logs').insert(log);\n    if (error) return apiError(error.message, 500);\n\n    return apiResponse({ log });\n  } catch (err: any) {\n    return apiError(err.message || 'Failed to record staff activity', 500);\n  }\n}\n''')
+          PY
+
+      - name: Commit and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/StaffDashboard.tsx src/app/api/staff/logs/route.ts .github/workflows/one-time-staff-dashboard-remediation.yml
+          git rm .github/workflows/one-time-staff-dashboard-remediation.yml
+          git commit -m "fix(staff): bind dashboard logs to authoritative activity data"
+          git push origin HEAD:audit/dashboard-sync-fix
