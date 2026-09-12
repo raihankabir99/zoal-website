@@ -15,12 +15,8 @@ export async function GET(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
 
   try {
-    const auth = await verifyAuthAndRole(req, ['staff', 'admin']);
+    const auth = await verifyAuthAndRole(req, ['staff', 'admin', 'owner', 'manager']);
     if (auth.error) return auth.error;
-    if (!['staff', 'admin', 'owner', 'manager'].includes(auth.user?.role)) {
-      return apiError('Forbidden: Insufficient privileges for this operation', 403);
-    }
-
     const { data: staffDetails, error } = await resolveStaffDetailsUser(auth.user.id);
     if (error) return apiError(error.message, 500);
     if (!staffDetails) return apiError('Staff details record not found for authenticated user', 404);
@@ -30,7 +26,7 @@ export async function GET(req: NextRequest) {
       return apiError('Invalid duty status stored for staff member', 500);
     }
 
-    return apiResponse({ dutyStatus });
+    return apiResponse({ dutyStatus, status: dutyStatus });
   } catch (err: any) {
     return apiError(err.message || 'Duty status unavailable', 500);
   }
@@ -40,14 +36,10 @@ export async function PUT(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
 
   try {
-    const auth = await verifyAuthAndRole(req, ['staff', 'admin']);
+    const auth = await verifyAuthAndRole(req, ['staff', 'admin', 'owner', 'manager']);
     if (auth.error) return auth.error;
-    if (!['staff', 'admin', 'owner', 'manager'].includes(auth.user?.role)) {
-      return apiError('Forbidden: Insufficient privileges for this operation', 403);
-    }
-
     const body = await req.json();
-    const dutyStatus = typeof body?.dutyStatus === 'string' ? body.dutyStatus.trim().toLowerCase() : '';
+    const dutyStatus = typeof (body?.dutyStatus ?? body?.status) === 'string' ? String(body.dutyStatus ?? body.status).trim().toLowerCase() : '';
     if (!ALLOWED_DUTY_STATUS.has(dutyStatus)) {
       return apiError('dutyStatus must be one of: active, break, offline', 400);
     }
@@ -76,7 +68,7 @@ export async function PUT(req: NextRequest) {
       if (logError) console.error('Failed to record duty-status activity:', logError.message);
     }
 
-    return apiResponse({ dutyStatus: updated.duty_status });
+    return apiResponse({ dutyStatus: updated.duty_status, status: updated.duty_status });
   } catch (err: any) {
     return apiError(err.message || 'Failed to update duty status', 500);
   }
