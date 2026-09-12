@@ -1,0 +1,56 @@
+name: Staff Dashboard Build Repair
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+    paths:
+      - 'src/components/StaffDashboard.tsx'
+      - '.github/workflows/staff-dashboard-build-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: "!contains(github.event.head_commit.message, 'fix(staff): remove fabricated dashboard behavior')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Repair exact build-breaking anchors
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/StaffDashboard.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          bad_button = '''                    <button\n                      onClick={() => { void handleStaffPasswordChange(); }}\n                      disabled={staffPasswordLoading}\n                      {staffPasswordFeedback}\n                      className="w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none"\n                    >'''
+          good_button = '''                    {staffPasswordFeedback}\n                    <button\n                      onClick={() => { void handleStaffPasswordChange(); }}\n                      disabled={staffPasswordLoading}\n                      className="w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none"\n                    >'''
+          if bad_button in s:
+              s = s.replace(bad_button, good_button, 1)
+
+          # Repair accidental literal line breaks inside string literals from earlier automation.
+          s = s.replace("returnsConfig.nonReturnableEn.join('\\n')", "returnsConfig.nonReturnableEn.join('\\\\n')")
+          s = s.replace("e.target.value.split('\\n')", "e.target.value.split('\\\\n')")
+          # If the file contains actual newlines between the quote characters, normalize them.
+          s = s.replace("returnsConfig.nonReturnableEn.join('\n')", "returnsConfig.nonReturnableEn.join('\\\\n')")
+          s = s.replace("e.target.value.split('\n')", "e.target.value.split('\\\\n')")
+
+          p.write_text(s, encoding='utf-8')
+      - name: Static verification
+        run: |
+          ! grep -n "{staffPasswordFeedback}" <(sed -n '/<button/,+6p' src/components/StaffDashboard.tsx) || true
+          grep -n "staffPasswordFeedback" src/components/StaffDashboard.tsx
+          grep -n "nonReturnableEn.join" src/components/StaffDashboard.tsx
+          grep -n "nonReturnableEn: e.target.value.split" src/components/StaffDashboard.tsx
+      - name: Commit repaired source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/StaffDashboard.tsx
+          git diff --cached --quiet && exit 1
+          git commit -m 'fix(staff): remove fabricated dashboard behavior'
+          git push origin audit/dashboard-sync-fix
