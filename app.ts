@@ -8,7 +8,8 @@ import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getSupabaseClient, getServiceSupabaseClient, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.ts';
+import { getSupabaseClient, getServiceSupabaseClient, getCleanSupabaseUrl, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.ts';
+import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 const { Client } = pg;
 
@@ -1353,7 +1354,10 @@ app.get('/api/system/auth-health', async (req, res) => {
 // Change Password (Authenticated User)
 app.post('/api/auth/change-password', authenticateRequest, async (req: any, res) => {
   try {
-    const { newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
     if (!newPassword) {
       return res.status(400).json({ error: 'New password is required.' });
     }
@@ -1365,16 +1369,27 @@ app.post('/api/auth/change-password', authenticateRequest, async (req: any, res)
       });
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return res.status(500).json({ error: 'Supabase client not initialized.' });
+    const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!accessToken || !anonKey) {
+      return res.status(500).json({ error: 'Supabase authentication configuration is unavailable.' });
     }
 
-    const { error } = await supabase.auth.updateUser({
+    // Supabase supports current_password verification in updateUser; bind the auth client to the
+    // already-authenticated request token so the password check is performed by Auth.
+    const authClient = createClient(getCleanSupabaseUrl(), anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${accessToken}` } }
+    });
+
+    const { error } = await authClient.auth.updateUser({
+      current_password: currentPassword,
       password: newPassword
     });
 
-    if (error) throw error;
+    if (error) {
+      return res.status(400).json({ error: 'Current password is incorrect or the password change was rejected.' });
+    }
 
     await logActivityAsync(req.user.id, req.user.email, 'PASSWORD_CHANGED', req.ip || '', req.headers['user-agent'] || '');
 
@@ -1466,8 +1481,204 @@ app.get('/api/auth/activity-logs', authenticateRequest, requireRole(['admin']), 
   }
 });
 
+// ---------------------------------------------------------------------------
+// STAFF DASHBOARD AUTHORITATIVE ORDER + STAFF CONTRACT
+// ---------------------------------------------------------------------------
+
+// GET /api/orders — authoritative staff/admin order roster.
+app.get('/api/orders', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), async (req: any, res) => {
+  try {
+    const supabase = getServiceSupabaseClient() || getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database connection unavailable.' });
+
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100) : 100;
+    const requestedPage = Number(req.query.page);
+    const page = Number.isFinite(requestedPage) ? Math.max(Math.floor(requestedPage), 1) : 1;
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+
+    let query = supabase.from('zoal_orders').select('*', { count: 'exact' });
+    if (status) query = query.eq('status', status);
+    query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+
+    const { data: orders, error, count } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const rows = orders || [];
+    const orderIds = rows.map((order: any) => order.id).filter(Boolean);
+    let items: any[] = [];
+    if (orderIds.length > 0) {
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('zoal_order_items')
+        .select('order_id, product_id, quantity, unit_price, total_price')
+        .in('order_id', orderIds);
+      if (itemsError) return res.status(500).json({ error: itemsError.message });
+      items = itemRows || [];
+    }
+
+    const itemsByOrder = new Map<string, any[]>();
+    for (const item of items) {
+      const key = String(item.order_id);
+      const list = itemsByOrder.get(key) || [];
+      list.push(item);
+      itemsByOrder.set(key, list);
+    }
+
+    const enrichedOrders = rows.map((order: any) => ({
+      ...order,
+      items: itemsByOrder.get(String(order.id)) || []
+    }));
+
+    return res.json({
+      orders: enrichedOrders,
+      data: { orders: enrichedOrders },
+      pagination: {
+        page,
+        limit,
+        totalItems: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    });
+  } catch (error: any) {
+    console.error('GET /api/orders error:', error);
+    return res.status(500).json({ error: 'Failed to load authoritative orders.' });
+  }
+});
+
+// GET /api/staff — authoritative staff roster.
+app.get('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), async (req: any, res) => {
+  try {
+    const supabase = getServiceSupabaseClient() || getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database connection unavailable.' });
+
+    const { data, error } = await supabase
+      .from('zoal_users')
+      .select('id, first_name, last_name, email, role')
+      .in('role', ['staff', 'admin', 'owner', 'manager']);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ data: data || [] });
+  } catch (error: any) {
+    console.error('GET /api/staff error:', error);
+    return res.status(500).json({ error: 'Failed to load staff roster.' });
+  }
+});
+
+// PUT /api/staff — authoritative order status/assignment/notes mutation.
+app.put('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), async (req: any, res) => {
+  try {
+    const body = req.body || {};
+    const orderId = String(body.orderId || '').trim();
+    if (!orderId) return res.status(400).json({ error: 'orderId is required.' });
+
+    const supabase = getServiceSupabaseClient() || getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database connection unavailable.' });
+
+    const statusMap: Record<string, string> = {
+      pending: 'pending', Pending: 'pending',
+      confirmed: 'processing', Confirmed: 'processing',
+      processing: 'processing', Processing: 'processing', Preparing: 'processing',
+      packed: 'processing', Packed: 'processing',
+      'ready for shipping': 'processing', 'Ready for Shipping': 'processing',
+      shipped: 'shipped', Shipped: 'shipped',
+      'out for delivery': 'shipped', 'Out for Delivery': 'shipped',
+      delivered: 'delivered', Delivered: 'delivered', Completed: 'delivered',
+      cancelled: 'cancelled', Cancelled: 'cancelled',
+      refunded: 'refunded', 'Refund Completed': 'refunded',
+      failed: 'failed', Failed: 'failed'
+    };
+
+    const updateFields: Record<string, any> = {};
+    if (typeof body.status === 'string' && body.status.trim()) {
+      const normalized = statusMap[body.status.trim()] || statusMap[body.status.trim().toLowerCase()];
+      if (!normalized) return res.status(400).json({ error: 'Invalid status value.' });
+      updateFields.status = normalized;
+      if (normalized === 'delivered') updateFields.payment_status = 'paid';
+      if (normalized === 'refunded') updateFields.payment_status = 'refunded';
+    }
+
+    if (typeof body.trackingNumber === 'string') updateFields.tracking_number = body.trackingNumber.trim() || null;
+
+    if (Object.prototype.hasOwnProperty.call(body, 'assignedStaffId')) {
+      const staffId = body.assignedStaffId ? String(body.assignedStaffId).trim() : '';
+      if (staffId) {
+        const { data: member, error: memberError } = await supabase
+          .from('zoal_users')
+          .select('id, first_name, last_name, email, role')
+          .eq('id', staffId)
+          .in('role', ['staff', 'admin', 'owner', 'manager'])
+          .maybeSingle();
+        if (memberError) return res.status(500).json({ error: memberError.message });
+        if (!member) return res.status(400).json({ error: 'Assigned staff member not found or not authorized.' });
+        updateFields.assigned_staff_id = member.id;
+        updateFields.assigned_staff_name = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email;
+      } else {
+        updateFields.assigned_staff_id = null;
+        updateFields.assigned_staff_name = null;
+      }
+    }
+
+    if (typeof body.assignedStaffName === 'string' && !Object.prototype.hasOwnProperty.call(body, 'assignedStaffId')) {
+      const name = body.assignedStaffName.trim();
+      if (!name) {
+        updateFields.assigned_staff_id = null;
+        updateFields.assigned_staff_name = null;
+      } else {
+        const { data: members, error: membersError } = await supabase
+          .from('zoal_users')
+          .select('id, first_name, last_name, email, role')
+          .in('role', ['staff', 'admin', 'owner', 'manager']);
+        if (membersError) return res.status(500).json({ error: membersError.message });
+        const match = (members || []).find((member: any) => {
+          const fullName = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
+          return fullName.toLowerCase() === name.toLowerCase() || String(member.email || '').toLowerCase() === name.toLowerCase();
+        });
+        if (!match) return res.status(400).json({ error: 'Assigned staff member not found.' });
+        updateFields.assigned_staff_id = match.id;
+        updateFields.assigned_staff_name = [match.first_name, match.last_name].filter(Boolean).join(' ') || match.email;
+      }
+    }
+
+    for (const [inputKey, dbKey] of [
+      ['adminNotes', 'admin_notes'],
+      ['staffNotes', 'staff_notes'],
+      ['customerNotes', 'customer_notes']
+    ] as const) {
+      if (typeof body[inputKey] === 'string') updateFields[dbKey] = body[inputKey];
+    }
+
+    if (Object.keys(updateFields).length === 0) return res.status(400).json({ error: 'No mutable order fields supplied.' });
+    updateFields.updated_at = new Date().toISOString();
+
+    const { data: updatedOrder, error: updateError } = await supabase
+      .from('zoal_orders')
+      .update(updateFields)
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    await supabase.from('zoal_activity_logs').insert({
+      id: crypto.randomUUID(),
+      user_id: req.user.id,
+      email: req.user.email,
+      action: `Updated order ${orderId}: ${Object.keys(updateFields).filter((key) => key !== 'updated_at').join(', ')}`,
+      resource_type: 'order',
+      resource_id: orderId,
+      metadata: { fields: Object.keys(updateFields).filter((key) => key !== 'updated_at') }
+    });
+
+    return res.json({ data: updatedOrder, order: updatedOrder });
+  } catch (error: any) {
+    console.error('PUT /api/staff error:', error);
+    return res.status(500).json({ error: 'Failed to persist staff order operation.' });
+  }
+});
+
 // Get Email history logs
-app.get('/api/orders/email-history', async (req, res) => {
+app.get('/api/orders/email-history', authenticateRequest, requireRole(['admin']), async (req, res) => {
   const logs = await readEmailDbAsync();
   res.json(logs);
 });
