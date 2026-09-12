@@ -265,6 +265,45 @@ function AppContent() {
   const [dashboardSubTab, setDashboardSubTab] = useState<string>('overview');
   const [adminSubTab, setAdminSubTab] = useState<string>('dashboard');
 
+  // Synchronize authenticated wishlist from the server of record.
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) return;
+
+    let cancelled = false;
+
+    const loadServerWishlist = async () => {
+      try {
+        const res = await fetch('/api/wishlist', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await res.json().catch(() => null);
+
+        if (!res.ok || !result?.success || !Array.isArray(result.data)) {
+          throw new Error(result?.error || 'Failed to load wishlist');
+        }
+
+        if (cancelled) return;
+
+        const productIds = result.data
+          .map((item: any) => item?.product_id)
+          .filter((id: any): id is string => typeof id === 'string');
+
+        setWishlist(productIds);
+      } catch (error: any) {
+        console.error('Failed to synchronize server wishlist:', error);
+      }
+    };
+
+    loadServerWishlist();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
   const handleNotificationNavigate = (targetModule: string, _params?: any) => {
     setNotificationCenterOpen(false);
     const userRole = ((currentUser as any)?.role || 'customer').toLowerCase();
@@ -883,28 +922,71 @@ function AppContent() {
     setCart((prevCart) => prevCart.filter((item) => item.product.id !== productId));
   };
 
-  // Wishlist toggle
-  const handleToggleWishlist = (productId: string) => {
+  // Wishlist toggle — authenticated users are server-authoritative; guests retain local-only behavior.
+  const handleToggleWishlist = async (productId: string) => {
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return;
 
-    const isAlreadyInWishlist = wishlist.includes(productId);
-    if (isAlreadyInWishlist) {
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    const isAuthenticatedCustomer = !!currentUser && !!token;
+
+    if (!isAuthenticatedCustomer) {
+      const isAlreadyInWishlist = wishlist.includes(productId);
+      setWishlist((prevWish) =>
+        isAlreadyInWishlist
+          ? prevWish.filter((id) => id !== productId)
+          : [...prevWish, productId]
+      );
       dispatchNotification({
         type: 'wishlist',
         title: product.name,
-        message: 'Removed from wishlist',
+        message: isAlreadyInWishlist ? 'Removed from wishlist' : 'Saved to wishlist',
         image: resolveProductImage(product)
       });
-      setWishlist((prevWish) => prevWish.filter((id) => id !== productId));
-    } else {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ product_id: productId })
+      });
+
+      const result = await res.json().catch(() => null);
+      if (!res.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to update wishlist');
+      }
+
+      const toggled = result.data?.toggled;
+      if (toggled === 'added') {
+        setWishlist((prevWish) =>
+          prevWish.includes(productId) ? prevWish : [...prevWish, productId]
+        );
+      } else if (toggled === 'removed') {
+        setWishlist((prevWish) => prevWish.filter((id) => id !== productId));
+      } else {
+        throw new Error('Invalid wishlist response');
+      }
+
       dispatchNotification({
         type: 'wishlist',
         title: product.name,
-        message: 'Saved to wishlist',
+        message: toggled === 'removed' ? 'Removed from wishlist' : 'Saved to wishlist',
         image: resolveProductImage(product)
       });
-      setWishlist((prevWish) => [...prevWish, productId]);
+    } catch (error: any) {
+      console.error('Failed to update server wishlist:', error);
+      dispatchNotification({
+        type: 'system',
+        variant: 'toast',
+        title: 'Wishlist update failed',
+        message: error?.message || 'Please try again.',
+        metadata: { productId }
+      });
     }
   };
 
