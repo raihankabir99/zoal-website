@@ -21,6 +21,7 @@ export interface Brand {
   supportEmail?: string;     // Support contact email
   supportPhone?: string;     // Support contact phone
   brandStory?: string;       // In-depth brand story
+  brandStoryAr?: string;     // In-depth brand story Arabic
   featuredToggle: boolean;   // Featured display on homepage
   status: 'Published' | 'Draft' | 'Hidden' | 'Archived' | 'Scheduled'; // Brand status
   // Brand SEO
@@ -377,30 +378,30 @@ export const BrandManagement: React.FC<BrandManagementProps> = ({
   };
 
   const handleBulkImport = async () => {
-  if (!rawInput.trim()) return;
-  try {
-    const imported = JSON.parse(rawInput);
-    if (!Array.isArray(imported)) throw new Error('Import payload must be an array.');
-    const headers = getBrandAuthHeaders();
-    for (const item of imported) {
-      const payload = mapUiBrandToApi(item);
-      const response = await fetch('/api/brands', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(`Brand import failed: ${detail}`);
+    const rawInput = prompt('Paste JSON array of brands to import:');
+    if (!rawInput || !rawInput.trim()) return;
+    try {
+      const imported = JSON.parse(rawInput);
+      if (!Array.isArray(imported)) throw new Error('Import payload must be an array.');
+      const headers = getBrandAuthHeaders();
+      for (const item of imported) {
+        const payload = mapUiBrandToApi(item);
+        const response = await fetch('/api/brands', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new Error(`Brand import failed: ${detail}`);
+        }
       }
+      await refreshBrandsFromServer();
+    } catch (error) {
+      console.error('Bulk import failed:', error);
+      alert(error instanceof Error ? error.message : 'Bulk import failed.');
     }
-    await refreshBrandsFromServer();
-    setRawInput('');
-  } catch (error) {
-    console.error('Bulk import failed:', error);
-    alert(error instanceof Error ? error.message : 'Bulk import failed.');
-  }
-};
+  };
 
   // Media Asset Auto-Optimization sequence simulation
   const triggerAutoOptimization = () => {
