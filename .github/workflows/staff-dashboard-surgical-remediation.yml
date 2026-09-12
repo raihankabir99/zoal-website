@@ -5,6 +5,8 @@ on:
     branches: [audit/dashboard-sync-fix]
     paths:
       - 'src/components/StaffDashboard.tsx'
+      - 'app.ts'
+      - 'server/staff.ts'
       - '.github/workflows/staff-dashboard-surgical-remediation.yml'
   workflow_dispatch:
 
@@ -20,59 +22,109 @@ jobs:
         with:
           ref: audit/dashboard-sync-fix
           fetch-depth: 1
-      - name: Apply surgical Staff Dashboard remediation
+
+      - name: Apply authoritative Staff Dashboard remediation
         shell: python
         run: |
           from pathlib import Path
           import re
 
-          path = Path('src/components/StaffDashboard.tsx')
-          text = path.read_text(encoding='utf-8')
-          original = text
+          staff_path = Path('src/components/StaffDashboard.tsx')
+          text = staff_path.read_text(encoding='utf-8')
 
-          old = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');"
-          new = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');\n  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);\n  const [staffPasswordError, setStaffPasswordError] = useState('');\n  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState('');\n  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);"
-          if old not in text:
-              raise SystemExit('ANCHOR_MISSING: duty state')
-          text = text.replace(old, new, 1)
+          # Clean the previous workflow's literal escaped-newline insertion.
+          text = text.replace('\\n', '\n')
 
-          customer_effect = r'''\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadAuthoritativeCustomers = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) {\n          if (!cancelled) setAuthoritativeCustomers([]);\n          return;\n        }\n        const response = await fetch('/api/admin/customers?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);\n        const payload = await response.json();\n        const customers = Array.isArray(payload?.customers)\n          ? payload.customers\n          : Array.isArray(payload?.data?.customers)\n            ? payload.data.customers\n            : [];\n        if (!cancelled) setAuthoritativeCustomers(customers);\n      } catch (error) {\n        console.error('Failed to load staff customers from authoritative API:', error);\n        if (!cancelled) setAuthoritativeCustomers([]);\n      }\n    };\n    void loadAuthoritativeCustomers();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n'''
-          marker = "\n  // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.\n"
-          if marker not in text:
-              raise SystemExit('ANCHOR_MISSING: order marker')
-          text = text.replace(marker, customer_effect + marker, 1)
+          text = text.replace(
+              "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');",
+              "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');"
+          )
 
-          old_customers = '''  // Derived Customers\n  const uniqueCustomers = useMemo(() => {\n    const map = new Map();\n    orders.forEach(o => {\n      if (!map.has(o.phone)) {\n        map.set(o.phone, {\n          name: o.customerName,\n          phone: o.phone,\n          email: null,\n          address: o.address,\n          totalOrders: orders.filter(x => x.phone === o.phone).length,\n          totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),\n          status: 'Active VIP'\n        });\n      }\n    });\n    return Array.from(map.values());\n  }, [orders]);\n'''
-          new_customers = '''  // Customer Directory is API-authoritative; never derive customer records from order rows.\n  const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);\n'''
-          if old_customers not in text:
+          if 'const [authoritativeCustomers, setAuthoritativeCustomers]' not in text:
+              anchor = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');"
+              additions = """\n  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);\n  const [staffPasswordError, setStaffPasswordError] = useState('');\n  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState('');\n  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);"""
+              if anchor not in text:
+                  raise SystemExit('ANCHOR_MISSING: duty state')
+              text = text.replace(anchor, anchor + additions, 1)
+
+          if 'loadAuthoritativeCustomers' not in text:
+              marker = "\n  // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.\n"
+              effect = """\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadAuthoritativeCustomers = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) {\n          if (!cancelled) setAuthoritativeCustomers([]);\n          return;\n        }\n        const response = await fetch('/api/admin/customers?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);\n        const payload = await response.json();\n        const customers = Array.isArray(payload?.customers)\n          ? payload.customers\n          : Array.isArray(payload?.data?.customers)\n            ? payload.data.customers\n            : [];\n        if (!cancelled) setAuthoritativeCustomers(customers);\n      } catch (error) {\n        console.error('Failed to load staff customers from authoritative API:', error);\n        if (!cancelled) setAuthoritativeCustomers([]);\n      }\n    };\n    void loadAuthoritativeCustomers();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n"""
+              if marker not in text:
+                  raise SystemExit('ANCHOR_MISSING: order marker')
+              text = text.replace(marker, effect + marker, 1)
+
+          old_customers = """  // Derived Customers\n  const uniqueCustomers = useMemo(() => {\n    const map = new Map();\n    orders.forEach(o => {\n      if (!map.has(o.phone)) {\n        map.set(o.phone, {\n          name: o.customerName,\n          phone: o.phone,\n          email: null,\n          address: o.address,\n          totalOrders: orders.filter(x => x.phone === o.phone).length,\n          totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),\n          status: 'Active VIP'\n        });\n      }\n    });\n    return Array.from(map.values());\n  }, [orders]);\n"""
+          new_customers = """  // Customer Directory is API-authoritative; never derive customer records from order rows.\n  const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);\n"""
+          if old_customers in text:
+              text = text.replace(old_customers, new_customers, 1)
+          elif 'const uniqueCustomers = useMemo(() => authoritativeCustomers' not in text:
               raise SystemExit('ANCHOR_MISSING: fabricated customers block')
-          text = text.replace(old_customers, new_customers, 1)
 
-          # Add a real password-change handler only when the component still lacks one.
           if 'const handleStaffPasswordChange' not in text:
-              insert_before = "\n\n  return ("
-              handler = r'''\n  const handleStaffPasswordChange = async () => {\n    setStaffPasswordError('');\n    setStaffPasswordSuccess('');\n    if (!currentPassword || !newPassword) {\n      setStaffPasswordError('Current and new password are required.');\n      return;\n    }\n    if (newPassword.length < 8) {\n      setStaffPasswordError('New password must be at least 8 characters.');\n      return;\n    }\n    setStaffPasswordLoading(true);\n    try {\n      const { data: { session } } = await supabaseClient.auth.getSession();\n      const token = session?.access_token;\n      if (!token) throw new Error('Authentication session is unavailable.');\n      const response = await fetch('/api/auth/change-password', {\n        method: 'POST',\n        headers: {\n          Authorization: `Bearer ${token}`,\n          'Content-Type': 'application/json'\n        },\n        body: JSON.stringify({ currentPassword, newPassword })\n      });\n      const payload = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);\n      setCurrentPassword('');\n      setNewPassword('');\n      setStaffPasswordSuccess('Password changed successfully.');\n    } catch (error) {\n      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');\n    } finally {\n      setStaffPasswordLoading(false);\n    }\n  };\n'''
-              if insert_before not in text:
+              marker = "\n\n  return ("
+              handler = """\n  const handleStaffPasswordChange = async () => {\n    setStaffPasswordError('');\n    setStaffPasswordSuccess('');\n    if (!currentPassword || !newPassword) {\n      setStaffPasswordError('Current and new password are required.');\n      return;\n    }\n    if (newPassword.length < 8) {\n      setStaffPasswordError('New password must be at least 8 characters.');\n      return;\n    }\n    setStaffPasswordLoading(true);\n    try {\n      const { data: { session } } = await supabaseClient.auth.getSession();\n      const token = session?.access_token;\n      if (!token) throw new Error('Authentication session is unavailable.');\n      const response = await fetch('/api/auth/change-password', {\n        method: 'POST',\n        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },\n        body: JSON.stringify({ currentPassword, newPassword })\n      });\n      const payload = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);\n      setCurrentPassword('');\n      setNewPassword('');\n      setStaffPasswordSuccess('Password changed successfully.');\n    } catch (error) {\n      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');\n    } finally {\n      setStaffPasswordLoading(false);\n    }\n  };\n"""
+              if marker not in text:
                   raise SystemExit('ANCHOR_MISSING: return marker')
-              text = text.replace(insert_before, '\n' + handler + insert_before, 1)
+              text = text.replace(marker, '\n' + handler + marker, 1)
 
-          if text == original:
-              raise SystemExit('NO_CHANGES_APPLIED')
-          path.write_text(text, encoding='utf-8')
-          print('Staff Dashboard surgical remediation applied')
-      - name: Verify forbidden legacy behavior is gone
+          # Replace legacy localStorage duty mutation with authoritative API mutation.
+          legacy_duty = re.compile(r"onClick=\{\(\) => \{\s*localStorage\.setItem\('zoal_staff_duty_status', st\);\s*setStaffDutyStatus\(st\);\s*addStaffLog\('Duty Status Changed', `Set status to \$\{st\.toUpperCase\(\)\}`\);\s*\}\}", re.S)
+          if legacy_duty.search(text):
+              replacement = "onClick={() => { void updateStaffDutyStatus(st); }}"
+              text = legacy_duty.sub(replacement, text, count=1)
+
+          if 'const updateStaffDutyStatus' not in text:
+              marker = "\n  const addStaffLog = (action: string, target: string) => {"
+              fn = """\n  const updateStaffDutyStatus = async (nextStatus: 'active' | 'break' | 'offline') => {\n    try {\n      const { data: { session } } = await supabaseClient.auth.getSession();\n      const token = session?.access_token;\n      if (!token) return;\n      const response = await fetch('/api/staff/duty-status', {\n        method: 'PUT',\n        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },\n        body: JSON.stringify({ status: nextStatus })\n      });\n      if (!response.ok) throw new Error(`Duty status update failed (${response.status})`);\n      const payload = await response.json();\n      if (payload?.status) {\n        setStaffDutyStatus(payload.status);\n        addStaffLog('Duty Status Changed', `Set status to ${payload.status.toUpperCase()}`);\n      }\n    } catch (error) {\n      console.error('Failed to update authoritative staff duty status:', error);\n    }\n  };\n\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadDutyStatus = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) return;\n        const response = await fetch('/api/staff/duty-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });\n        if (!response.ok) return;\n        const payload = await response.json();\n        if (!cancelled && ['active', 'break', 'offline'].includes(payload?.status)) setStaffDutyStatus(payload.status);\n      } catch (error) {\n        console.error('Failed to load authoritative staff duty status:', error);\n      }\n    };\n    void loadDutyStatus();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n"""
+              if marker not in text:
+                  raise SystemExit('ANCHOR_MISSING: addStaffLog marker')
+              text = text.replace(marker, fn + marker, 1)
+
+          # Replace the fake success alert with real submit handler and inline feedback.
+          text = text.replace("onClick={() => {\n                        alert('Password changed successfully!');\n                        addStaffLog('Password Changed', 'Staff credentials updated securely');\n                      }}", "onClick={() => { void handleStaffPasswordChange(); }}\n                      disabled={staffPasswordLoading}", 1)
+
+          staff_path.write_text(text, encoding='utf-8')
+
+          # Create authoritative staff API module using the existing zoal_staff_details table.
+          staff_module = Path('server/staff.ts')
+          staff_module.write_text("""import { Request, Response } from 'express';\nimport { getServiceSupabaseClient, getSupabaseClient } from './supabase';\n\nconst getClient = () => getServiceSupabaseClient() || getSupabaseClient();\nconst VALID_DUTY_STATUSES = new Set(['active', 'break', 'offline']);\n\nexport async function getDutyStatus(req: Request, res: Response) {\n  try {\n    const client = getClient();\n    if (!client || !req.user?.id) return res.status(503).json({ error: 'Staff data service unavailable' });\n    const { data, error } = await client.from('zoal_staff_details').select('duty_status').eq('user_id', req.user.id).maybeSingle();\n    if (error) return res.status(500).json({ error: 'Failed to load staff duty status' });\n    return res.json({ status: VALID_DUTY_STATUSES.has(String(data?.duty_status)) ? data.duty_status : 'offline' });\n  } catch (error) {\n    console.error('getDutyStatus error:', error);\n    return res.status(500).json({ error: 'Failed to load staff duty status' });\n  }\n}\n\nexport async function updateDutyStatus(req: Request, res: Response) {\n  try {\n    const status = String(req.body?.status || '');\n    if (!VALID_DUTY_STATUSES.has(status)) return res.status(400).json({ error: 'Invalid duty status' });\n    const client = getClient();\n    if (!client || !req.user?.id) return res.status(503).json({ error: 'Staff data service unavailable' });\n    const { data, error } = await client.from('zoal_staff_details').upsert({ user_id: req.user.id, duty_status: status }, { onConflict: 'user_id' }).select('duty_status').single();\n    if (error) return res.status(500).json({ error: 'Failed to update staff duty status' });\n    return res.json({ status: data?.duty_status });\n  } catch (error) {\n    console.error('updateDutyStatus error:', error);\n    return res.status(500).json({ error: 'Failed to update staff duty status' });\n  }\n}\n\nexport async function getStaffLogs(req: Request, res: Response) {\n  try {\n    const client = getClient();\n    if (!client) return res.status(503).json({ error: 'Staff data service unavailable' });\n    const { data: logs, error } = await client.from('zoal_activity_logs').select('id,user_id,email,action,timestamp,resource_type,resource_id,result,severity,source,metadata').eq('resource_type', 'staff').order('timestamp', { ascending: false }).limit(100);\n    if (error) return res.status(500).json({ error: 'Failed to load staff logs' });\n    const { count: staffMemberCount } = await client.from('zoal_staff_details').select('id', { count: 'exact', head: true });\n    return res.json({ logs: logs || [], staffMemberCount: staffMemberCount ?? null });\n  } catch (error) {\n    console.error('getStaffLogs error:', error);\n    return res.status(500).json({ error: 'Failed to load staff logs' });\n  }\n}\n\nexport async function createStaffLog(req: Request, res: Response) {\n  try {\n    const action = String(req.body?.action || '').trim();\n    const target = String(req.body?.target || '').trim();\n    if (!action) return res.status(400).json({ error: 'Action is required' });\n    const client = getClient();\n    if (!client || !req.user?.id) return res.status(503).json({ error: 'Staff data service unavailable' });\n    const record = { id: crypto.randomUUID(), user_id: req.user.id, email: req.user.email || null, action, timestamp: new Date().toISOString(), resource_type: 'staff', resource_id: target || null, metadata: {}, severity: 'info', source: 'staff-dashboard', result: 'success' };\n    const { data, error } = await client.from('zoal_activity_logs').insert(record).select('*').single();\n    if (error) return res.status(500).json({ error: 'Failed to create staff log' });\n    return res.status(201).json({ log: data });\n  } catch (error) {\n    console.error('createStaffLog error:', error);\n    return res.status(500).json({ error: 'Failed to create staff log' });\n  }\n}\n""", encoding='utf-8')
+
+          app_path = Path('app.ts')
+          app = app_path.read_text(encoding='utf-8')
+          if "import * as staffModule from './server/staff.ts';" not in app:
+              import_anchor = "import * as crmModule from './server/crm.ts';"
+              if import_anchor not in app:
+                  raise SystemExit('ANCHOR_MISSING: crm import')
+              app = app.replace(import_anchor, import_anchor + "\nimport * as staffModule from './server/staff.ts';", 1)
+          route_anchor = "app.get('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomers);"
+          if "app.get('/api/staff/duty-status'" not in app:
+              if route_anchor not in app:
+                  raise SystemExit('ANCHOR_MISSING: customer route')
+              routes = """\napp.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getDutyStatus);\napp.put('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateDutyStatus);\napp.get('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);\napp.post('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.createStaffLog);\n"""
+              app = app.replace(route_anchor, route_anchor + routes, 1)
+          app_path.write_text(app, encoding='utf-8')
+
+      - name: Verify production-safety anchors
         run: |
           ! grep -n "zoal_staff_duty_status" src/components/StaffDashboard.tsx
           ! grep -n "status: 'Active VIP'" src/components/StaffDashboard.tsx
+          ! grep -n "alert('Password changed successfully!')" src/components/StaffDashboard.tsx
           grep -n "authoritativeCustomers" src/components/StaffDashboard.tsx
           grep -n "handleStaffPasswordChange" src/components/StaffDashboard.tsx
           grep -n "/api/admin/customers" src/components/StaffDashboard.tsx
           grep -n "/api/auth/change-password" src/components/StaffDashboard.tsx
+          grep -n "updateStaffDutyStatus" src/components/StaffDashboard.tsx
+          grep -n "/api/staff/duty-status" app.ts
+          grep -n "/api/staff/logs" app.ts
+          test -f server/staff.ts
+          grep -n "zoal_staff_details" server/staff.ts
+
       - name: Commit remediation
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/components/StaffDashboard.tsx
+          git add src/components/StaffDashboard.tsx app.ts server/staff.ts .github/workflows/staff-dashboard-surgical-remediation.yml
           git diff --cached --quiet && exit 1
           git commit -m 'fix(staff): remove fabricated dashboard behavior'
           git push origin audit/dashboard-sync-fix
