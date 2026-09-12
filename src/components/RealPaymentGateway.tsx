@@ -3,6 +3,8 @@ import { Clock, Shield, XCircle, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
+  orderId?: string;
+  amount?: number;
   onSuccess: (orderData: any) => void;
   onCancel: () => void;
   notificationEngine?: any;
@@ -45,20 +47,24 @@ function loadAsset(kind: 'script' | 'style', url: string) {
   });
 }
 
-export default function RealPaymentGateway({ onSuccess, onCancel, notificationEngine }: Props) {
+function getAuthToken() {
+  return localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+}
+
+export default function RealPaymentGateway({ orderId: providedOrderId, amount: providedAmount, onSuccess, onCancel, notificationEngine }: Props) {
   const { i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
   const formRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
-  const [orderId, setOrderId] = useState('');
-  const [amount, setAmount] = useState<number | null>(null);
+  const [orderId, setOrderId] = useState(providedOrderId || '');
+  const [amount, setAmount] = useState<number | null>(typeof providedAmount === 'number' ? providedAmount : null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'verifying' | 'success'>('loading');
   const [timeLeft, setTimeLeft] = useState(15 * 60);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const currentOrderId = params.get('order_id') || '';
+    const currentOrderId = providedOrderId || params.get('order_id') || '';
     const gatewayPaymentId = params.get('id') || '';
     setOrderId(currentOrderId);
 
@@ -68,9 +74,11 @@ export default function RealPaymentGateway({ onSuccess, onCancel, notificationEn
       if (!gatewayPaymentId || !currentOrderId) return false;
       setStatus('verifying');
       try {
+        const token = getAuthToken();
+        if (!token) throw new Error('Your customer session has expired. Please sign in again.');
         const response = await fetch('/api/payments/verify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ paymentId: gatewayPaymentId, orderId: currentOrderId })
         });
         const data = await response.json();
@@ -93,6 +101,26 @@ export default function RealPaymentGateway({ onSuccess, onCancel, notificationEn
       return true;
     }
 
+    async function loadAuthoritativeAmount() {
+      if (typeof providedAmount === 'number' && providedAmount > 0) return providedAmount;
+      const token = getAuthToken();
+      if (!token) throw new Error('Your customer session has expired. Please sign in again.');
+      const orderResponse = await fetch('/api/orders?limit=100&page=1', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!orderResponse.ok) throw new Error(`Unable to load the authoritative order amount (${orderResponse.status}).`);
+      const orderPayload = await orderResponse.json();
+      const rows = Array.isArray(orderPayload?.data?.orders)
+        ? orderPayload.data.orders
+        : Array.isArray(orderPayload?.orders)
+          ? orderPayload.orders
+          : [];
+      const found = rows.find((row: any) => String(row.id) === String(currentOrderId));
+      const total = Number(found?.total_amount ?? found?.total ?? 0);
+      if (!total || total <= 0) throw new Error('Unable to determine the authoritative order amount.');
+      return total;
+    }
+
     async function init() {
       try {
         const configResponse = await fetch('/api/payments/config');
@@ -100,34 +128,14 @@ export default function RealPaymentGateway({ onSuccess, onCancel, notificationEn
         if (!configResponse.ok || !config.publishableKey) throw new Error(config.error || 'Moyasar payment gateway is not configured.');
         if (import.meta.env.PROD && String(config.publishableKey).startsWith('pk_test_')) throw new Error('Production is still using a Moyasar test publishable key.');
 
-        const orderResponse = await fetch(`/api/orders?limit=100&page=1`);
-        if (orderResponse.ok) {
-          const orderPayload = await orderResponse.json();
-          const rows = Array.isArray(orderPayload) ? orderPayload : (orderPayload.orders || orderPayload.data?.orders || []);
-          const found = rows.find((row: any) => String(row.id) === String(currentOrderId));
-          if (found) setAmount(Number(found.total_amount ?? found.total ?? 0));
-        }
-
         if (await verifyReturnedPayment()) return;
         if (!currentOrderId) throw new Error('Missing order ID for payment session.');
 
-        const resolvedAmount = amount;
-        if (!resolvedAmount) {
-          const directOrder = await fetch(`/api/orders?limit=100&page=1`);
-          const payload = await directOrder.json();
-          const rows = Array.isArray(payload) ? payload : (payload.orders || payload.data?.orders || []);
-          const found = rows.find((row: any) => String(row.id) === String(currentOrderId));
-          const total = Number(found?.total_amount ?? found?.total ?? 0);
-          if (!total || total <= 0) throw new Error('Unable to determine the authoritative order amount.');
-          setAmount(total);
-          await loadAsset('style', MOYASAR_CSS);
-          await loadAsset('script', MOYASAR_JS);
-          mountForm(total, currentOrderId, config.publishableKey);
-          return;
-        }
+        const total = await loadAuthoritativeAmount();
+        setAmount(total);
         await loadAsset('style', MOYASAR_CSS);
         await loadAsset('script', MOYASAR_JS);
-        mountForm(resolvedAmount, currentOrderId, config.publishableKey);
+        mountForm(total, currentOrderId, config.publishableKey);
       } catch (err: any) {
         setError(err?.message || 'Unable to initialize secure payment gateway.');
         setStatus('ready');
@@ -149,9 +157,11 @@ export default function RealPaymentGateway({ onSuccess, onCancel, notificationEn
         methods: ['creditcard'],
         language: isAr ? 'ar' : 'en',
         on_completed: async (payment: any) => {
+          const token = getAuthToken();
+          if (!token) return;
           await fetch('/api/payments/record', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ paymentId: payment?.id, orderId: id })
           });
         },
@@ -166,7 +176,7 @@ export default function RealPaymentGateway({ onSuccess, onCancel, notificationEn
 
     init();
     return () => window.clearInterval(timer);
-  }, []);
+  }, [providedOrderId, providedAmount, onSuccess, isAr, notificationEngine]);
 
   const mins = Math.floor(timeLeft / 60);
   const secs = timeLeft % 60;
