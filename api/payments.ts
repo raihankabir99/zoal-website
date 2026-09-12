@@ -14,7 +14,7 @@ function pathName(req: VercelRequest) {
 }
 
 async function getUser(req: VercelRequest) {
-  const header = req.headers.authorization || '';
+  const header = req.headers.authorization || req.headers.Authorization || '';
   if (!header.startsWith('Bearer ')) return null;
   const token = header.slice(7).trim();
   if (!token) return null;
@@ -23,6 +23,18 @@ async function getUser(req: VercelRequest) {
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return null;
   return syncSupabaseUser(data.user);
+}
+
+async function requireOrderAccess(req: VercelRequest, supabase: any, orderId: string) {
+  const user = await getUser(req);
+  if (!user) return { user: null, order: null, status: 401, error: 'Authentication required.' };
+  const order = await getOrder(supabase, orderId);
+  if (!order) return { user, order: null, status: 404, error: 'Order not found.' };
+  const privileged = ['owner', 'admin', 'manager', 'staff'].includes(String(user.role));
+  if (!privileged && String(order.customer_id) !== String(user.id)) {
+    return { user, order: null, status: 403, error: 'Forbidden: order does not belong to the authenticated customer.' };
+  }
+  return { user, order, status: 200, error: null };
 }
 
 async function getOrder(supabase: any, orderId: string) {
@@ -39,8 +51,10 @@ function verifyGatewayPayment(payment: any, order: any) {
   const amountMatches = Number(payment?.amount) === expectedMinor(order);
   const currencyMatches = String(payment?.currency || '').toUpperCase() === String(order?.currency || 'SAR').toUpperCase();
   const metadataOrderId = String(payment?.metadata?.order_id ?? '');
-  const orderMatches = !metadataOrderId || metadataOrderId === String(order.id);
-  if (!amountMatches || !currencyMatches || !orderMatches) throw new Error('Gateway payment does not match the authoritative order amount, currency, or order correlation.');
+  const orderMatches = metadataOrderId === String(order.id);
+  if (!amountMatches || !currencyMatches || !orderMatches) {
+    throw new Error('Gateway payment does not match the authoritative order amount, currency, or order correlation.');
+  }
 }
 
 async function recordPayment(req: VercelRequest, res: VercelResponse) {
@@ -48,8 +62,9 @@ async function recordPayment(req: VercelRequest, res: VercelResponse) {
   if (!supabase) return send(res, 503, { error: 'Database connection unavailable.' });
   const { paymentId, orderId } = req.body || {};
   if (!paymentId || !orderId) return send(res, 400, { error: 'Missing paymentId or orderId.' });
-  const order = await getOrder(supabase, String(orderId));
-  if (!order) return send(res, 404, { error: 'Order not found.' });
+  const access = await requireOrderAccess(req, supabase, String(orderId));
+  if (access.status !== 200) return send(res, access.status, { error: access.error });
+  const order = access.order;
   const payment = await getMoyasarPayment(String(paymentId));
   verifyGatewayPayment(payment, order);
   const { error } = await supabase.from('zoal_payment_transactions').update({ gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() }).eq('order_id', order.id).in('payment_status', ['initiated', 'pending', 'unpaid']);
@@ -62,8 +77,9 @@ async function verifyPayment(req: VercelRequest, res: VercelResponse) {
   if (!supabase) return send(res, 503, { error: 'Database connection unavailable.' });
   const { paymentId, orderId } = req.body || {};
   if (!paymentId || !orderId) return send(res, 400, { error: 'Missing paymentId or orderId.' });
-  const order = await getOrder(supabase, String(orderId));
-  if (!order) return send(res, 404, { error: 'Order not found.' });
+  const access = await requireOrderAccess(req, supabase, String(orderId));
+  if (access.status !== 200) return send(res, access.status, { error: access.error });
+  const order = access.order;
   const payment = await getMoyasarPayment(String(paymentId));
   verifyGatewayPayment(payment, order);
   if (order.payment_status === 'paid') return send(res, 200, { success: true, verified: true, orderId: order.id, paymentStatus: 'paid', amount: Number(order.total_amount) });
