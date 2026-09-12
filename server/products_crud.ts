@@ -90,6 +90,25 @@ function validateLogisticsFields(body: any): string | null {
 }
 
 /**
+ * Validate monetary fields without silently coercing invalid input to zero.
+ */
+function validateCreatePrice(body: any): string | null {
+  const price = Number(body?.price);
+  if (!Number.isFinite(price) || price < 0) {
+    return 'price must be a finite non-negative number.';
+  }
+
+  if (body?.salePrice !== undefined && body?.salePrice !== null && body?.salePrice !== '') {
+    const salePrice = Number(body.salePrice);
+    if (!Number.isFinite(salePrice) || salePrice < 0) {
+      return 'salePrice must be a finite non-negative number.';
+    }
+  }
+
+  return null;
+}
+
+/**
  * POST /api/products
  * Creates a new product, or routes to update if ID already exists.
  */
@@ -101,6 +120,11 @@ export async function createProduct(req: Request, res: Response) {
   const body = req.body;
   if (!body || !body.name || !body.slug || body.price === undefined) {
     return res.status(400).json({ error: 'Validation failed', message: 'Missing required fields: name, slug, price' });
+  }
+
+  const priceError = validateCreatePrice(body);
+  if (priceError) {
+    return res.status(400).json({ error: 'Validation failed', message: priceError });
   }
 
   const logisticsError = validateLogisticsFields(body);
