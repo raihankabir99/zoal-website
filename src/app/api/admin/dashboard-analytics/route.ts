@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       supabase.from('zoal_products').select('id', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('zoal_categories').select('id, name').order('name', { ascending: true }),
       supabase.from('zoal_orders').select('id', { count: 'exact', head: true }),
-      supabase.from('zoal_orders').select('total_amount').eq('payment_status', 'paid').neq('status', 'Cancelled'),
+      supabase.from('zoal_orders').select('total_amount, status').eq('payment_status', 'paid'),
       supabase
         .from('zoal_orders')
         .select('id, customer_id, status, total_amount, payment_status, created_at')
@@ -48,8 +48,9 @@ export async function GET(req: NextRequest) {
     if (inventoryResult.error) throw inventoryResult.error;
 
     const orders = ordersResult.data || [];
-    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && order.status !== 'Cancelled');
-    const totalRevenue = (allRevenueResult.data || []).reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
+    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && !['cancelled', 'Cancelled'].includes(String(order.status || '')));
+    const allRevenueOrders = (allRevenueResult.data || []).filter((order: any) => !['cancelled', 'Cancelled'].includes(String(order.status || '')));
+    const totalRevenue = allRevenueOrders.reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
     const monthlySales = revenueOrders
       .filter((order: any) => new Date(order.created_at) >= currentMonthStart && new Date(order.created_at) < nextMonthStart)
       .reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
