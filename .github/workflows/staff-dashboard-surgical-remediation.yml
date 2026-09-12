@@ -1,0 +1,78 @@
+name: Staff Dashboard Surgical Remediation
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+    paths:
+      - 'src/components/StaffDashboard.tsx'
+      - '.github/workflows/staff-dashboard-surgical-remediation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: "!contains(github.event.head_commit.message, 'fix(staff): remove fabricated dashboard behavior')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Apply surgical Staff Dashboard remediation
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/components/StaffDashboard.tsx')
+          text = path.read_text(encoding='utf-8')
+          original = text
+
+          old = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');"
+          new = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');\n  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);\n  const [staffPasswordError, setStaffPasswordError] = useState('');\n  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState('');\n  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);"
+          if old not in text:
+              raise SystemExit('ANCHOR_MISSING: duty state')
+          text = text.replace(old, new, 1)
+
+          customer_effect = r'''\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadAuthoritativeCustomers = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) {\n          if (!cancelled) setAuthoritativeCustomers([]);\n          return;\n        }\n        const response = await fetch('/api/admin/customers?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);\n        const payload = await response.json();\n        const customers = Array.isArray(payload?.customers)\n          ? payload.customers\n          : Array.isArray(payload?.data?.customers)\n            ? payload.data.customers\n            : [];\n        if (!cancelled) setAuthoritativeCustomers(customers);\n      } catch (error) {\n        console.error('Failed to load staff customers from authoritative API:', error);\n        if (!cancelled) setAuthoritativeCustomers([]);\n      }\n    };\n    void loadAuthoritativeCustomers();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n'''
+          marker = "\n  // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.\n"
+          if marker not in text:
+              raise SystemExit('ANCHOR_MISSING: order marker')
+          text = text.replace(marker, customer_effect + marker, 1)
+
+          old_customers = '''  // Derived Customers\n  const uniqueCustomers = useMemo(() => {\n    const map = new Map();\n    orders.forEach(o => {\n      if (!map.has(o.phone)) {\n        map.set(o.phone, {\n          name: o.customerName,\n          phone: o.phone,\n          email: null,\n          address: o.address,\n          totalOrders: orders.filter(x => x.phone === o.phone).length,\n          totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),\n          status: 'Active VIP'\n        });\n      }\n    });\n    return Array.from(map.values());\n  }, [orders]);\n'''
+          new_customers = '''  // Customer Directory is API-authoritative; never derive customer records from order rows.\n  const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);\n'''
+          if old_customers not in text:
+              raise SystemExit('ANCHOR_MISSING: fabricated customers block')
+          text = text.replace(old_customers, new_customers, 1)
+
+          # Add a real password-change handler only when the component still lacks one.
+          if 'const handleStaffPasswordChange' not in text:
+              insert_before = "\n\n  return ("
+              handler = r'''\n  const handleStaffPasswordChange = async () => {\n    setStaffPasswordError('');\n    setStaffPasswordSuccess('');\n    if (!currentPassword || !newPassword) {\n      setStaffPasswordError('Current and new password are required.');\n      return;\n    }\n    if (newPassword.length < 8) {\n      setStaffPasswordError('New password must be at least 8 characters.');\n      return;\n    }\n    setStaffPasswordLoading(true);\n    try {\n      const { data: { session } } = await supabaseClient.auth.getSession();\n      const token = session?.access_token;\n      if (!token) throw new Error('Authentication session is unavailable.');\n      const response = await fetch('/api/auth/change-password', {\n        method: 'POST',\n        headers: {\n          Authorization: `Bearer ${token}`,\n          'Content-Type': 'application/json'\n        },\n        body: JSON.stringify({ currentPassword, newPassword })\n      });\n      const payload = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);\n      setCurrentPassword('');\n      setNewPassword('');\n      setStaffPasswordSuccess('Password changed successfully.');\n    } catch (error) {\n      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');\n    } finally {\n      setStaffPasswordLoading(false);\n    }\n  };\n'''
+              if insert_before not in text:
+                  raise SystemExit('ANCHOR_MISSING: return marker')
+              text = text.replace(insert_before, '\n' + handler + insert_before, 1)
+
+          if text == original:
+              raise SystemExit('NO_CHANGES_APPLIED')
+          path.write_text(text, encoding='utf-8')
+          print('Staff Dashboard surgical remediation applied')
+      - name: Verify forbidden legacy behavior is gone
+        run: |
+          ! grep -n "zoal_staff_duty_status" src/components/StaffDashboard.tsx
+          ! grep -n "status: 'Active VIP'" src/components/StaffDashboard.tsx
+          grep -n "authoritativeCustomers" src/components/StaffDashboard.tsx
+          grep -n "handleStaffPasswordChange" src/components/StaffDashboard.tsx
+          grep -n "/api/admin/customers" src/components/StaffDashboard.tsx
+          grep -n "/api/auth/change-password" src/components/StaffDashboard.tsx
+      - name: Commit remediation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/StaffDashboard.tsx
+          git diff --cached --quiet && exit 1
+          git commit -m 'fix(staff): remove fabricated dashboard behavior'
+          git push origin audit/dashboard-sync-fix
