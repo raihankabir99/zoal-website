@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   remediate:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
@@ -219,5 +218,3 @@ jobs:
           git diff --cached --stat
           git commit -m "fix(staff): remove fabricated dashboard behavior"
           git push origin audit/dashboard-sync-fix
-
-# Controlled trigger touch: execute the already-reviewed minimal remediation workflow on the audit branch.
