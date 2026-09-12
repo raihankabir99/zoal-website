@@ -1,7 +1,9 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getServiceSupabaseClient } from '../backend/supabase.ts';
 import { syncSupabaseUser } from '../backend/security.ts';
 import { getMoyasarPayment, refundMoyasarPayment } from '../server/moyasar.ts';
+
+type VercelRequest = any;
+type VercelResponse = any;
 
 function send(res: VercelResponse, status: number, body: any) {
   return res.status(status).json(body);
@@ -38,9 +40,7 @@ function verifyGatewayPayment(payment: any, order: any) {
   const currencyMatches = String(payment?.currency || '').toUpperCase() === String(order?.currency || 'SAR').toUpperCase();
   const metadataOrderId = String(payment?.metadata?.order_id ?? '');
   const orderMatches = !metadataOrderId || metadataOrderId === String(order.id);
-  if (!amountMatches || !currencyMatches || !orderMatches) {
-    throw new Error('Gateway payment does not match the authoritative order amount, currency, or order correlation.');
-  }
+  if (!amountMatches || !currencyMatches || !orderMatches) throw new Error('Gateway payment does not match the authoritative order amount, currency, or order correlation.');
 }
 
 async function recordPayment(req: VercelRequest, res: VercelResponse) {
@@ -52,10 +52,7 @@ async function recordPayment(req: VercelRequest, res: VercelResponse) {
   if (!order) return send(res, 404, { error: 'Order not found.' });
   const payment = await getMoyasarPayment(String(paymentId));
   verifyGatewayPayment(payment, order);
-  const { error } = await supabase.from('zoal_payment_transactions')
-    .update({ gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() })
-    .eq('order_id', order.id)
-    .in('payment_status', ['initiated', 'pending', 'unpaid']);
+  const { error } = await supabase.from('zoal_payment_transactions').update({ gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() }).eq('order_id', order.id).in('payment_status', ['initiated', 'pending', 'unpaid']);
   if (error) return send(res, 500, { error: error.message });
   return send(res, 200, { recorded: true, paymentId: payment.id, status: payment.status });
 }
@@ -69,29 +66,19 @@ async function verifyPayment(req: VercelRequest, res: VercelResponse) {
   if (!order) return send(res, 404, { error: 'Order not found.' });
   const payment = await getMoyasarPayment(String(paymentId));
   verifyGatewayPayment(payment, order);
-
   if (order.payment_status === 'paid') return send(res, 200, { success: true, verified: true, orderId: order.id, paymentStatus: 'paid', amount: Number(order.total_amount) });
-
   if (['paid', 'captured'].includes(String(payment.status))) {
-    const { error: txError } = await supabase.from('zoal_payment_transactions')
-      .update({ payment_status: 'paid', gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() })
-      .eq('order_id', order.id)
-      .in('payment_status', ['initiated', 'pending', 'unpaid']);
+    const { error: txError } = await supabase.from('zoal_payment_transactions').update({ payment_status: 'paid', gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() }).eq('order_id', order.id).in('payment_status', ['initiated', 'pending', 'unpaid']);
     if (txError) return send(res, 500, { error: txError.message });
-    const { error: orderError } = await supabase.from('zoal_orders')
-      .update({ payment_status: 'paid', status: 'processing', updated_at: new Date().toISOString() })
-      .eq('id', order.id)
-      .neq('payment_status', 'paid');
+    const { error: orderError } = await supabase.from('zoal_orders').update({ payment_status: 'paid', status: 'processing', updated_at: new Date().toISOString() }).eq('id', order.id).neq('payment_status', 'paid');
     if (orderError) return send(res, 500, { error: orderError.message });
     return send(res, 200, { success: true, verified: true, orderId: order.id, paymentStatus: 'paid', amount: Number(order.total_amount), gatewayPaymentId: payment.id });
   }
-
   if (String(payment.status) === 'failed') {
     await supabase.from('zoal_payment_transactions').update({ payment_status: 'failed', gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() }).eq('order_id', order.id).in('payment_status', ['initiated', 'pending', 'unpaid']);
     await supabase.from('zoal_orders').update({ payment_status: 'failed', status: 'failed', updated_at: new Date().toISOString() }).eq('id', order.id);
     return send(res, 200, { success: false, verified: true, orderId: order.id, paymentStatus: 'failed', message: 'Payment authorization failed.' });
   }
-
   return send(res, 202, { success: false, verified: true, orderId: order.id, paymentStatus: payment.status, message: 'Payment is not final yet.' });
 }
 
@@ -107,18 +94,15 @@ async function refundPayment(req: VercelRequest, res: VercelResponse) {
   const { data: tx, error: txLookupError } = await supabase.from('zoal_payment_transactions').select('*').eq('order_id', order.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (txLookupError) return send(res, 500, { error: txLookupError.message });
   if (!tx?.gateway_payment_id) return send(res, 409, { error: 'No real Moyasar payment is linked to this order.' });
-
   const original = Number(tx.amount);
   const alreadyRefunded = Number(tx.refund_amount || 0);
   const requested = amount == null ? original - alreadyRefunded : Number(amount);
   if (!Number.isFinite(requested) || requested <= 0 || requested > original - alreadyRefunded) return send(res, 400, { error: 'Invalid refund amount.' });
-
   const gateway = await getMoyasarPayment(String(tx.gateway_payment_id));
   if (!['paid', 'captured'].includes(String(gateway?.status))) return send(res, 409, { error: `Payment is not refundable in status ${gateway?.status}.` });
   const refund = await refundMoyasarPayment(String(tx.gateway_payment_id), Math.round(requested * 100));
   const totalRefunded = alreadyRefunded + requested;
   const newStatus = totalRefunded >= original ? 'refunded' : 'partially_refunded';
-
   const { error: updateTxError } = await supabase.from('zoal_payment_transactions').update({ payment_status: newStatus, refund_amount: totalRefunded, refund_reason: reason || null, gateway_response: refund, updated_at: new Date().toISOString() }).eq('id', tx.id);
   if (updateTxError) return send(res, 500, { error: updateTxError.message });
   const { error: updateOrderError } = await supabase.from('zoal_orders').update({ payment_status: newStatus, status: newStatus, updated_at: new Date().toISOString() }).eq('id', order.id);
@@ -136,11 +120,9 @@ async function webhook(req: VercelRequest, res: VercelResponse) {
   const eventId = String(payload.id || '');
   const paymentId = String(payload.data?.id || '');
   if (!eventId || !paymentId) return send(res, 400, { error: 'Invalid webhook payload.' });
-
   const { error: logError } = await supabase.from('zoal_payment_webhook_logs').insert({ gateway_event_id: eventId, event_type: payload.type || null, payload, processed_status: 'pending' });
   if (logError && !String(logError.message).toLowerCase().includes('duplicate')) return send(res, 500, { error: logError.message });
   if (logError && String(logError.message).toLowerCase().includes('duplicate')) return send(res, 200, { received: true, duplicate: true });
-
   const payment = await getMoyasarPayment(paymentId);
   const { data: tx } = await supabase.from('zoal_payment_transactions').select('*').eq('gateway_payment_id', paymentId).maybeSingle();
   if (tx) {
