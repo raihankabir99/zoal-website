@@ -160,7 +160,11 @@ export default function StaffDashboard({
   const [authoritativeOrders, setAuthoritativeOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
 
-  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');
+  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');
+  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);
+  const [staffPasswordError, setStaffPasswordError] = useState('');
+  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState('');
+  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);
 
   // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.
   const [staffLogs, setStaffLogs] = useState<any[]>([]);
@@ -229,7 +233,7 @@ export default function StaffDashboard({
     void loadAuthoritativeOrders();
     return () => { cancelled = true; };
   }, [currentUser?.id]);
-
+\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadAuthoritativeCustomers = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) {\n          if (!cancelled) setAuthoritativeCustomers([]);\n          return;\n        }\n        const response = await fetch('/api/admin/customers?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);\n        const payload = await response.json();\n        const customers = Array.isArray(payload?.customers)\n          ? payload.customers\n          : Array.isArray(payload?.data?.customers)\n            ? payload.data.customers\n            : [];\n        if (!cancelled) setAuthoritativeCustomers(customers);\n      } catch (error) {\n        console.error('Failed to load staff customers from authoritative API:', error);\n        if (!cancelled) setAuthoritativeCustomers([]);\n      }\n    };\n    void loadAuthoritativeCustomers();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n
   // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.
   const orders = authoritativeOrders;
 
@@ -258,25 +262,10 @@ export default function StaffDashboard({
 
 
 
-  // Derived Customers
-  const uniqueCustomers = useMemo(() => {
-    const map = new Map();
-    orders.forEach(o => {
-      if (!map.has(o.phone)) {
-        map.set(o.phone, {
-          name: o.customerName,
-          phone: o.phone,
-          email: null,
-          address: o.address,
-          totalOrders: orders.filter(x => x.phone === o.phone).length,
-          totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),
-          status: 'Active VIP'
-        });
-      }
-    });
-    return Array.from(map.values());
-  }, [orders]);
+  // Customer Directory is API-authoritative; never derive customer records from order rows.
+  const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);
 
+\n  const handleStaffPasswordChange = async () => {\n    setStaffPasswordError('');\n    setStaffPasswordSuccess('');\n    if (!currentPassword || !newPassword) {\n      setStaffPasswordError('Current and new password are required.');\n      return;\n    }\n    if (newPassword.length < 8) {\n      setStaffPasswordError('New password must be at least 8 characters.');\n      return;\n    }\n    setStaffPasswordLoading(true);\n    try {\n      const { data: { session } } = await supabaseClient.auth.getSession();\n      const token = session?.access_token;\n      if (!token) throw new Error('Authentication session is unavailable.');\n      const response = await fetch('/api/auth/change-password', {\n        method: 'POST',\n        headers: {\n          Authorization: `Bearer ${token}`,\n          'Content-Type': 'application/json'\n        },\n        body: JSON.stringify({ currentPassword, newPassword })\n      });\n      const payload = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);\n      setCurrentPassword('');\n      setNewPassword('');\n      setStaffPasswordSuccess('Password changed successfully.');\n    } catch (error) {\n      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');\n    } finally {\n      setStaffPasswordLoading(false);\n    }\n  };\n
 
   return (
     <div className="space-y-1 lg:space-y-6 text-left animate-fade-in">
