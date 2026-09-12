@@ -1,0 +1,58 @@
+name: Staff Dashboard Restore Build Repair
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+  workflow_dispatch:
+
+jobs:
+  repair:
+    if: "!contains(github.event.head_commit.message, 'RESTORE_STAFF_DASHBOARD')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Restore last known StaffDashboard source and repair JSX
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout 7f0a3f7b8abd95e56f9fd9c17dc63b22919d9160 -- src/components/StaffDashboard.tsx
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/StaffDashboard.tsx')
+          s = p.read_text(encoding='utf-8')
+          lines = s.splitlines(True)
+          out = []
+          for line in lines:
+              stripped = line.strip()
+              if stripped == "') })}":
+                  continue
+              out.append(line)
+          s = ''.join(out)
+          p.write_text(s, encoding='utf-8')
+          PY
+          if grep -nF "') })}" src/components/StaffDashboard.tsx; then
+            echo 'ERROR: stray JSX corruption remains'
+            exit 1
+          fi
+          grep -n "nonReturnableEn.join" src/components/StaffDashboard.tsx
+          grep -n "nonReturnableAr.join" src/components/StaffDashboard.tsx
+          grep -n "exchangeOptionsEn.join" src/components/StaffDashboard.tsx
+          grep -n "exchangeOptionsAr.join" src/components/StaffDashboard.tsx
+
+      - name: Commit restored source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/StaffDashboard.tsx
+          git diff --cached --check
+          git commit -m 'fix(staff): restore dashboard source and repair JSX RESTORE_STAFF_DASHBOARD'
+          git push origin HEAD:audit/dashboard-sync-fix
