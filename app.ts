@@ -3705,25 +3705,44 @@ app.get('/api/branding', async (req, res) => {
     website: 'https://alzoal.sa',
     theme: 'dark'
   };
-  try {
-    const supabase = getServiceSupabaseClient() || getSupabaseClient();
-    if (!supabase) return res.json(defaults);
 
-    const { data, error } = await supabase
-      .from('branding_settings')
-      .select('*')
-      .eq('id', 1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('❌ Error fetching branding settings via Supabase API:', error.message);
-      return res.json(defaults);
+  const connectionString = process.env.DATABASE_URL;
+  if (connectionString) {
+    let dbClient: any = null;
+    try {
+      dbClient = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+      await dbClient.connect();
+      const result = await dbClient.query('SELECT * FROM branding_settings WHERE id = 1 LIMIT 1');
+      if (result.rows.length > 0) {
+        return res.json(mapBrandingToSafeClientSettings(result.rows[0]));
+      }
+    } catch (dbErr: any) {
+      // Direct PG connection or query fallback
+    } finally {
+      if (dbClient) {
+        try { await dbClient.end(); } catch (e) {}
+      }
     }
-    return res.json(data ? mapBrandingToSafeClientSettings(data) : defaults);
-  } catch (err: any) {
-    console.error('❌ Branding API unavailable:', err.message || err);
-    return res.json(defaults);
   }
+
+  try {
+    const supabase = getServiceSupabaseClient();
+    if (supabase && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { data, error } = await supabase
+        .from('branding_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (!error && data) {
+        return res.json(mapBrandingToSafeClientSettings(data));
+      }
+    }
+  } catch (err: any) {
+    // Non-blocking fallback
+  }
+
+  return res.json(defaults);
 });
 
 app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (req: any, res) => {

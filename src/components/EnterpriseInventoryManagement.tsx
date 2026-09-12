@@ -227,7 +227,7 @@ export default function EnterpriseInventoryManagement({
   const [scannerAlert, setScannerAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Transaction history is rendered from the authoritative activity panel; no client seed/localStorage fallback.
-  const [transactions] = useState<InventoryTransaction[]>([]);
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
 
   // Handle systemic delay for professional high-end loading skeletons
   useEffect(() => {
@@ -1885,7 +1885,7 @@ export default function EnterpriseInventoryManagement({
           )}
 
           {/* ======================= TAB IV: AUDIT MOVE TRAIL ======================= */}
-          {activeTab === 'logs' && (
+          {(activeTab as string) === 'logs' && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
