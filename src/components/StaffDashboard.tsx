@@ -159,7 +159,6 @@ export default function StaffDashboard({
 
   const [authoritativeOrders, setAuthoritativeOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
-  const [ordersError, setOrdersError] = useState('');
 
   const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');
   const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);
@@ -182,11 +181,10 @@ export default function StaffDashboard({
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store'
         });
-        if (!response.ok) throw new Error(`Staff logs request failed (${response.status})`);
+        if (!response.ok) return;
         const payload = await response.json();
         if (cancelled) return;
-        const logRows = Array.isArray(payload?.logs) ? payload.logs : Array.isArray(payload?.data?.logs) ? payload.data.logs : [];
-        setStaffLogs(logRows);
+        setStaffLogs(Array.isArray(payload?.logs) ? payload.logs : []);
         setStaffMemberCount(typeof payload?.staffMemberCount === 'number' ? payload.staffMemberCount : null);
       } catch {
         if (!cancelled) {
@@ -203,7 +201,6 @@ export default function StaffDashboard({
     let cancelled = false;
     const loadAuthoritativeOrders = async () => {
       setOrdersLoading(true);
-      setOrdersError('');
       try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         const token = session?.access_token;
@@ -216,10 +213,7 @@ export default function StaffDashboard({
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store'
         });
-        if (!response.ok) {
-          const errorPayload = await response.json().catch(() => ({}));
-          throw new Error(errorPayload?.error || errorPayload?.message || `Orders request failed (${response.status})`);
-        }
+        if (!response.ok) throw new Error(`Orders request failed (${response.status})`);
 
         const payload = await response.json();
         const rows = Array.isArray(payload?.data?.orders)
@@ -230,10 +224,7 @@ export default function StaffDashboard({
         if (!cancelled) setAuthoritativeOrders(rows.map(mapApiOrder));
       } catch (error) {
         console.error('Failed to load staff orders from authoritative API:', error);
-        if (!cancelled) {
-          setAuthoritativeOrders([]);
-          setOrdersError(error instanceof Error ? error.message : 'Orders could not be loaded.');
-        }
+        if (!cancelled) setAuthoritativeOrders([]);
       } finally {
         if (!cancelled) setOrdersLoading(false);
       }
@@ -289,9 +280,8 @@ export default function StaffDashboard({
       });
       if (!response.ok) throw new Error(`Duty status update failed (${response.status})`);
       const payload = await response.json();
-      const resolvedStatus = payload?.status || payload?.dutyStatus || payload?.data?.status || payload?.data?.dutyStatus;
-      if (resolvedStatus) {
-        setStaffDutyStatus(resolvedStatus);
+      if (payload?.status) {
+        setStaffDutyStatus(payload.status);
         addStaffLog('Duty Status Changed', `Set status to ${payload.status.toUpperCase()}`);
       }
     } catch (error) {
@@ -309,8 +299,7 @@ export default function StaffDashboard({
         const response = await fetch('/api/staff/duty-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
         if (!response.ok) return;
         const payload = await response.json();
-        const resolvedStatus = payload?.status || payload?.dutyStatus || payload?.data?.status || payload?.data?.dutyStatus;
-        if (!cancelled && ['active', 'break', 'offline'].includes(resolvedStatus)) setStaffDutyStatus(resolvedStatus);
+        if (!cancelled && ['active', 'break', 'offline'].includes(payload?.status)) setStaffDutyStatus(payload.status);
       } catch (error) {
         console.error('Failed to load authoritative staff duty status:', error);
       }
@@ -335,8 +324,7 @@ export default function StaffDashboard({
         });
         if (!response.ok) return;
         const payload = await response.json();
-        const createdLog = payload?.log || payload?.data?.log;
-        if (createdLog) setStaffLogs((prev) => [createdLog, ...prev]);
+        if (payload?.log) setStaffLogs((prev) => [payload.log, ...prev]);
       } catch {
         // Do not create a local or synthetic audit record when the authoritative API is unavailable.
       }
@@ -1066,18 +1054,6 @@ export default function StaffDashboard({
                   {orders.length} orders total
                 </span>
               </div>
-
-              {ordersLoading && (
-                <div className="mb-3 flex items-center gap-2 border border-white/10 bg-zinc-950 p-3 text-[10px] text-zinc-400" role="status">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading authoritative orders…
-                </div>
-              )}
-              {ordersError && !ordersLoading && (
-                <div className="mb-3 flex items-center justify-between gap-3 border border-rose-500/20 bg-rose-950/20 p-3 text-[10px] text-rose-300" role="alert">
-                  <span><AlertCircle className="inline w-3.5 h-3.5 mr-1" />{ordersError}</span>
-                  <button type="button" onClick={() => window.location.reload()} className="px-2 py-1 border border-rose-400/30 hover:border-rose-300 text-rose-200 uppercase tracking-wider">Retry</button>
-                </div>
-              )}
 
               {/* Table View */}
               <div className="bg-[#060606] border border-white/5 rounded-sm p-5">
@@ -2217,7 +2193,7 @@ Assigned Master Tailor successfully notified.`);
                       <textarea
                         rows={4}
                         value={returnsConfig.nonReturnableEn.join('\n')}
-                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('
+                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('\n') })}
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans"
                       />
                     </div>
@@ -2230,7 +2206,7 @@ Assigned Master Tailor successfully notified.`);
                       <textarea
                         rows={4}
                         value={returnsConfig.nonReturnableAr.join('\n')}
-                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('
+                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('\n') })}
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans text-right"
                         dir="rtl"
                       />
@@ -2244,14 +2220,14 @@ Assigned Master Tailor successfully notified.`);
                         <textarea
                           rows={2}
                           value={returnsConfig.exchangeOptionsEn.join('\n')}
-                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('
+                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('\n') })}
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans"
                           placeholder="EN options"
                         />
                         <textarea
                           rows={2}
                           value={returnsConfig.exchangeOptionsAr.join('\n')}
-                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('
+                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('\n') })}
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans text-right"
                           dir="rtl"
                           placeholder="AR options"
