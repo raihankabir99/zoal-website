@@ -1726,7 +1726,7 @@ export default function Dashboards({
                         </div>
 
                         <form
-                          onSubmit={(e) => {
+                          onSubmit={async (e) => {
                             e.preventDefault();
                             const pName = (e.currentTarget.elements.namedItem('reviewProduct') as HTMLSelectElement).value;
                             const ratingVal = parseInt((e.currentTarget.elements.namedItem('reviewRating') as HTMLSelectElement).value, 10);
