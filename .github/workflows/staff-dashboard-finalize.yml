@@ -1,0 +1,69 @@
+name: Staff Dashboard Finalize
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+    paths:
+      - 'src/components/StaffDashboard.tsx'
+      - '.github/workflows/staff-dashboard-finalize.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: "!contains(github.event.head_commit.message, 'fix(staff): remove fabricated dashboard behavior')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Finalize Staff Dashboard UI and static checks
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/components/StaffDashboard.tsx')
+          text = path.read_text(encoding='utf-8').replace('\\n', '\n')
+
+          if 'staffPasswordError &&' not in text and 'staffPasswordSuccess &&' not in text:
+              marker = "\n  const handleStaffPasswordChange = async () => {"
+              if marker not in text:
+                  raise SystemExit('ANCHOR_MISSING: password handler')
+              feedback = """\n  const staffPasswordFeedback = (\n    <>\n      {staffPasswordError && <div className=\"text-red-400 text-[10px] mt-2\" role=\"alert\">{staffPasswordError}</div>}\n      {staffPasswordSuccess && <div className=\"text-emerald-400 text-[10px] mt-2\" role=\"status\">{staffPasswordSuccess}</div>}\n    </>\n  );\n"""
+              text = text.replace(marker, feedback + marker, 1)
+
+          # Render feedback immediately before the password-submit button when the legacy button remains.
+          button_anchor = 'className="w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none"'
+          if 'staffPasswordFeedback' not in text:
+              raise SystemExit('ANCHOR_MISSING: password feedback declaration')
+          if text.count('staffPasswordFeedback') == 1:
+              idx = text.find(button_anchor)
+              if idx == -1:
+                  raise SystemExit('ANCHOR_MISSING: password button')
+              line_start = text.rfind('\n', 0, idx) + 1
+              text = text[:line_start] + '                      {staffPasswordFeedback}\n' + text[line_start:]
+
+          path.write_text(text, encoding='utf-8')
+      - name: Verify
+        run: |
+          ! grep -n "zoal_staff_duty_status" src/components/StaffDashboard.tsx
+          ! grep -n "status: 'Active VIP'" src/components/StaffDashboard.tsx
+          ! grep -n "alert('Password changed successfully!')" src/components/StaffDashboard.tsx
+          grep -n "authoritativeCustomers" src/components/StaffDashboard.tsx
+          grep -n "handleStaffPasswordChange" src/components/StaffDashboard.tsx
+          grep -n "staffPasswordError" src/components/StaffDashboard.tsx
+          grep -n "staffPasswordSuccess" src/components/StaffDashboard.tsx
+          grep -n "/api/staff/duty-status" src/components/StaffDashboard.tsx app.ts
+          grep -n "/api/staff/logs" src/components/StaffDashboard.tsx app.ts
+          test -f server/staff.ts
+          grep -n "crypto" server/staff.ts
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/StaffDashboard.tsx .github/workflows/staff-dashboard-finalize.yml
+          git diff --cached --quiet && exit 1
+          git commit -m 'fix(staff): remove fabricated dashboard behavior'
+          git push origin audit/dashboard-sync-fix
