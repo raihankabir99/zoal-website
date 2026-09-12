@@ -43,6 +43,10 @@
       "dest": "/api/payments.ts"
     },
     {
+      "src": "/api/customer-invoices",
+      "dest": "/api/customer-invoices.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
