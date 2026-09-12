@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   repair:
-    if: "!contains(github.event.head_commit.message, 'fix(staff): repair all returns textarea literals')"
+    if: "!contains(github.event.head_commit.message, 'SKIP_STAFF_REPAIR')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
