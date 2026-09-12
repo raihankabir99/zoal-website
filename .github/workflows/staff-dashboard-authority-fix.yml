@@ -1,0 +1,81 @@
+name: Staff Dashboard Authority Fix
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+    paths: ['.github/staff-dashboard-authority-trigger.txt']
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Apply exact targeted authority patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          staff = Path('src/components/StaffDashboard.tsx')
+          text = staff.read_text()
+
+          old = """  currentUser,\n  orders,\n  setOrders,"""
+          new = """  currentUser,\n  orders: _legacyOrders,\n  setOrders,"""
+          if old not in text:
+              raise SystemExit('StaffDashboard destructuring anchor not found; aborting.')
+          text = text.replace(old, new, 1)
+
+          old = """  const [staffCustomerSearch, setStaffCustomerSearch] = useState('');\n\n  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>(() => {\n    return (localStorage.getItem('zoal_staff_duty_status') as any) || 'active';\n  });"""
+          new = """  const [staffCustomerSearch, setStaffCustomerSearch] = useState('');\n\n  const [authoritativeOrders, setAuthoritativeOrders] = useState<Order[]>([]);\n  const [ordersLoading, setOrdersLoading] = useState(true);\n\n  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');"""
+          if old not in text:
+              raise SystemExit('StaffDashboard order/duty anchor not found; aborting.')
+          text = text.replace(old, new, 1)
+
+          anchor = """  const addStaffLog = (action: string, target: string) => {"""
+          insert = """  React.useEffect(() => {\n    let cancelled = false;\n    const loadAuthoritativeOrders = async () => {\n      setOrdersLoading(true);\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) {\n          if (!cancelled) setAuthoritativeOrders([]);\n          return;\n        }\n\n        const response = await fetch('/api/orders?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) throw new Error(`Orders request failed (${response.status})`);\n\n        const payload = await response.json();\n        const rows = Array.isArray(payload?.data?.orders)\n          ? payload.data.orders\n          : Array.isArray(payload?.orders)\n            ? payload.orders\n            : [];\n        if (!cancelled) setAuthoritativeOrders(rows.map(mapApiOrder));\n      } catch (error) {\n        console.error('Failed to load staff orders from authoritative API:', error);\n        if (!cancelled) setAuthoritativeOrders([]);\n      } finally {\n        if (!cancelled) setOrdersLoading(false);\n      }\n    };\n\n    void loadAuthoritativeOrders();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n\n  // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.\n  const orders = authoritativeOrders;\n\n"""
+          if anchor not in text:
+              raise SystemExit('StaffDashboard effect anchor not found; aborting.')
+          text = text.replace(anchor, insert + anchor, 1)
+
+          marker = """interface StaffDashboardProps {"""
+          helper = """const STATUS_MAP: Record<string, Order['status']> = {\n  pending: 'Pending',\n  confirmed: 'Confirmed',\n  processing: 'Processing',\n  preparing: 'Preparing',\n  packed: 'Packed',\n  ready_for_shipping: 'Ready for Shipping',\n  shipped: 'Shipped',\n  out_for_delivery: 'Out for Delivery',\n  delivered: 'Delivered',\n  completed: 'Completed',\n  cancelled: 'Cancelled',\n  returned: 'Returned',\n  refund_requested: 'Refund Requested',\n  refund_approved: 'Refund Approved',\n  refund_completed: 'Refund Completed',\n};\n\nfunction mapApiOrder(row: any): Order {\n  return {\n    id: String(row.id),\n    date: row.created_at || '',\n    items: Array.isArray(row.items) ? row.items.map((item: any) => ({\n      productId: String(item.product_id || ''),\n      name: item.name || '',\n      price: Number(item.unit_price || 0),\n      quantity: Number(item.quantity || 0),\n      image: item.image || undefined,\n    })) : [],\n    subtotal: Number(row.subtotal || 0),\n    shipping: Number(row.shipping_cost || 0),\n    discount: Number(row.discount_amount || 0),\n    total: Number(row.total_amount || 0),\n    status: STATUS_MAP[String(row.status || '').toLowerCase()] || 'Pending',\n    customerName: row.customer_name || '',\n    email: row.email || '',\n    phone: row.phone || '',\n    address: row.shipping_address || row.address || '',\n    paymentMethod: row.payment_method || '—',\n    trackingNumber: row.tracking_number || '',\n    assignedStaff: row.assigned_staff_name || row.assigned_staff_id || undefined,\n    adminNotes: row.admin_notes || undefined,\n    staffNotes: row.staff_notes || undefined,\n    customerNotes: row.customer_notes || undefined,\n    paymentStatus: row.payment_status ? String(row.payment_status).replace(/^./, (c: string) => c.toUpperCase()) as Order['paymentStatus'] : undefined,\n  };\n}\n\n"""
+          if marker not in text:
+              raise SystemExit('StaffDashboard interface marker not found; aborting.')
+          text = text.replace(marker, helper + marker, 1)
+
+          staff.write_text(text)
+
+          route = Path('src/app/api/orders/route.ts')
+          r = route.read_text()
+          old = """    query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);\n    const { data: orders, error, count } = await query;\n    if (error) return apiError(error.message, 500);\n    return apiResponse({ orders, pagination: { page, limit, totalItems: count || 0, totalPages: Math.ceil((count || 0) / limit) } });"""
+          new = """    query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);\n    const { data: orders, error, count } = await query;\n    if (error) return apiError(error.message, 500);\n\n    let enrichedOrders = orders || [];\n    if (user.role !== 'customer' && enrichedOrders.length > 0) {\n      const orderIds = enrichedOrders.map((order: any) => order.id);\n      const { data: items, error: itemsError } = await supabase\n        .from('zoal_order_items')\n        .select('order_id, product_id, quantity, unit_price, total_price')\n        .in('order_id', orderIds);\n      if (itemsError) return apiError(itemsError.message, 500);\n\n      const itemsByOrder = new Map<string, any[]>();\n      for (const item of items || []) {\n        const list = itemsByOrder.get(String(item.order_id)) || [];\n        list.push(item);\n        itemsByOrder.set(String(item.order_id), list);\n      }\n      enrichedOrders = enrichedOrders.map((order: any) => ({\n        ...order,\n        items: itemsByOrder.get(String(order.id)) || [],\n      }));\n    }\n\n    return apiResponse({ orders: enrichedOrders, pagination: { page, limit, totalItems: count || 0, totalPages: Math.ceil((count || 0) / limit) } });"""
+          if old not in r:
+              raise SystemExit('Orders route anchor not found; aborting.')
+          route.write_text(r.replace(old, new, 1))
+          PY
+
+      - name: Verify exact diff and build
+        run: |
+          git diff --check
+          grep -n "const orders = authoritativeOrders" src/components/StaffDashboard.tsx
+          grep -n "zoal_order_items" src/app/api/orders/route.ts
+          npm ci
+          npm run build
+
+      - name: Commit and clean up one-time workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/staff-dashboard-authority-trigger.txt
+          rm -f .github/workflows/staff-dashboard-authority-fix.yml
+          git add src/components/StaffDashboard.tsx src/app/api/orders/route.ts .github/staff-dashboard-authority-trigger.txt .github/workflows/staff-dashboard-authority-fix.yml
+          git commit -m "fix(staff-dashboard): bind orders to authoritative API"
+          git push origin audit/dashboard-sync-fix
