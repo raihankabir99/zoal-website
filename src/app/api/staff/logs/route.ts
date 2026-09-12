@@ -12,12 +12,16 @@ export async function GET(req: NextRequest) {
     const auth = await verifyAuthAndRole(req, ['staff', 'admin', 'owner', 'manager']);
     if (auth.error) return auth.error;
 
+    let logsQuery = supabase
+      .from('zoal_activity_logs')
+      .select('id,user_id,action,timestamp,resource_type,resource_id,result,severity,source')
+      .eq('resource_type', 'staff')
+      .order('timestamp', { ascending: false })
+      .limit(50);
+    if (auth.user.role === 'staff') logsQuery = logsQuery.eq('user_id', auth.user.id);
+
     const [{ data: logs, error: logsError }, { count: staffMemberCount, error: staffError }] = await Promise.all([
-      supabase
-        .from('zoal_activity_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(50),
+      logsQuery,
       supabase
         .from('zoal_users')
         .select('id', { count: 'exact', head: true })
