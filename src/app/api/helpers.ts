@@ -64,7 +64,7 @@ export function apiError(message: string, status = 500, details?: any) {
  */
 export async function verifyAuthAndRole(
   req: NextRequest,
-  allowedRoles: ('customer' | 'staff' | 'admin')[]
+  allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]
 ): Promise<{ user: any; error?: NextResponse }> {
   const authHeader = req.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
