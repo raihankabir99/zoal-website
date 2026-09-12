@@ -2216,8 +2216,7 @@ Assigned Master Tailor successfully notified.`);
                       </h4>
                       <textarea
                         rows={4}
-                        value={returnsConfig.nonReturnableEn.join('
-')}
+                        value={returnsConfig.nonReturnableEn.join('\n')}
                         onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans"
                       />
@@ -2230,8 +2229,7 @@ Assigned Master Tailor successfully notified.`);
                       </h4>
                       <textarea
                         rows={4}
-                        value={returnsConfig.nonReturnableAr.join('
-')}
+                        value={returnsConfig.nonReturnableAr.join('\n')}
                         onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans text-right"
                         dir="rtl"
@@ -2245,16 +2243,14 @@ Assigned Master Tailor successfully notified.`);
                       <div className="grid grid-cols-2 gap-3">
                         <textarea
                           rows={2}
-                          value={returnsConfig.exchangeOptionsEn.join('
-')}
+                          value={returnsConfig.exchangeOptionsEn.join('\n')}
                           onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans"
                           placeholder="EN options"
                         />
                         <textarea
                           rows={2}
-                          value={returnsConfig.exchangeOptionsAr.join('
-')}
+                          value={returnsConfig.exchangeOptionsAr.join('\n')}
                           onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans text-right"
                           dir="rtl"
