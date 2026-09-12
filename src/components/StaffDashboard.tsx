@@ -337,6 +337,13 @@ export default function StaffDashboard({
   const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);
 
 
+  const staffPasswordFeedback = (
+    <>
+      {staffPasswordError && <div className="text-red-400 text-[10px] mt-2" role="alert">{staffPasswordError}</div>}
+      {staffPasswordSuccess && <div className="text-emerald-400 text-[10px] mt-2" role="status">{staffPasswordSuccess}</div>}
+    </>
+  );
+
   const handleStaffPasswordChange = async () => {
     setStaffPasswordError('');
     setStaffPasswordSuccess('');
@@ -1603,6 +1610,7 @@ Assigned Master Tailor successfully notified.`);
                     <button
                       onClick={() => { void handleStaffPasswordChange(); }}
                       disabled={staffPasswordLoading}
+                      {staffPasswordFeedback}
                       className="w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none"
                     >
                       Update Password
