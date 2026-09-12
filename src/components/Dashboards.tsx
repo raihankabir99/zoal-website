@@ -29,6 +29,7 @@ import { AddressSection } from './AddressSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import SupabaseStoragePanel from './SupabaseStoragePanel';
 import StaffDashboard from './StaffDashboard';
+import CustomerSupport from './CustomerSupport';
 import EnterpriseOrderManagement from './EnterpriseOrderManagement';
 
 import { useNotificationEngine } from '../lib/notificationStore';
@@ -170,6 +171,7 @@ export default function Dashboards({
         { id: 'wishlist', name: isAr ? 'كتالوج المفضلة' : 'Wishlist Catalog', icon: Bookmark },
         { id: 'reviews', name: isAr ? 'تقييمات المنتجات' : 'Product Reviews', icon: Star },
         { id: 'addresses', name: isAr ? 'العناوين المحفوظة' : 'Saved Addresses', icon: MapPin },
+        { id: 'support', name: isAr ? 'الدعم' : 'Customer Support', icon: MessageCircle },
       ]
     }
   ], [isAr]);
@@ -513,6 +515,7 @@ export default function Dashboards({
                        customerSubTab === 'profile' ? (isAr ? 'الملف الشخصي' : 'Profile') :
                        customerSubTab === 'reviews' ? (isAr ? 'تقييمات المنتجات' : 'Product Reviews') :
                        customerSubTab === 'invoices' ? (isAr ? 'الفواتير والإيصالات' : 'Invoices & Receipts') :
+                       customerSubTab === 'support' ? (isAr ? 'الدعم' : 'Customer Support') :
                        customerSubTab === 'settings' ? (isAr ? 'إعدادات الحساب' : 'Account Settings') : (isAr ? 'الملخص' : 'Overview')}
                     </span>
                   </div>
@@ -1655,6 +1658,13 @@ export default function Dashboards({
                           </div>
                         </div>
                       )}
+                    </motion.div>
+                  )}
+
+                  {/* TAB 9: CUSTOMER SUPPORT */}
+                  {customerSubTab === 'support' && (
+                    <motion.div key="support-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
+                      <CustomerSupport currentUser={currentUser} isAr={isAr} />
                     </motion.div>
                   )}
 
