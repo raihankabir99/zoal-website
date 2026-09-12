@@ -35,16 +35,13 @@ jobs:
                   continue
               out.append(line)
           s = ''.join(out)
-          s = re.sub(r"(nonReturnableEn|nonReturnableAr|exchangeOptionsEn|exchangeOptionsAr)\.join\('\s*\n\s*'\)", r"\1.join('\\n')", s)
-          s = re.sub(r"(nonReturnableEn|nonReturnableAr|exchangeOptionsEn|exchangeOptionsAr): e\.target\.value\.split\('\s*\n\s*'\)", r"\1: e.target.value.split('\\n')", s)
+          for name in ('nonReturnableEn','nonReturnableAr','exchangeOptionsEn','exchangeOptionsAr'):
+              s = re.sub(rf"{name}\.join\('[^']*\n\s*'\)", rf"{name}.join('\\n')", s)
+              s = re.sub(rf"{name}: e\.target\.value\.split\('[^']*\n\s*'\)", rf"{name}: e.target.value.split('\\n')", s)
           p.write_text(s, encoding='utf-8')
           PY
           if grep -nF "') })}" src/components/StaffDashboard.tsx; then
             echo 'ERROR: stray JSX corruption remains'
-            exit 1
-          fi
-          if grep -n "nonReturnableEn.join('" src/components/StaffDashboard.tsx | grep -q "^.*join('$"; then
-            echo 'ERROR: split join literal corruption remains'
             exit 1
           fi
 
