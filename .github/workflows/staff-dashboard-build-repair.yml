@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   repair:
-    if: "!contains(github.event.head_commit.message, 'fix(staff): normalize returns textarea literals safely')"
+    if: "!contains(github.event.head_commit.message, 'fix(staff): repair all returns textarea literals')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,29 +35,38 @@ jobs:
           lines = s.splitlines()
           out = []
           i = 0
+          replacements = {
+              'value={returnsConfig.nonReturnableEn.join(': "                        value={returnsConfig.nonReturnableEn.join('\\n')}",
+              'value={returnsConfig.nonReturnableAr.join(': "                        value={returnsConfig.nonReturnableAr.join('\\n')}",
+              'value={returnsConfig.exchangeOptionsEn.join(': "                          value={returnsConfig.exchangeOptionsEn.join('\\n')}",
+              'value={returnsConfig.exchangeOptionsAr.join(': "                          value={returnsConfig.exchangeOptionsAr.join('\\n')}",
+          }
+          split_replacements = {
+              'nonReturnableEn: e.target.value.split(': "                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('\\n') })}",
+              'nonReturnableAr: e.target.value.split(': "                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('\\n') })}",
+              'exchangeOptionsEn: e.target.value.split(': "                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('\\n') })}",
+              'exchangeOptionsAr: e.target.value.split(': "                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('\\n') })}",
+          }
           while i < len(lines):
               line = lines[i]
-              if 'value={returnsConfig.nonReturnableEn.join(' in line:
-                  out.append("                        value={returnsConfig.nonReturnableEn.join('\\n')}")
-                  i += 1
-                  if i < len(lines) and "')}" in lines[i]:
+              handled = False
+              for needle, replacement in replacements.items():
+                  if needle in line:
+                      out.append(replacement)
                       i += 1
+                      if i < len(lines) and "')}" in lines[i]:
+                          i += 1
+                      handled = True
+                      break
+              if handled:
                   continue
-              if 'nonReturnableEn: e.target.value.split(' in line:
-                  out.append("                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('\\n') })}")
-                  i += 1
-                  continue
-              if 'nonReturnableAr: e.target.value.split(' in line:
-                  out.append("                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('\\n') })}")
-                  i += 1
-                  continue
-              if 'exchangeOptionsEn: e.target.value.split(' in line:
-                  out.append("                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('\\n') })}")
-                  i += 1
-                  continue
-              if 'exchangeOptionsAr: e.target.value.split(' in line:
-                  out.append("                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('\\n') })}")
-                  i += 1
+              for needle, replacement in split_replacements.items():
+                  if needle in line:
+                      out.append(replacement)
+                      i += 1
+                      handled = True
+                      break
+              if handled:
                   continue
               out.append(line)
               i += 1
@@ -66,6 +75,9 @@ jobs:
         run: |
           grep -n "staffPasswordFeedback" src/components/StaffDashboard.tsx
           grep -n "nonReturnableEn.join" src/components/StaffDashboard.tsx
+          grep -n "nonReturnableAr.join" src/components/StaffDashboard.tsx
+          grep -n "exchangeOptionsEn.join" src/components/StaffDashboard.tsx
+          grep -n "exchangeOptionsAr.join" src/components/StaffDashboard.tsx
           grep -n "nonReturnableEn: e.target.value.split" src/components/StaffDashboard.tsx
           grep -n "nonReturnableAr: e.target.value.split" src/components/StaffDashboard.tsx
           grep -n "exchangeOptionsEn: e.target.value.split" src/components/StaffDashboard.tsx
@@ -76,5 +88,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/components/StaffDashboard.tsx
           git diff --cached --quiet && exit 1
-          git commit -m 'fix(staff): normalize returns textarea literals safely'
+          git commit -m 'fix(staff): repair all returns textarea literals'
           git push origin audit/dashboard-sync-fix
