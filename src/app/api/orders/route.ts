@@ -22,7 +22,29 @@ export async function GET(req: NextRequest) {
     query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
     const { data: orders, error, count } = await query;
     if (error) return apiError(error.message, 500);
-    return apiResponse({ orders, pagination: { page, limit, totalItems: count || 0, totalPages: Math.ceil((count || 0) / limit) } });
+
+    let enrichedOrders = orders || [];
+    if (user.role !== 'customer' && enrichedOrders.length > 0) {
+      const orderIds = enrichedOrders.map((order: any) => order.id);
+      const { data: items, error: itemsError } = await supabase
+        .from('zoal_order_items')
+        .select('order_id, product_id, quantity, unit_price, total_price')
+        .in('order_id', orderIds);
+      if (itemsError) return apiError(itemsError.message, 500);
+
+      const itemsByOrder = new Map<string, any[]>();
+      for (const item of items || []) {
+        const list = itemsByOrder.get(String(item.order_id)) || [];
+        list.push(item);
+        itemsByOrder.set(String(item.order_id), list);
+      }
+      enrichedOrders = enrichedOrders.map((order: any) => ({
+        ...order,
+        items: itemsByOrder.get(String(order.id)) || [],
+      }));
+    }
+
+    return apiResponse({ orders: enrichedOrders, pagination: { page, limit, totalItems: count || 0, totalPages: Math.ceil((count || 0) / limit) } });
   } catch (err: any) { return apiError(err.message || 'Server error', 500); }
 }
 

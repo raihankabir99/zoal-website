@@ -21,6 +21,54 @@ import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
 import { useNotificationEngine } from '../lib/notificationStore';
 import { supabaseClient } from '../lib/supabaseClient';
 
+const STATUS_MAP: Record<string, Order['status']> = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  processing: 'Processing',
+  preparing: 'Preparing',
+  packed: 'Packed',
+  ready_for_shipping: 'Ready for Shipping',
+  shipped: 'Shipped',
+  out_for_delivery: 'Out for Delivery',
+  delivered: 'Delivered',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  returned: 'Returned',
+  refund_requested: 'Refund Requested',
+  refund_approved: 'Refund Approved',
+  refund_completed: 'Refund Completed',
+};
+
+function mapApiOrder(row: any): Order {
+  return {
+    id: String(row.id),
+    date: row.created_at || '',
+    items: Array.isArray(row.items) ? row.items.map((item: any) => ({
+      productId: String(item.product_id || ''),
+      name: item.name || '',
+      price: Number(item.unit_price || 0),
+      quantity: Number(item.quantity || 0),
+      image: item.image || undefined,
+    })) : [],
+    subtotal: Number(row.subtotal || 0),
+    shipping: Number(row.shipping_cost || 0),
+    discount: Number(row.discount_amount || 0),
+    total: Number(row.total_amount || 0),
+    status: STATUS_MAP[String(row.status || '').toLowerCase()] || 'Pending',
+    customerName: row.customer_name || '',
+    email: row.email || '',
+    phone: row.phone || '',
+    address: row.shipping_address || row.address || '',
+    paymentMethod: row.payment_method || '—',
+    trackingNumber: row.tracking_number || '',
+    assignedStaff: row.assigned_staff_name || row.assigned_staff_id || undefined,
+    adminNotes: row.admin_notes || undefined,
+    staffNotes: row.staff_notes || undefined,
+    customerNotes: row.customer_notes || undefined,
+    paymentStatus: row.payment_status ? String(row.payment_status).replace(/^./, (c: string) => c.toUpperCase()) as Order['paymentStatus'] : undefined,
+  };
+}
+
 interface StaffDashboardProps {
   currentUser: any;
   orders: Order[];
@@ -54,7 +102,7 @@ interface StaffDashboardProps {
 
 export default function StaffDashboard({
   currentUser,
-  orders,
+  orders: _legacyOrders,
   setOrders,
   onUpdateOrderStatus,
   onLogout,
@@ -109,9 +157,10 @@ export default function StaffDashboard({
   const [staffInventoryFilter, setStaffInventoryFilter] = useState<'all' | 'low' | 'out'>('all');
   const [staffCustomerSearch, setStaffCustomerSearch] = useState('');
 
-  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>(() => {
-    return (localStorage.getItem('zoal_staff_duty_status') as any) || 'active';
-  });
+  const [authoritativeOrders, setAuthoritativeOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+
+  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');
 
   // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.
   const [staffLogs, setStaffLogs] = useState<any[]>([]);
@@ -143,6 +192,46 @@ export default function StaffDashboard({
     void loadStaffOperations();
     return () => { cancelled = true; };
   }, [currentUser?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadAuthoritativeOrders = async () => {
+      setOrdersLoading(true);
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          if (!cancelled) setAuthoritativeOrders([]);
+          return;
+        }
+
+        const response = await fetch('/api/orders?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Orders request failed (${response.status})`);
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data?.orders)
+          ? payload.data.orders
+          : Array.isArray(payload?.orders)
+            ? payload.orders
+            : [];
+        if (!cancelled) setAuthoritativeOrders(rows.map(mapApiOrder));
+      } catch (error) {
+        console.error('Failed to load staff orders from authoritative API:', error);
+        if (!cancelled) setAuthoritativeOrders([]);
+      } finally {
+        if (!cancelled) setOrdersLoading(false);
+      }
+    };
+
+    void loadAuthoritativeOrders();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.
+  const orders = authoritativeOrders;
 
   const addStaffLog = (action: string, target: string) => {
     void (async () => {
