@@ -233,9 +233,80 @@ export default function StaffDashboard({
     void loadAuthoritativeOrders();
     return () => { cancelled = true; };
   }, [currentUser?.id]);
-\n  React.useEffect(() => {\n    let cancelled = false;\n    const loadAuthoritativeCustomers = async () => {\n      try {\n        const { data: { session } } = await supabaseClient.auth.getSession();\n        const token = session?.access_token;\n        if (!token) {\n          if (!cancelled) setAuthoritativeCustomers([]);\n          return;\n        }\n        const response = await fetch('/api/admin/customers?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` },\n          cache: 'no-store'\n        });\n        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);\n        const payload = await response.json();\n        const customers = Array.isArray(payload?.customers)\n          ? payload.customers\n          : Array.isArray(payload?.data?.customers)\n            ? payload.data.customers\n            : [];\n        if (!cancelled) setAuthoritativeCustomers(customers);\n      } catch (error) {\n        console.error('Failed to load staff customers from authoritative API:', error);\n        if (!cancelled) setAuthoritativeCustomers([]);\n      }\n    };\n    void loadAuthoritativeCustomers();\n    return () => { cancelled = true; };\n  }, [currentUser?.id]);\n
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadAuthoritativeCustomers = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          if (!cancelled) setAuthoritativeCustomers([]);
+          return;
+        }
+        const response = await fetch('/api/admin/customers?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);
+        const payload = await response.json();
+        const customers = Array.isArray(payload?.customers)
+          ? payload.customers
+          : Array.isArray(payload?.data?.customers)
+            ? payload.data.customers
+            : [];
+        if (!cancelled) setAuthoritativeCustomers(customers);
+      } catch (error) {
+        console.error('Failed to load staff customers from authoritative API:', error);
+        if (!cancelled) setAuthoritativeCustomers([]);
+      }
+    };
+    void loadAuthoritativeCustomers();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
   // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.
   const orders = authoritativeOrders;
+
+  const updateStaffDutyStatus = async (nextStatus: 'active' | 'break' | 'offline') => {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      const response = await fetch('/api/staff/duty-status', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      if (!response.ok) throw new Error(`Duty status update failed (${response.status})`);
+      const payload = await response.json();
+      if (payload?.status) {
+        setStaffDutyStatus(payload.status);
+        addStaffLog('Duty Status Changed', `Set status to ${payload.status.toUpperCase()}`);
+      }
+    } catch (error) {
+      console.error('Failed to update authoritative staff duty status:', error);
+    }
+  };
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadDutyStatus = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/duty-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!cancelled && ['active', 'break', 'offline'].includes(payload?.status)) setStaffDutyStatus(payload.status);
+      } catch (error) {
+        console.error('Failed to load authoritative staff duty status:', error);
+      }
+    };
+    void loadDutyStatus();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
 
   const addStaffLog = (action: string, target: string) => {
     void (async () => {
@@ -265,7 +336,43 @@ export default function StaffDashboard({
   // Customer Directory is API-authoritative; never derive customer records from order rows.
   const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);
 
-\n  const handleStaffPasswordChange = async () => {\n    setStaffPasswordError('');\n    setStaffPasswordSuccess('');\n    if (!currentPassword || !newPassword) {\n      setStaffPasswordError('Current and new password are required.');\n      return;\n    }\n    if (newPassword.length < 8) {\n      setStaffPasswordError('New password must be at least 8 characters.');\n      return;\n    }\n    setStaffPasswordLoading(true);\n    try {\n      const { data: { session } } = await supabaseClient.auth.getSession();\n      const token = session?.access_token;\n      if (!token) throw new Error('Authentication session is unavailable.');\n      const response = await fetch('/api/auth/change-password', {\n        method: 'POST',\n        headers: {\n          Authorization: `Bearer ${token}`,\n          'Content-Type': 'application/json'\n        },\n        body: JSON.stringify({ currentPassword, newPassword })\n      });\n      const payload = await response.json().catch(() => ({}));\n      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);\n      setCurrentPassword('');\n      setNewPassword('');\n      setStaffPasswordSuccess('Password changed successfully.');\n    } catch (error) {\n      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');\n    } finally {\n      setStaffPasswordLoading(false);\n    }\n  };\n
+
+  const handleStaffPasswordChange = async () => {
+    setStaffPasswordError('');
+    setStaffPasswordSuccess('');
+    if (!currentPassword || !newPassword) {
+      setStaffPasswordError('Current and new password are required.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setStaffPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+    setStaffPasswordLoading(true);
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication session is unavailable.');
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);
+      setCurrentPassword('');
+      setNewPassword('');
+      setStaffPasswordSuccess('Password changed successfully.');
+    } catch (error) {
+      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');
+    } finally {
+      setStaffPasswordLoading(false);
+    }
+  };
+
 
   return (
     <div className="space-y-1 lg:space-y-6 text-left animate-fade-in">
@@ -1261,7 +1368,8 @@ export default function StaffDashboard({
                         <p className="text-[10px] uppercase font-semibold text-[#D4AF37] mb-2 leading-none">{bsp.status}</p>
                         <button
                           onClick={() => {
-                            alert(`Updating tailoring workflow progress for Order ${bsp.id}.\nAssigned Master Tailor successfully notified.`);
+                            alert(`Updating tailoring workflow progress for Order ${bsp.id}.
+Assigned Master Tailor successfully notified.`);
                             addStaffLog('Premium Advance', `Tailoring status advanced for ${bsp.id}`);
                           }}
                           className="px-3 py-1.5 border border-[#D4AF37]/25 hover:bg-[#D4AF37] text-zinc-300 hover:text-black rounded-xs transition-colors uppercase font-bold text-[9px]"
@@ -1426,11 +1534,7 @@ export default function StaffDashboard({
                         {['active', 'break', 'offline'].map((st: any) => (
                           <button
                             key={st}
-                            onClick={() => {
-                              localStorage.setItem('zoal_staff_duty_status', st);
-                              setStaffDutyStatus(st);
-                              addStaffLog('Duty Status Changed', `Set status to ${st.toUpperCase()}`);
-                            }}
+                            onClick={() => { void updateStaffDutyStatus(st); }}
                             className={`py-2 px-2.5 rounded-xs text-[9.5px] uppercase tracking-wider font-bold transition-all cursor-pointer font-mono ${
                               staffDutyStatus === st ? 'bg-white text-black font-semibold' : 'bg-black border border-white/5 text-zinc-500 hover:text-white'
                             }`}
@@ -1497,10 +1601,8 @@ export default function StaffDashboard({
                     </div>
 
                     <button
-                      onClick={() => {
-                        alert('Password changed successfully!');
-                        addStaffLog('Password Changed', 'Staff credentials updated securely');
-                      }}
+                      onClick={() => { void handleStaffPasswordChange(); }}
+                      disabled={staffPasswordLoading}
                       className="w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none"
                     >
                       Update Password
@@ -2082,8 +2184,10 @@ export default function StaffDashboard({
                       </h4>
                       <textarea
                         rows={4}
-                        value={returnsConfig.nonReturnableEn.join('\n')}
-                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('\n') })}
+                        value={returnsConfig.nonReturnableEn.join('
+')}
+                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('
+') })}
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans"
                       />
                     </div>
@@ -2095,8 +2199,10 @@ export default function StaffDashboard({
                       </h4>
                       <textarea
                         rows={4}
-                        value={returnsConfig.nonReturnableAr.join('\n')}
-                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('\n') })}
+                        value={returnsConfig.nonReturnableAr.join('
+')}
+                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('
+') })}
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans text-right"
                         dir="rtl"
                       />
@@ -2109,15 +2215,19 @@ export default function StaffDashboard({
                       <div className="grid grid-cols-2 gap-3">
                         <textarea
                           rows={2}
-                          value={returnsConfig.exchangeOptionsEn.join('\n')}
-                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('\n') })}
+                          value={returnsConfig.exchangeOptionsEn.join('
+')}
+                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('
+') })}
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans"
                           placeholder="EN options"
                         />
                         <textarea
                           rows={2}
-                          value={returnsConfig.exchangeOptionsAr.join('\n')}
-                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('\n') })}
+                          value={returnsConfig.exchangeOptionsAr.join('
+')}
+                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('
+') })}
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans text-right"
                           dir="rtl"
                           placeholder="AR options"

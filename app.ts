@@ -87,6 +87,7 @@ import * as productImportModule from './server/product_import.ts';
 import * as healthMonitorModule from './server/health_monitor.ts';
 import * as supportModule from './server/support.ts';
 import * as crmModule from './server/crm.ts';
+import * as staffModule from './server/staff.ts';
 import * as adminModule from './server/admin.ts';
 import * as operationsModule from './server/operations.ts';
 
@@ -4829,6 +4830,11 @@ app.post('/api/auth/invite/verify', crmModule.verifyInviteToken);
 app.get('/api/auth/invite/verify', crmModule.verifyInviteToken);
 
 app.get('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomers);
+app.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getDutyStatus);
+app.put('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateDutyStatus);
+app.get('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
+app.post('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.createStaffLog);
+
 app.get('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomerById);
 app.post('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.createCustomer);
 app.patch('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.updateCustomer);
