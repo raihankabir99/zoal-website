@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { getServiceSupabaseClient, getSupabaseClient } from './supabase';
 
 const getClient = () => getServiceSupabaseClient() || getSupabaseClient();
