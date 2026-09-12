@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -3677,8 +3678,6 @@ async function ensureBrandingRowExists() {
 }
 
 app.get('/api/branding', async (req, res) => {
-  // Prefer the configured Supabase API client. This avoids opening a raw pg DNS
-  // connection on every branding request and keeps branding available in serverless.
   const defaults = {
     businessName: 'AL ZOAL Enterprise',
     businessLogo: '/assets/branding/zoal-main-logo.jpg',
@@ -3705,25 +3704,52 @@ app.get('/api/branding', async (req, res) => {
     website: 'https://alzoal.sa',
     theme: 'dark'
   };
-  try {
-    const supabase = getServiceSupabaseClient() || getSupabaseClient();
-    if (!supabase) return res.json(defaults);
 
-    const { data, error } = await supabase
-      .from('branding_settings')
-      .select('*')
-      .eq('id', 1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('❌ Error fetching branding settings via Supabase API:', error.message);
-      return res.json(defaults);
+  // 1. Direct PostgreSQL connection (authoritative enterprise database)
+  const connectionString = process.env.DATABASE_URL;
+  if (connectionString) {
+    let client: any = null;
+    try {
+      client = new Client({
+        connectionString,
+        ssl: { rejectUnauthorized: false }
+      });
+      await client.connect();
+      const result = await client.query('SELECT * FROM branding_settings WHERE id = 1 LIMIT 1');
+      if (result.rows && result.rows.length > 0) {
+        return res.json(mapBrandingToSafeClientSettings(result.rows[0]));
+      }
+    } catch (dbErr: any) {
+      console.warn('⚠️ Direct DB query for branding failed, trying Supabase service client:', dbErr.message);
+    } finally {
+      if (client) {
+        try { await client.end(); } catch (e) {}
+      }
     }
-    return res.json(data ? mapBrandingToSafeClientSettings(data) : defaults);
-  } catch (err: any) {
-    console.error('❌ Branding API unavailable:', err.message || err);
-    return res.json(defaults);
   }
+
+  // 2. Service-role Supabase client fallback (if service key configured)
+  try {
+    const serviceSupabase = getServiceSupabaseClient();
+    if (serviceSupabase) {
+      const { data, error } = await serviceSupabase
+        .from('branding_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (!error && data) {
+        return res.json(mapBrandingToSafeClientSettings(data));
+      }
+      if (error) {
+        console.warn('⚠️ Service role Supabase client branding query error:', error.message);
+      }
+    }
+  } catch (err: any) {
+    console.warn('⚠️ Branding API unavailable via Supabase:', err.message || err);
+  }
+
+  return res.json(defaults);
 });
 
 app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (req: any, res) => {

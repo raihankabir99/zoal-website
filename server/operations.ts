@@ -1,6 +1,8 @@
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
 import os from 'os';
+import pg from 'pg';
+const { Client } = pg;
 
 export async function getHealthData(req: Request, res: Response) {
   const supabase = getSupabaseClient();
@@ -37,16 +39,35 @@ export async function getHealthData(req: Request, res: Response) {
 }
 
 export async function getBackupData(req: Request, res: Response) {
-  const supabase = getSupabaseClient();
   let lastBackup = 'Never';
   let status = 'Not Configured';
   
   try {
-    if (supabase) {
-      const { data: settings } = await supabase.from('branding_settings').select('auto_backup_frequency, updated_at').eq('id', 1).single();
-      if (settings?.auto_backup_frequency && settings?.auto_backup_frequency !== 'none') {
-        status = 'Active';
-        lastBackup = settings.updated_at || 'Unknown';
+    const connectionString = process.env.DATABASE_URL;
+    if (connectionString) {
+      let client: any = null;
+      try {
+        client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+        await client.connect();
+        const result = await client.query('SELECT auto_backup_frequency, updated_at FROM branding_settings WHERE id = 1 LIMIT 1');
+        const settings = result.rows[0];
+        if (settings?.auto_backup_frequency && settings?.auto_backup_frequency !== 'none') {
+          status = 'Active';
+          lastBackup = settings.updated_at || 'Unknown';
+        }
+      } finally {
+        if (client) {
+          try { await client.end(); } catch (e) {}
+        }
+      }
+    } else {
+      const serviceSupabase = getServiceSupabaseClient();
+      if (serviceSupabase) {
+        const { data: settings } = await serviceSupabase.from('branding_settings').select('auto_backup_frequency, updated_at').eq('id', 1).single();
+        if (settings?.auto_backup_frequency && settings?.auto_backup_frequency !== 'none') {
+          status = 'Active';
+          lastBackup = settings.updated_at || 'Unknown';
+        }
       }
     }
   } catch (err) {}
