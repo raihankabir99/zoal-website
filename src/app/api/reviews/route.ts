@@ -78,7 +78,8 @@ export async function POST(req: NextRequest) {
         product_id: body.product_id,
         rating,
         comment: body.comment,
-        is_approved: true // Auto-approved for seamless demo experience
+        // Production moderation: new customer reviews remain pending until approved.
+        is_approved: false
       })
       .select()
       .single();
