@@ -35,6 +35,14 @@
       "dest": "/api/cms.ts"
     },
     {
+      "src": "/api/payments",
+      "dest": "/api/payments.ts"
+    },
+    {
+      "src": "/api/payments/(.*)",
+      "dest": "/api/payments.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
