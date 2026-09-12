@@ -25,23 +25,31 @@ jobs:
           git checkout 7f0a3f7b8abd95e56f9fd9c17dc63b22919d9160 -- src/components/StaffDashboard.tsx
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p = Path('src/components/StaffDashboard.tsx')
           s = p.read_text(encoding='utf-8')
-          lines = s.splitlines(True)
+          names = ('nonReturnableEn','nonReturnableAr','exchangeOptionsEn','exchangeOptionsAr')
           out = []
-          for line in lines:
-              if line.strip() == "') })}":
+          for line in s.splitlines(True):
+              stripped = line.strip()
+              if stripped == "') })}":
                   continue
-              out.append(line)
-          s = ''.join(out)
-          for name in ('nonReturnableEn','nonReturnableAr','exchangeOptionsEn','exchangeOptionsAr'):
-              s = re.sub(rf"{name}\.join\('[^']*\n\s*'\)", rf"{name}.join('\\n')", s)
-              s = re.sub(rf"{name}: e\.target\.value\.split\('[^']*\n\s*'\)", rf"{name}: e.target.value.split('\\n')", s)
-          p.write_text(s, encoding='utf-8')
+              replaced = False
+              for name in names:
+                  if f"{name}: e.target.value.split(" in line:
+                      indent = line[:len(line) - len(line.lstrip())]
+                      out.append(indent + f"onChange={{(e) => setLocalReturnsConfig({{ ...returnsConfig, {name}: e.target.value.split('\\n') }})}}\n")
+                      replaced = True
+                      break
+              if not replaced:
+                  out.append(line)
+          p.write_text(''.join(out), encoding='utf-8')
           PY
           if grep -nF "') })}" src/components/StaffDashboard.tsx; then
             echo 'ERROR: stray JSX corruption remains'
+            exit 1
+          fi
+          if grep -nE "split\('[^']*$" src/components/StaffDashboard.tsx; then
+            echo 'ERROR: unterminated split literal remains'
             exit 1
           fi
 
@@ -52,5 +60,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/components/StaffDashboard.tsx
-          git commit -m 'fix(staff): restore dashboard source and repair JSX RESTORE_STAFF_DASHBOARD'
+          git diff --cached --check
+          git commit -m 'fix(staff): repair malformed returns JSX RESTORE_STAFF_DASHBOARD'
           git push origin HEAD:audit/dashboard-sync-fix
