@@ -20,49 +20,33 @@ jobs:
       - name: Inventory hardcoded/admin fallback scan
         run: |
           set -e
-          echo '=== AdminDashboard legacy sources ==='
-          grep -nE "localStorage\\.(getItem|setItem)|Math\\.random\\(|127\\.0\\.0\\.1|192\\.168\\.|DEFAULT_|hardcoded|fake|mock|synthetic" src/components/AdminDashboard.tsx | head -n 120 || true
           echo '=== StaffDashboard legacy sources ==='
           grep -nE "localStorage\\.(getItem|setItem)|Math\\.random\\(|127\\.0\\.0\\.1|192\\.168\\.|fake|mock|synthetic" src/components/StaffDashboard.tsx | head -n 80 || true
           echo '=== Inventory ==='
           grep -nE "localStorage\\.(getItem|setItem)|Math\\.random\\(|fake|mock|synthetic|refreshProducts" src/components/EnterpriseInventoryManagement.tsx | head -n 120 || true
-          echo '=== Brands ==='
-          find src/app/api -path '*brand*' -o -path '*brands*' | sort
-          grep -RniE "zoal_admin_brands|hardcoded.*brand|DEFAULT.*BRAND" src/components src/app/api server --exclude-dir=node_modules | head -n 100 || true
 
       - name: Apply Staff Dashboard remediation
-        if: contains(github.event.head_commit.message, 'stage admin sections audit')
         run: |
           python3 <<'PY'
           from pathlib import Path
           p = Path('src/components/StaffDashboard.tsx')
           s = p.read_text()
+          s = s.replace("  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');", "  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');\n  const [staffPasswordError, setStaffPasswordError] = useState<string | null>(null);\n  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState<string | null>(null);\n  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);\n  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);", 1)
 
-          s = s.replace(
-            "  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');",
-            "  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');\n  const [staffPasswordError, setStaffPasswordError] = useState<string | null>(null);\n  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState<string | null>(null);\n  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);\n  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);",
-            1
-          )
-
-          log_anchor = "  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.\n  const [staffLogs, setStaffLogs] = useState<any[]>([]);"
-          log_insert = """  React.useEffect(() => {
+          anchor = "  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.\n  const [staffLogs, setStaffLogs] = useState<any[]>([]);"
+          insert = """  React.useEffect(() => {
     let cancelled = false;
     const loadDutyStatus = async () => {
       try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         const token = session?.access_token;
         if (!token) return;
-        const response = await fetch('/api/staff/duty-status', {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store'
-        });
+        const response = await fetch('/api/staff/duty-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
         if (!response.ok) return;
         const payload = await response.json();
         const status = payload?.data?.dutyStatus || payload?.dutyStatus;
         if (!cancelled && ['active', 'break', 'offline'].includes(status)) setStaffDutyStatus(status);
-      } catch {
-        // Keep the truthful offline state when the authoritative API is unavailable.
-      }
+      } catch {}
     };
     void loadDutyStatus();
     return () => { cancelled = true; };
@@ -75,16 +59,11 @@ jobs:
         const { data: { session } } = await supabaseClient.auth.getSession();
         const token = session?.access_token;
         if (!token) return;
-        const response = await fetch('/api/admin/customers?limit=100&page=1', {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store'
-        });
+        const response = await fetch('/api/admin/customers?limit=100&page=1', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
         if (!response.ok) return;
         const payload = await response.json();
         if (!cancelled) setAuthoritativeCustomers(Array.isArray(payload?.customers) ? payload.customers : []);
-      } catch {
-        if (!cancelled) setAuthoritativeCustomers([]);
-      }
+      } catch { if (!cancelled) setAuthoritativeCustomers([]); }
     };
     void loadAuthoritativeCustomers();
     return () => { cancelled = true; };
@@ -92,8 +71,8 @@ jobs:
 
   // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.
   const [staffLogs, setStaffLogs] = useState<any[]>([]);"""
-          if log_anchor not in s: raise SystemExit('staff log anchor not found')
-          s = s.replace(log_anchor, log_insert, 1)
+          if anchor not in s: raise SystemExit('staff log anchor not found')
+          s = s.replace(anchor, insert, 1)
 
           customer_old = """  // Derived Customers
   const uniqueCustomers = useMemo(() => {
@@ -124,60 +103,29 @@ jobs:
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
       if (!token) return;
-      const response = await fetch('/api/staff/duty-status', {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dutyStatus: nextStatus })
-      });
+      const response = await fetch('/api/staff/duty-status', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dutyStatus: nextStatus }) });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        console.error('Failed to update staff duty status:', payload?.error || response.statusText);
-        return;
-      }
+      if (!response.ok) { console.error('Failed to update staff duty status:', payload?.error || response.statusText); return; }
       const confirmedStatus = payload?.data?.dutyStatus || payload?.dutyStatus;
       if (['active', 'break', 'offline'].includes(confirmedStatus)) setStaffDutyStatus(confirmedStatus);
-    } catch (error) {
-      console.error('Failed to update staff duty status:', error);
-    }
+    } catch (error) { console.error('Failed to update staff duty status:', error); }
   };
 
   const handleStaffPasswordChange = async () => {
-    setStaffPasswordError(null);
-    setStaffPasswordSuccess(null);
-    if (!currentPassword || !newPassword) {
-      setStaffPasswordError('Please fill in both current and new password fields.');
-      return;
-    }
-    if (newPassword.length < 8) {
-      setStaffPasswordError('Password must be at least 8 characters long.');
-      return;
-    }
+    setStaffPasswordError(null); setStaffPasswordSuccess(null);
+    if (!currentPassword || !newPassword) { setStaffPasswordError('Please fill in both current and new password fields.'); return; }
+    if (newPassword.length < 8) { setStaffPasswordError('Password must be at least 8 characters long.'); return; }
     setStaffPasswordLoading(true);
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
-      if (!token) {
-        setStaffPasswordError('Authentication session not found. Please log in again.');
-        return;
-      }
-      const response = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ currentPassword, newPassword })
-      });
+      if (!token) { setStaffPasswordError('Authentication session not found. Please log in again.'); return; }
+      const response = await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ currentPassword, newPassword }) });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setStaffPasswordError(payload?.error || payload?.message || 'Password change failed.');
-        return;
-      }
-      setStaffPasswordSuccess(payload?.message || 'Password changed successfully.');
-      setCurrentPassword('');
-      setNewPassword('');
-    } catch (error) {
-      setStaffPasswordError(error instanceof Error ? error.message : 'Network error. Password change aborted.');
-    } finally {
-      setStaffPasswordLoading(false);
-    }
+      if (!response.ok) { setStaffPasswordError(payload?.error || payload?.message || 'Password change failed.'); return; }
+      setStaffPasswordSuccess(payload?.message || 'Password changed successfully.'); setCurrentPassword(''); setNewPassword('');
+    } catch (error) { setStaffPasswordError(error instanceof Error ? error.message : 'Network error. Password change aborted.'); }
+    finally { setStaffPasswordLoading(false); }
   };
 
   const addStaffLog = (action: string, target: string) => {"""
@@ -188,9 +136,8 @@ jobs:
                               localStorage.setItem('zoal_staff_duty_status', st);
                               setStaffDutyStatus(st);
                             }}"""
-          duty_new = """                            onClick={() => { void updateStaffDutyStatus(st); }}"""
           if duty_old not in s: raise SystemExit('localStorage duty handler not found')
-          s = s.replace(duty_old, duty_new, 1)
+          s = s.replace(duty_old, """                            onClick={() => { void updateStaffDutyStatus(st); }}""", 1)
 
           password_old = """                    <button
                       onClick={() => {
@@ -198,53 +145,43 @@ jobs:
                         addStaffLog('Password Changed', 'Staff credentials updated securely');
                       }}
                       className=\"w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none\"""
-          password_new = """                    {(staffPasswordError || staffPasswordSuccess) && (
-                      <div className={`mb-3 text-[10px] font-mono ${staffPasswordError ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {staffPasswordError || staffPasswordSuccess}
-                      </div>
-                    )}
-                    <button
-                      type=\"button\"
-                      disabled={staffPasswordLoading}
-                      onClick={() => { void handleStaffPasswordChange(); }}
-                      className=\"w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none disabled:opacity-50 disabled:cursor-not-allowed\"""
           if password_old not in s: raise SystemExit('fake password handler not found')
+          password_new = """                    {(staffPasswordError || staffPasswordSuccess) && (
+                      <div className={`mb-3 text-[10px] font-mono ${staffPasswordError ? 'text-rose-400' : 'text-emerald-400'}`}>{staffPasswordError || staffPasswordSuccess}</div>
+                    )}
+                    <button type=\"button\" disabled={staffPasswordLoading} onClick={() => { void handleStaffPasswordChange(); }} className=\"w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none disabled:opacity-50 disabled:cursor-not-allowed\""" 
           s = s.replace(password_old, password_new, 1)
 
           tailoring_old = """                    <span className=\"text-2xl font-sans text-white font-bold block leading-none tabular-nums-fix\">3 Active</span>
                   </div>
                   <span className=\"text-[9px] text-indigo-400 block font-mono\">Premium custom thobe cuts</span>"""
-          tailoring_new = """                    <span className=\"text-2xl font-sans text-white font-bold block leading-none tabular-nums-fix\">Not Available</span>
-                  </div>
-                  <span className=\"text-[9px] text-indigo-400 block font-mono\">No authoritative tailoring metric source</span>"""
           if tailoring_old not in s: raise SystemExit('tailoring metric anchor not found')
-          s = s.replace(tailoring_old, tailoring_new, 1)
+          s = s.replace(tailoring_old, """                    <span className=\"text-2xl font-sans text-white font-bold block leading-none tabular-nums-fix\">Not Available</span>
+                  </div>
+                  <span className=\"text-[9px] text-indigo-400 block font-mono\">No authoritative tailoring metric source</span>""", 1)
 
           chart_old = """                  <div className=\"h-[210px] w-full\">
                     <ResponsiveContainer width=\"100%\" height=\"100%\">"""
-          chart_new = """                  <div className=\"h-[210px] w-full flex items-center justify-center border border-white/5 bg-black/30\">
+          if chart_old not in s: raise SystemExit('SLA chart anchor not found')
+          s = s.replace(chart_old, """                  <div className=\"h-[210px] w-full flex items-center justify-center border border-white/5 bg-black/30\">
                     <span className=\"text-[10px] font-mono uppercase tracking-wider text-zinc-500\">Not Available — authoritative SLA history is not connected</span>
                   </div>
-                  {false && <ResponsiveContainer width=\"100%\" height=\"100%\">"""
-          if chart_old not in s: raise SystemExit('SLA chart anchor not found')
-          s = s.replace(chart_old, chart_new, 1)
+                  {false && <ResponsiveContainer width=\"100%\" height=\"100%\">""", 1)
           close_old = """                    </ResponsiveContainer>
                   </div>"""
           if close_old not in s: raise SystemExit('SLA chart closing anchor not found')
           s = s.replace(close_old, """                    </ResponsiveContainer>}
                   </div>""", 1)
-
           p.write_text(s)
 
           h = Path('src/app/api/helpers.ts')
-          hs = h.read_text()
-          hs = hs.replace("allowedRoles: ('customer' | 'staff' | 'admin')[]", "allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]", 1)
+          hs = h.read_text().replace("allowedRoles: ('customer' | 'staff' | 'admin')[]", "allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]", 1)
           h.write_text(hs)
           PY
 
-      - name: Verify remediation and build
-        if: contains(github.event.head_commit.message, 'stage admin sections audit')
+      - name: Verify and build
         run: |
+          set -euo pipefail
           ! grep -n "zoal_staff_duty_status" src/components/StaffDashboard.tsx
           ! grep -n "Password changed successfully!" src/components/StaffDashboard.tsx
           grep -n "/api/staff/duty-status" src/components/StaffDashboard.tsx
@@ -255,11 +192,10 @@ jobs:
           npm run build
 
       - name: Commit remediation
-        if: contains(github.event.head_commit.message, 'stage admin sections audit')
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/components/StaffDashboard.tsx src/app/api/helpers.ts
           git diff --cached --check
-          git commit -m "fix(staff): remove fabricated dashboard behavior"
+          git commit -m 'fix(staff): remove fabricated dashboard behavior'
           git push origin audit/dashboard-sync-fix
