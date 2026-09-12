@@ -25,6 +25,7 @@ jobs:
           git checkout 7f0a3f7b8abd95e56f9fd9c17dc63b22919d9160 -- src/components/StaffDashboard.tsx
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('src/components/StaffDashboard.tsx')
           s = p.read_text(encoding='utf-8')
           lines = s.splitlines(True)
@@ -33,10 +34,17 @@ jobs:
               if line.strip() == "') })}":
                   continue
               out.append(line)
-          p.write_text(''.join(out), encoding='utf-8')
+          s = ''.join(out)
+          s = re.sub(r"(nonReturnableEn|nonReturnableAr|exchangeOptionsEn|exchangeOptionsAr)\.join\('\s*\n\s*'\)", r"\1.join('\\n')", s)
+          s = re.sub(r"(nonReturnableEn|nonReturnableAr|exchangeOptionsEn|exchangeOptionsAr): e\.target\.value\.split\('\s*\n\s*'\)", r"\1: e.target.value.split('\\n')", s)
+          p.write_text(s, encoding='utf-8')
           PY
           if grep -nF "') })}" src/components/StaffDashboard.tsx; then
             echo 'ERROR: stray JSX corruption remains'
+            exit 1
+          fi
+          if grep -n "nonReturnableEn.join('" src/components/StaffDashboard.tsx | grep -q "^.*join('$"; then
+            echo 'ERROR: split join literal corruption remains'
             exit 1
           fi
 
