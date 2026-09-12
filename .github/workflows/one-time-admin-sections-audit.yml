@@ -1,55 +1,27 @@
 name: one-time-admin-sections-audit
 
 on:
+  workflow_dispatch:
   push:
     branches: [audit/dashboard-sync-fix]
-
-permissions:
-  contents: write
 
 jobs:
   audit:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'stage staff final remediation')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'stage admin sections audit')
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: audit/dashboard-sync-fix
-          fetch-depth: 0
-      - name: Apply exact targeted Staff Dashboard remediation
-        shell: bash
+      - name: Inventory hardcoded/admin fallback scan
         run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('src/components/StaffDashboard.tsx')
-          s = p.read_text()
-          old = '''                          onClick={() => {\n                            localStorage.setItem('zoal_staff_duty_status', st);\n                            setStaffDutyStatus(st);\n                            addStaffLog('Duty Status Changed', `Set status to ${st.toUpperCase()}`);\n                          }}'''
-          new = '''                          onClick={async () => {\n                            try {\n                              const { data: { session } } = await supabaseClient.auth.getSession();\n                              const token = session?.access_token;\n                              if (!token) throw new Error('Authenticated session required');\n                              const response = await fetch('/api/staff/logs', {\n                                method: 'POST',\n                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },\n                                body: JSON.stringify({ action: 'Duty Status Changed', target: `Set status to ${st.toUpperCase()}` })\n                              });\n                              if (!response.ok) throw new Error(`Duty status request failed (${response.status})`);\n                              setStaffDutyStatus(st);\n                              const payload = await response.json();\n                              if (payload?.log) setStaffLogs((prev) => [payload.log, ...prev]);\n                            } catch (error) {\n                              console.error('Failed to persist duty status:', error);\n                              alert('Unable to save duty status. Please try again.');\n                            }\n                          }}'''
-          if old not in s: raise SystemExit('Duty status handler anchor not found; aborting.')
-          s = s.replace(old, new, 1)
-          old = '''                      onClick={() => {\n                        alert('Password changed successfully!');\n                        addStaffLog('Password Changed', 'Staff credentials updated securely');\n                      }}'''
-          new = '''                      onClick={async () => {\n                        if (!currentPassword || !newPassword) { alert('Enter your current password and a new password.'); return; }\n                        if (newPassword.length < 8) { alert('New password must be at least 8 characters.'); return; }\n                        try {\n                          const { data: { session } } = await supabaseClient.auth.getSession();\n                          const token = session?.access_token;\n                          if (!token) throw new Error('Authenticated session required');\n                          const response = await fetch('/api/auth/change-password', {\n                            method: 'POST',\n                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },\n                            body: JSON.stringify({ currentPassword, newPassword })\n                          });\n                          const payload = await response.json().catch(() => ({}));\n                          if (!response.ok) throw new Error(payload?.error || payload?.message || `Password update failed (${response.status})`);\n                          setCurrentPassword('');\n                          setNewPassword('');\n                          alert('Password changed successfully.');\n                          addStaffLog('Password Changed', 'Staff credentials updated securely');\n                        } catch (error: any) {\n                          console.error('Failed to change password:', error);\n                          alert(error?.message || 'Unable to change password. Please try again.');\n                        }\n                      }}'''
-          if old not in s: raise SystemExit('Password handler anchor not found; aborting.')
-          s = s.replace(old, new, 1)
-          s = s.replace('<span className="text-[9px] text-indigo-400 block font-mono">Premium custom thobe cuts</span>', '<span className="text-[9px] text-zinc-500 block font-mono">Authoritative tailoring telemetry unavailable</span>', 1)
-          s = s.replace('<span className="text-2xl font-sans text-white font-bold block leading-none tabular-nums-fix">3 Active</span>', '<span className="text-2xl font-sans text-zinc-500 font-bold block leading-none tabular-nums-fix">Not Available</span>', 1)
-          s = s.replace('''                      <AreaChart data={[\n                        { name: 'Mon', target: 100, active: 94 },\n                        { name: 'Tue', target: 100, active: 96 },\n                        { name: 'Wed', target: 100, active: 92 },\n                        { name: 'Thu', target: 100, active: 98 },\n                        { name: 'Fri', target: 100, active: 100 },\n                        { name: 'Sat', target: 100, active: 95 },\n                        { name: 'Sun', target: 100, active: 97 }\n                      ]}''', '''                      <AreaChart data={[]}''', 1)
-          s = s.replace('Live operational times', 'Authoritative telemetry unavailable', 1)
-          p.write_text(s)
-          PY
-          git diff --check
-          grep -n "api/auth/change-password" src/components/StaffDashboard.tsx
-          grep -n "const orders = authoritativeOrders" src/components/StaffDashboard.tsx
-          npm ci
+          set -e
+          echo '=== AdminDashboard legacy sources ==='
+          grep -nE "localStorage\\.(getItem|setItem)|Math\\.random\\(|127\\.0\\.0\\.1|192\\.168\\.|DEFAULT_|hardcoded|fake|mock|synthetic" src/components/AdminDashboard.tsx | head -n 120 || true
+          echo '=== StaffDashboard legacy sources ==='
+          grep -nE "localStorage\\.(getItem|setItem)|Math\\.random\\(|127\\.0\\.0\\.1|192\\.168\\.|fake|mock|synthetic" src/components/StaffDashboard.tsx | head -n 80 || true
+          echo '=== Inventory ==='
+          grep -nE "localStorage\\.(getItem|setItem)|Math\\.random\\(|fake|mock|synthetic|refreshProducts" src/components/EnterpriseInventoryManagement.tsx | head -n 120 || true
+          echo '=== Brands ==='
+          find src/app/api -path '*brand*' -o -path '*brands*' | sort
+          grep -RniE "zoal_admin_brands|hardcoded.*brand|DEFAULT.*BRAND" src/components src/app/api server --exclude-dir=node_modules | head -n 100 || true
+          echo '=== Build ==='
           npm run build
-      - name: Commit patch and clean temporary runners
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -f .github/workflows/one-time-admin-sections-audit.yml .github/workflows/staff-final-remediation.yml .github/staff-final-remediation-trigger.txt
-          git add src/components/StaffDashboard.tsx .github/workflows/one-time-admin-sections-audit.yml .github/workflows/staff-final-remediation.yml .github/staff-final-remediation-trigger.txt
-          git commit -m "fix(staff-dashboard): persist security actions and remove fabricated metrics"
-          git push origin audit/dashboard-sync-fix
