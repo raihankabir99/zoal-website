@@ -1,0 +1,51 @@
+name: Staff Order Persistence Patch
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'fix(staff): bind order operations to authoritative API') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+      - name: Apply guarded patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('src/components/EnterpriseOrderManagement.tsx')
+          s=p.read_text(encoding='utf-8')
+          original=s
+          staff=re.compile(r"  // Mock staff list for assignment\n  const STAFF_LIST = \[.*?\n  \];",re.S)
+          if not staff.search(s): raise SystemExit('ABORT: staff marker not found')
+          staff_repl='''  // Authoritative staff roster loaded from the protected staff API\n  const [staffList, setStaffList] = useState<Array<{ id: string; name: string; email: string }>>([]);\n  useEffect(() => {\n    let cancelled = false;\n    const loadStaff = async () => {\n      try {\n        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n        if (!token) return;\n        const response = await fetch('/api/staff', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });\n        if (!response.ok) throw new Error(`Staff API ${response.status}`);\n        const result = await response.json();\n        const rows = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];\n        if (!cancelled) setStaffList(rows.map((member: any) => ({ id: String(member.id), name: [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email || String(member.id), email: member.email || '' })));\n      } catch (error) { console.error('[EnterpriseOrderManagement] Staff roster load failed', error); }\n    };\n    void loadStaff();\n    return () => { cancelled = true; };\n  }, []);\n  const getStaffAuthToken = () => localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');\n  const persistOrderOperation = async (payload: Record<string, unknown>) => {\n    const token = getStaffAuthToken();\n    if (!token) throw new Error('Authenticated staff session is required.');\n    const response = await fetch('/api/staff', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });\n    const result = await response.json().catch(() => ({}));\n    if (!response.ok) throw new Error(result?.error || `Staff order operation failed (${response.status})`);\n    return result?.data || result?.order || result;\n  };'''
+          s=staff.sub(staff_repl,s,1)
+          status=re.compile(r"  // Perform status update & timeline creation\n  const handleStatusTransition = \(orderId: string, nextStatus: Order\['status'\], noteText\?: string\) => \{.*?\n  \};\n\n  // Staff Assignment",re.S)
+          if not status.search(s): raise SystemExit('ABORT: status marker not found')
+          status_repl='''  // Perform status update & timeline creation\n  const handleStatusTransition = async (orderId: string, nextStatus: Order['status'], noteText?: string) => {\n    const orderToUpdate = orders.find(o => o.id === orderId);\n    if (!orderToUpdate) return;\n    const validTransitions = getValidTransitions(orderToUpdate.status);\n    const isAdminOverride = hasRole('admin') || hasRole('owner') || hasRole('manager');\n    if (!isAdminOverride && !validTransitions.includes(nextStatus)) { alert(`Invalid status transition from ${orderToUpdate.status} to ${nextStatus}.`); return; }\n    try {\n      const updated = await persistOrderOperation({ orderId, status: nextStatus, staffNotes: noteText || undefined });\n      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...(updated || {}), status: updated?.status || nextStatus } : o));\n      setSelectedOrder(prev => prev?.id === orderId ? { ...prev, ...(updated || {}), status: updated?.status || nextStatus } : prev);\n    } catch (error: any) { console.error('[EnterpriseOrderManagement] Status persistence failed', error); alert(error?.message || 'Unable to persist order status.'); }\n  };\n\n  // Staff Assignment'''
+          s=status.sub(status_repl,s,1)
+          assign=re.compile(r"  // Staff Assignment\n  const handleAssignStaff = \(orderId: string, staffName: string\) => \{.*?\n  \};\n\n  // Notes Updates",re.S)
+          if not assign.search(s): raise SystemExit('ABORT: assignment marker not found')
+          assign_repl='''  // Staff Assignment\n  const handleAssignStaff = async (orderId: string, staffName: string) => {\n    const staff = staffList.find(member => member.name === staffName || member.email === staffName);\n    if (!staff) { alert('Please select a valid staff member from the live staff roster.'); return; }\n    try {\n      const updated = await persistOrderOperation({ orderId, assignedStaffId: staff.id, assignedStaffName: staff.name });\n      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...(updated || {}), assignedStaff: staff.name } : o));\n      setSelectedOrder(prev => prev?.id === orderId ? { ...prev, ...(updated || {}), assignedStaff: staff.name } : prev);\n    } catch (error: any) { console.error('[EnterpriseOrderManagement] Staff assignment persistence failed', error); alert(error?.message || 'Unable to persist staff assignment.'); }\n  };\n\n  // Notes Updates'''
+          s=assign.sub(assign_repl,s,1)
+          notes=re.compile(r"  // Notes Updates\n  const handleSaveNotes = \(type: 'admin' \| 'staff' \| 'customer'\) => \{.*?\n  \};",re.S)
+          if not notes.search(s): raise SystemExit('ABORT: notes marker not found')
+          notes_repl='''  // Notes Updates\n  const handleSaveNotes = async (type: 'admin' | 'staff' | 'customer') => {\n    if (!selectedOrder) return;\n    const fieldMap = { admin: 'adminNotes', staff: 'staffNotes', customer: 'customerNotes' } as const;\n    const field = fieldMap[type];\n    const noteValue = type === 'admin' ? adminNoteInput : type === 'staff' ? staffNoteInput : customerNoteInput;\n    try {\n      const updated = await persistOrderOperation({ orderId: selectedOrder.id, [field]: noteValue });\n      const update = type === 'admin' ? { adminNotes: noteValue } : type === 'staff' ? { staffNotes: noteValue } : { customerNotes: noteValue };\n      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...(updated || {}), ...update } : o));\n      setSelectedOrder(prev => prev ? { ...prev, ...(updated || {}), ...update } : prev);\n      alert(`${type.toUpperCase()} notes updated successfully.`);\n    } catch (error: any) { console.error('[EnterpriseOrderManagement] Note persistence failed', error); alert(error?.message || 'Unable to persist note.'); }\n  };'''
+          s=notes.sub(notes_repl,s,1)
+          s=s.replace('STAFF_LIST.map','staffList.map').replace('STAFF_LIST.find','staffList.find')
+          if s == original: raise SystemExit('ABORT: no changes')
+          p.write_text(s,encoding='utf-8')
+      - name: Verify and commit
+        run: |
+          git diff --check
+          grep -q "persistOrderOperation" src/components/EnterpriseOrderManagement.tsx
+          grep -q "fetch('/api/staff'" src/components/EnterpriseOrderManagement.tsx
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/EnterpriseOrderManagement.tsx
+          git commit -m 'fix(staff): bind order operations to authoritative API'
+          git push origin audit/dashboard-sync-fix
