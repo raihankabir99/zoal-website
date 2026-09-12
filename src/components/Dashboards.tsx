@@ -281,6 +281,50 @@ export default function Dashboards({
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
+  // Load the authenticated customer's reviews from the server of record.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) return;
+
+    let cancelled = false;
+
+    const loadCustomerReviews = async () => {
+      try {
+        const res = await fetch('/api/reviews?mine=true&limit=100', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await res.json().catch(() => null);
+
+        if (!res.ok || !result?.success || !Array.isArray(result.data?.reviews)) {
+          throw new Error(result?.error || 'Failed to load reviews');
+        }
+
+        if (cancelled) return;
+
+        const normalized = result.data.reviews.map((review: any) => {
+          const product = allProducts.find((item: any) => item.id === review.product_id);
+          return {
+            ...review,
+            productName: product?.name || review.product_id,
+            date: review.created_at ? new Date(review.created_at).toISOString().split('T')[0] : '—'
+          };
+        });
+
+        setCustomerReviews(normalized);
+      } catch (error: any) {
+        console.error('Failed to load customer reviews:', error);
+      }
+    };
+
+    loadCustomerReviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, allProducts]);
+
   // Seeding simulated employees
   const simulatedEmployees = [
     { name: 'Raed Al-Fahad', role: 'Chief Roasting Master', branch: 'Dammam', status: 'Active' },
@@ -1698,38 +1742,80 @@ export default function Dashboards({
                               return;
                             }
 
-                            if (editingReviewId) {
-                              setCustomerReviews(prev => prev.map(r => r.id === editingReviewId ? {
-                                ...r,
-                                productName: pName,
-                                rating: ratingVal,
-                                comment: commentText,
-                                date: new Date().toISOString().split('T')[0]
-                              } : r));
+                            const selectedProduct = allProducts.find((product: any) => product.name === pName || product.id === pName);
+                            if (!selectedProduct) {
+                              dispatchNotification({
+                                type: 'system',
+                                variant: 'toast',
+                                title: isAr ? 'تنبيه' : 'Alert',
+                                message: isAr ? 'المنتج المحدد غير متاح.' : 'The selected product is unavailable.'
+                              });
+                              return;
+                            }
+
+                            const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+                            if (!token) {
+                              dispatchNotification({
+                                type: 'system',
+                                variant: 'toast',
+                                title: isAr ? 'تنبيه' : 'Alert',
+                                message: isAr ? 'يرجى تسجيل الدخول مرة أخرى.' : 'Please sign in again.'
+                              });
+                              return;
+                            }
+
+                            try {
+                              const endpoint = editingReviewId ? '/api/reviews' : '/api/reviews';
+                              const method = editingReviewId ? 'PUT' : 'POST';
+                              const body = editingReviewId
+                                ? { review_id: editingReviewId, product_id: selectedProduct.id, rating: ratingVal, comment: commentText.trim() }
+                                : { product_id: selectedProduct.id, rating: ratingVal, comment: commentText.trim() };
+
+                              const res = await fetch(endpoint, {
+                                method,
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': 'Bearer ' + token
+                                },
+                                body: JSON.stringify(body)
+                              });
+                              const result = await res.json().catch(() => null);
+
+                              if (!res.ok || !result?.success || !result?.data) {
+                                throw new Error(result?.error || 'Failed to save review');
+                              }
+
+                              const savedReview = result.data;
+                              const normalizedReview = {
+                                ...savedReview,
+                                productName: selectedProduct.name,
+                                date: savedReview.created_at ? new Date(savedReview.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                              };
+
+                              setCustomerReviews(prev =>
+                                editingReviewId
+                                  ? prev.map(review => review.id === editingReviewId ? normalizedReview : review)
+                                  : [normalizedReview, ...prev]
+                              );
                               setEditingReviewId(null);
                               dispatchNotification({
                                 type: 'system',
                                 variant: 'toast',
                                 title: isAr ? 'نجاح' : 'Success',
-                                message: isAr ? 'شكراً لك! تم تعديل تقييمك بنجاح.' : 'Thank you! Your review has been updated successfully.'
+                                message: editingReviewId
+                                  ? (isAr ? 'تم تعديل تقييمك وإرساله للمراجعة.' : 'Your review was updated and sent for moderation.')
+                                  : (isAr ? 'شكراً لك! تم إرسال تقييمك للمراجعة.' : 'Thank you! Your review was submitted for moderation.')
                               });
-                            } else {
-                              const newReview = {
-                                id: 'rev-' + Date.now(),
-                                productName: pName,
-                                rating: ratingVal,
-                                comment: commentText,
-                                date: new Date().toISOString().split('T')[0]
-                              };
-                              setCustomerReviews(prev => [newReview, ...prev]);
+                              (e.target as HTMLFormElement).reset();
+                            } catch (error: any) {
+                              console.error('Failed to save customer review:', error);
                               dispatchNotification({
                                 type: 'system',
                                 variant: 'toast',
-                                title: isAr ? 'نجاح' : 'Success',
-                                message: isAr ? 'شكراً لك! تم إرسال تقييمك بنجاح.' : 'Thank you! Your review has been submitted successfully.'
+                                title: isAr ? 'خطأ' : 'Error',
+                                message: error?.message || (isAr ? 'تعذر حفظ التقييم.' : 'Unable to save the review.')
                               });
                             }
-                            (e.target as HTMLFormElement).reset();
                           }}
                           className="space-y-4 font-sans text-xs"
                         >
@@ -1743,10 +1829,11 @@ export default function Dashboards({
                                 name="reviewProduct"
                                 className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]/50"
                               >
-                                <option value="Royal Bisht Thobe">{isAr ? 'ثوب البشت الملكي الفاخر' : 'Royal Bisht Thobe'}</option>
-                                <option value="Premium Cashmere Al-Ula Ghutra">{isAr ? 'شماغ العلا كشمير صوف ممتاز' : 'Premium Cashmere Al-Ula Ghutra'}</option>
-                                <option value="Ivory Suede Sandals">{isAr ? 'حذاء شامواه عاجي راقي' : 'Ivory Suede Sandals'}</option>
-                                <option value="AL ZOAL Pure Dehn El-Oud Concentrate">{isAr ? 'دهن عود صافي مركز من زول' : 'AL ZOAL Pure Dehn El-Oud Concentrate'}</option>
+                                {allProducts.map((product: any) => (
+                                  <option key={product.id} value={product.id}>
+                                    {product.name}
+                                  </option>
+                                ))}
                               </select>
                             </div>
 
@@ -1912,7 +1999,7 @@ export default function Dashboards({
                                     onClick={() => {
                                       setEditingReviewId(rev.id);
                                       const selProdEl = document.getElementById('reviewProductSelect') as HTMLSelectElement;
-                                      if (selProdEl) selProdEl.value = rev.productName;
+                                      if (selProdEl) selProdEl.value = rev.product_id || '';
                                       window.scrollTo({ top: 350, behavior: 'smooth' });
                                     }}
                                     className="px-3 py-1 bg-black border border-white/10 hover:border-[#D4AF37]/50 text-zinc-300 hover:text-white rounded-xs text-[10px] uppercase font-semibold transition-all cursor-pointer"
