@@ -30,21 +30,16 @@ jobs:
           lines = s.splitlines(True)
           out = []
           for line in lines:
-              stripped = line.strip()
-              if stripped == "') })}":
+              if line.strip() == "') })}":
                   continue
               out.append(line)
-          s = ''.join(out)
-          p.write_text(s, encoding='utf-8')
+          p.write_text(''.join(out), encoding='utf-8')
           PY
           if grep -nF "') })}" src/components/StaffDashboard.tsx; then
             echo 'ERROR: stray JSX corruption remains'
             exit 1
           fi
-          grep -n "nonReturnableEn.join" src/components/StaffDashboard.tsx
-          grep -n "nonReturnableAr.join" src/components/StaffDashboard.tsx
-          grep -n "exchangeOptionsEn.join" src/components/StaffDashboard.tsx
-          grep -n "exchangeOptionsAr.join" src/components/StaffDashboard.tsx
+          git diff --check
 
       - name: Commit restored source
         shell: bash
