@@ -2699,7 +2699,8 @@ app.delete('/api/admin/customers/:id', authenticateRequest, requireRole(['staff'
 
 // -------------------------------------------------------------
 // STAFF DASHBOARD API ROUTES
-app.get('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
+app.get('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffRoster);
+app.put('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateStaffOrder);
 app.post('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.createStaffLog);
 app.get('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
 app.post('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateDutyStatus);
