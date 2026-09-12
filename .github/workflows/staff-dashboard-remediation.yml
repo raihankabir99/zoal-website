@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - audit/dashboard-sync-fix
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,7 +24,6 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
-          import re
 
           p = Path('src/components/StaffDashboard.tsx')
           s = p.read_text()
@@ -76,7 +76,12 @@ jobs:
                 });
                 if (!response.ok) return;
                 const payload = await response.json();
-                if (!cancelled) setAuthoritativeCustomers(Array.isArray(payload?.customers) ? payload.customers : []);
+                const customers = Array.isArray(payload?.customers)
+                  ? payload.customers
+                  : Array.isArray(payload?.data?.customers)
+                    ? payload.data.customers
+                    : [];
+                if (!cancelled) setAuthoritativeCustomers(customers);
               } catch {
                 if (!cancelled) setAuthoritativeCustomers([]);
               }
@@ -185,20 +190,17 @@ jobs:
           if old not in s: raise SystemExit('Expected fabricated tailoring metric not found')
           s = s.replace(old, new, 1)
 
-          old = """                  <div className=\"h-[210px] w-full\">\n                    <ResponsiveContainer width=\"100%\" height=\"100%\">"""
-          new = """                  <div className=\"h-[210px] w-full flex items-center justify-center border border-white/5 bg-black/30\">\n                    <span className=\"text-[10px] font-mono uppercase tracking-wider text-zinc-500\">Not Available — authoritative SLA history is not connected</span>\n                  </div>\n                  {false && <ResponsiveContainer width=\"100%\" height=\"100%\">"""
-          if old not in s: raise SystemExit('Expected SLA chart anchor not found')
-          s = s.replace(old, new, 1)
-          old_close = """                    </ResponsiveContainer>\n                  </div>"""
-          if old_close not in s: raise SystemExit('Expected SLA chart closing anchor not found')
-          s = s.replace(old_close, """                    </ResponsiveContainer>}\n                  </div>""", 1)
-
+          # Do not use a broad ResponsiveContainer replacement. Leave SLA visualization untouched
+          # unless its exact section is independently verified; static/fabricated SLA data remains a HOLD.
           p.write_text(s)
 
           h = Path('src/app/api/helpers.ts')
           hs = h.read_text()
-          hs = hs.replace("allowedRoles: ('customer' | 'staff' | 'admin')[]", "allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]", 1)
-          h.write_text(hs)
+          old_helper = "allowedRoles: ('customer' | 'staff' | 'admin')[]"
+          new_helper = "allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]"
+          if old_helper in hs:
+              hs = hs.replace(old_helper, new_helper, 1)
+              h.write_text(hs)
           PY
 
       - name: Verify exact remediation anchors
@@ -207,6 +209,7 @@ jobs:
           ! grep -n "Password changed successfully!" src/components/StaffDashboard.tsx
           grep -n "/api/staff/duty-status" src/components/StaffDashboard.tsx
           grep -n "/api/auth/change-password" src/components/StaffDashboard.tsx
+          grep -n "authoritativeCustomers" src/components/StaffDashboard.tsx
           grep -n "Not Available" src/components/StaffDashboard.tsx
 
       - name: Commit remediation
