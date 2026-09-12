@@ -25,11 +25,7 @@ export async function GET(req: NextRequest) {
       if (auth.error) return auth.error;
       query = query.eq('user_id', auth.user!.id);
     } else {
-      if (productId) {
-        query = query.eq('product_id', productId);
-      }
-
-      // Public review feed only exposes approved reviews.
+      if (productId) query = query.eq('product_id', productId);
       query = query.eq('is_approved', true);
     }
 
@@ -48,16 +44,11 @@ export async function GET(req: NextRequest) {
         totalPages: Math.ceil((count || 0) / limit),
       }
     });
-
   } catch (err: any) {
     return apiError(err.message || 'Server error', 500);
   }
 }
 
-/**
- * POST /api/reviews
- * Submit a review for a luxury product. (RBAC: Authenticated Customer)
- */
 /**
  * PUT /api/reviews
  * Update an authenticated customer's own review.
@@ -77,6 +68,29 @@ export async function PUT(req: NextRequest) {
     const rating = parseInt(body.rating, 10);
     if (isNaN(rating) || rating < 1 || rating > 5) {
       return apiError('Rating must be an integer between 1 and 5 stars', 400);
+    }
+
+    if (user.role === 'customer') {
+      const { data: eligibleOrders, error: orderError } = await supabase
+        .from('zoal_orders')
+        .select('id')
+        .eq('customer_id', user.id)
+        .in('status', ['delivered', 'completed']);
+
+      if (orderError) return apiError(orderError.message, 500);
+      const orderIds = (eligibleOrders || []).map((order: any) => order.id);
+      if (orderIds.length === 0) return apiError('Reviews are available only for products from completed purchases.', 403);
+
+      const { data: purchasedItem, error: itemError } = await supabase
+        .from('zoal_order_items')
+        .select('id')
+        .eq('product_id', body.product_id)
+        .in('order_id', orderIds)
+        .limit(1)
+        .maybeSingle();
+
+      if (itemError) return apiError(itemError.message, 500);
+      if (!purchasedItem) return apiError('You can review only products from your completed purchases.', 403);
     }
 
     const { data: review, error } = await supabase
@@ -127,6 +141,10 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
+/**
+ * POST /api/reviews
+ * Submit a review for a product. Customer reviews require a completed purchase.
+ */
 export async function POST(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
 
@@ -144,6 +162,40 @@ export async function POST(req: NextRequest) {
       return apiError('Rating must be an integer between 1 and 5 stars', 400);
     }
 
+    if (user.role === 'customer') {
+      const { data: eligibleOrders, error: orderError } = await supabase
+        .from('zoal_orders')
+        .select('id')
+        .eq('customer_id', user.id)
+        .in('status', ['delivered', 'completed']);
+
+      if (orderError) return apiError(orderError.message, 500);
+      const orderIds = (eligibleOrders || []).map((order: any) => order.id);
+      if (orderIds.length === 0) return apiError('Reviews are available only for products from completed purchases.', 403);
+
+      const { data: purchasedItem, error: itemError } = await supabase
+        .from('zoal_order_items')
+        .select('id')
+        .eq('product_id', body.product_id)
+        .in('order_id', orderIds)
+        .limit(1)
+        .maybeSingle();
+
+      if (itemError) return apiError(itemError.message, 500);
+      if (!purchasedItem) return apiError('You can review only products from your completed purchases.', 403);
+
+      const { data: existingReview, error: existingError } = await supabase
+        .from('zoal_reviews')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('product_id', body.product_id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) return apiError(existingError.message, 500);
+      if (existingReview) return apiError('You already have a review for this product.', 409);
+    }
+
     const { data: review, error } = await supabase
       .from('zoal_reviews')
       .insert({
@@ -159,7 +211,6 @@ export async function POST(req: NextRequest) {
 
     if (error) return apiError(error.message, 500);
     return apiResponse(review, 201);
-
   } catch (err: any) {
     return apiError(err.message || 'Server error', 500);
   }
