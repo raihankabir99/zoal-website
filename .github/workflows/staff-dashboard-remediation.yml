@@ -190,8 +190,6 @@ jobs:
           if old not in s: raise SystemExit('Expected fabricated tailoring metric not found')
           s = s.replace(old, new, 1)
 
-          # Do not use a broad ResponsiveContainer replacement. Leave SLA visualization untouched
-          # unless its exact section is independently verified; static/fabricated SLA data remains a HOLD.
           p.write_text(s)
 
           h = Path('src/app/api/helpers.ts')
@@ -221,3 +219,5 @@ jobs:
           git diff --cached --stat
           git commit -m "fix(staff): remove fabricated dashboard behavior"
           git push origin audit/dashboard-sync-fix
+
+# Controlled trigger touch: execute the already-reviewed minimal remediation workflow on the audit branch.
