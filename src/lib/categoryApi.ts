@@ -32,12 +32,7 @@ import { supabaseClient } from './supabaseClient';
 
 const getToken = async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  return session?.access_token ||
-    localStorage.getItem('zoal_auth_token') ||
-    sessionStorage.getItem('zoal_auth_token') ||
-    localStorage.getItem('auth_token') ||
-    sessionStorage.getItem('auth_token') ||
-    '';
+  return session?.access_token || '';
 };
 
 const request = async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -64,18 +59,12 @@ export const categoryApi = {
   },
 
   async create(category: Omit<CategoryApiRecord, 'id' | 'createdAt' | 'updatedAt'>) {
-    const payload = await request('/api/categories', {
-      method: 'POST',
-      body: JSON.stringify({ ...category, parentId: category.parent ?? null }),
-    });
+    const payload = await request('/api/categories', { method: 'POST', body: JSON.stringify({ ...category, parentId: category.parent ?? null }) });
     return payload?.data || payload?.category || payload;
   },
 
   async update(id: string, category: Partial<CategoryApiRecord>) {
-    const payload = await request('/api/categories', {
-      method: 'PUT',
-      body: JSON.stringify({ ...category, id, parentId: category.parent }),
-    });
+    const payload = await request('/api/categories', { method: 'PUT', body: JSON.stringify({ ...category, id, parentId: category.parent }) });
     return payload?.data || payload?.category || payload;
   },
 
@@ -105,10 +94,7 @@ export const categoryApi = {
   },
 
   async bulkImport(items: Partial<CategoryApiRecord>[], mode: 'merge' | 'skip') {
-    const payload = await request('/api/categories', {
-      method: 'PATCH',
-      body: JSON.stringify({ operation: 'bulk-import', mode, items })
-    });
+    const payload = await request('/api/categories', { method: 'PATCH', body: JSON.stringify({ operation: 'bulk-import', mode, items }) });
     return payload?.data || payload;
   },
 
