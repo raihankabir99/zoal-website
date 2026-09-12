@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { supabaseClient } from '../../lib/supabaseClient';
 
 interface AnalyticsOverviewProps {
   metrics: any;
@@ -17,26 +18,32 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({ formatCurrency })
 
   useEffect(() => {
     let cancelled = false;
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || localStorage.getItem('auth_token') || '';
-    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-    fetch('/api/admin/dashboard-analytics', { headers })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Dashboard analytics returned ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
+    const loadAnalytics = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session?.access_token) throw new Error('No active authenticated session');
+
+        const response = await fetch('/api/admin/dashboard-analytics', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Dashboard analytics returned ${response.status}`);
+
+        const data = await response.json();
         if (!cancelled && data?.metrics) {
           setServerData(data);
           setAnalyticsError(false);
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         if (!cancelled) {
           console.error('Failed to load server-authoritative dashboard analytics:', error);
           setAnalyticsError(true);
         }
-      });
+      }
+    };
+
+    loadAnalytics();
 
     return () => {
       cancelled = true;
@@ -44,7 +51,7 @@ const AnalyticsOverview: React.FC<AnalyticsOverviewProps> = ({ formatCurrency })
   }, []);
 
   // Dashboard values must come exclusively from the server-authoritative analytics endpoint.
-  // Never fall back to the legacy client-computed metrics or synthetic chart data.
+  // Never fall back to legacy client-computed metrics or synthetic chart data.
   const metrics = serverData?.metrics || {};
   const revenueTrendData = serverData?.revenueTrendData || [];
   const categoryPerformanceData = useMemo(() => {
