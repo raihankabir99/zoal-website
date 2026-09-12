@@ -1,0 +1,59 @@
+name: Admin Dashboard Authority Fix V2
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'fix(admin-dashboard): remove client fixtures and synthetic identity data') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+      - name: Apply guarded patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/AdminDashboard.tsx')
+          s = p.read_text(encoding='utf-8')
+          if "import React, { useState, useMemo, useEffect, useRef } from 'react';" not in s:
+              raise SystemExit('Expected source signature not found; aborting without changes.')
+          s = s.replace("import React, { useState, useMemo, useEffect, useRef } from 'react';", "import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';", 1)
+          start = s.find("  // Local state for categories (loaded from localStorage or default)\n  const [categories, setCategories] = useState<any[]>(() => {")
+          end = s.find("\n\n  // Local state for brands", start)
+          if start < 0 or end < 0: raise SystemExit('Category state guard failed.')
+          s = s[:start] + "  // Categories are hydrated by CategoryManagement from the authoritative API.\n  const [categories, setCategories] = useState<any[]>([]);" + s[end:]
+          start = s.find("  // Local state for brands\n  const [brands, setBrands] = useState<any[]>(() => {")
+          end = s.find("\n\n  // ENTERPRISE STATES & OVERRIDES", start)
+          if start < 0 or end < 0: raise SystemExit('Brand state guard failed.')
+          s = s[:start] + "  // Brands are hydrated by BrandManagement from the authoritative API.\n  const [brands, setBrands] = useState<any[]>([]);" + s[end:]
+          if "ip: l.ip || '127.0.0.1'," in s:
+              s = s.replace("ip: l.ip || '127.0.0.1',", "ip: l.ip || 'Unavailable',", 1)
+          if "ip: '127.0.0.1'," in s:
+              s = s.replace("ip: '127.0.0.1',", "ip: 'Unavailable',", 1)
+          if "const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;" in s:
+              s = s.replace("const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;", "const uniqueId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? `log-${crypto.randomUUID()}` : `log-${Date.now()}`;", 1)
+          if "const totalStaff = 5;" in s:
+              s = s.replace("const totalStaff = 5;", "const totalStaff = staffList.filter((staff: any) => staff?.status !== 'inactive').length;", 1)
+          s = s.replace("  }, [orders, allProducts]);\n\n  // Chart Data preparation", "  }, [orders, allProducts, staffList]);\n\n  // Chart Data preparation", 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Verify
+        run: |
+          git diff --check
+          npm ci
+          npm run build
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/AdminDashboard.tsx
+          git diff --cached --check
+          git commit -m 'fix(admin-dashboard): remove client fixtures and synthetic identity data'
+          git push origin audit/dashboard-sync-fix
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/admin-dashboard-authority-fix-v2.yml
+          git commit -m 'chore(audit): remove temporary admin authority remediation workflow v2'
+          git push origin audit/dashboard-sync-fix
