@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const productId = url.searchParams.get('productId');
+    const mine = url.searchParams.get('mine') === 'true';
     const limit = parseInt(url.searchParams.get('limit') || '10', 10);
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const offset = (page - 1) * limit;
@@ -19,13 +20,16 @@ export async function GET(req: NextRequest) {
       .from('zoal_reviews')
       .select('*, zoal_users(first_name, last_name)', { count: 'exact' });
 
-    if (productId) {
-      query = query.eq('product_id', productId);
-    }
+    if (mine) {
+      const auth = await verifyAuthAndRole(req, ['customer', 'staff', 'admin']);
+      if (auth.error) return auth.error;
+      query = query.eq('user_id', auth.user!.id);
+    } else {
+      if (productId) {
+        query = query.eq('product_id', productId);
+      }
 
-    // Default: only display approved reviews to public
-    const showAll = url.searchParams.get('showAll') === 'true';
-    if (!showAll) {
+      // Public review feed only exposes approved reviews.
       query = query.eq('is_approved', true);
     }
 
@@ -54,6 +58,75 @@ export async function GET(req: NextRequest) {
  * POST /api/reviews
  * Submit a review for a luxury product. (RBAC: Authenticated Customer)
  */
+/**
+ * PUT /api/reviews
+ * Update an authenticated customer's own review.
+ */
+export async function PUT(req: NextRequest) {
+  if (!checkRateLimit(req)) return apiError('Too many requests', 429);
+
+  try {
+    const auth = await verifyAuthAndRole(req, ['customer', 'staff', 'admin']);
+    if (auth.error) return auth.error;
+    const user = auth.user!;
+
+    const body = await req.json();
+    const validationErr = validateFields(body, ['review_id', 'product_id', 'rating', 'comment']);
+    if (validationErr) return apiError(validationErr, 400);
+
+    const rating = parseInt(body.rating, 10);
+    if (isNaN(rating) || rating < 1 || rating > 5) {
+      return apiError('Rating must be an integer between 1 and 5 stars', 400);
+    }
+
+    const { data: review, error } = await supabase
+      .from('zoal_reviews')
+      .update({
+        product_id: body.product_id,
+        rating,
+        comment: body.comment,
+        is_approved: false
+      })
+      .eq('id', body.review_id)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) return apiError(error.message, 500);
+    return apiResponse(review);
+  } catch (err: any) {
+    return apiError(err.message || 'Server error', 500);
+  }
+}
+
+/**
+ * DELETE /api/reviews
+ * Delete an authenticated customer's own review.
+ */
+export async function DELETE(req: NextRequest) {
+  if (!checkRateLimit(req)) return apiError('Too many requests', 429);
+
+  try {
+    const auth = await verifyAuthAndRole(req, ['customer', 'staff', 'admin']);
+    if (auth.error) return auth.error;
+    const user = auth.user!;
+
+    const reviewId = new URL(req.url).searchParams.get('review_id');
+    if (!reviewId) return apiError("Missing required field: 'review_id'", 400);
+
+    const { error } = await supabase
+      .from('zoal_reviews')
+      .delete()
+      .eq('id', reviewId)
+      .eq('user_id', user.id);
+
+    if (error) return apiError(error.message, 500);
+    return apiResponse({ deleted: true, reviewId });
+  } catch (err: any) {
+    return apiError(err.message || 'Server error', 500);
+  }
+}
+
 export async function POST(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
 
