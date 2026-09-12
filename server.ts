@@ -29,6 +29,7 @@ import * as productImportModule from './server/product_import';
 import * as productsCrudModule from './server/products_crud';
 import * as warehousesModule from './server/warehouses';
 import * as crmModule from './server/crm';
+import * as staffModule from './server/staff';
 import pg from 'pg';
 import { resolveShippingOptions, calculateAuthoritativeShippingFee, getProvider, isMockShippingEnabled } from './server/shipping';
 const { Client } = pg;
@@ -775,38 +776,39 @@ app.get('/api/auth/dev-config', (req, res) => {
 // Change Password (Authenticated User)
 app.post('/api/auth/change-password', authenticateRequest, async (req: any, res) => {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword) {
-      return res.status(400).json({ error: 'New password is required.' });
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required.' });
     }
-
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!passwordRegex.test(newPassword)) {
-      return res.status(400).json({
-        error: 'New password must be at least 8 characters long, contain at least one uppercase letter, one number, and one special character.'
-      });
+      return res.status(400).json({ error: 'New password must be at least 8 characters long, contain at least one uppercase letter, one number, and one special character.' });
     }
-
     const supabase = getSupabaseClient();
-    if (!supabase) {
-      return res.status(500).json({ error: 'Supabase client not initialized.' });
-    }
+    if (!supabase || !req.user?.id) return res.status(503).json({ error: 'Authentication service unavailable.' });
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
+    const { data: user, error: userError } = await supabase
+      .from('zoal_users')
+      .select('id,password_hash')
+      .eq('id', req.user.id)
+      .single();
+    if (userError || !user) return res.status(401).json({ error: 'Unable to verify account credentials.' });
 
-    if (error) throw error;
+    const currentHash = Buffer.from(currentPassword).toString('base64');
+    if (user.password_hash !== currentHash) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+    const nextHash = Buffer.from(newPassword).toString('base64');
+    const { error: updateError } = await supabase
+      .from('zoal_users')
+      .update({ password_hash: nextHash })
+      .eq('id', req.user.id);
+    if (updateError) return res.status(500).json({ error: 'Failed to update password.' });
 
     await logActivityAsync(req.user.id, req.user.email, 'PASSWORD_CHANGED', req.ip || '', req.headers['user-agent'] || '');
-
-    return res.json({
-      success: true,
-      message: 'Password updated successfully!'
-    });
+    return res.json({ success: true, message: 'Password updated successfully!' });
   } catch (error: any) {
     console.error('Password change error:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error during password change.' });
+    return res.status(500).json({ error: 'Password change failed.' });
   }
 });
 
@@ -2694,6 +2696,14 @@ app.post('/api/admin/customers/:id/status', authenticateRequest, requireRole(['s
 app.post('/api/admin/customers/:id/notes', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.addCustomerNote);
 app.post('/api/admin/customers/:id/communications', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.addCustomerCommunication);
 app.delete('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.deleteOrDeactivateCustomer);
+
+// -------------------------------------------------------------
+// STAFF DASHBOARD API ROUTES
+app.get('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
+app.post('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.createStaffLog);
+app.get('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
+app.post('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateDutyStatus);
+app.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getDutyStatus);
 
 // -------------------------------------------------------------
 // SUPPORT CENTER API ROUTES
