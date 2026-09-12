@@ -135,6 +135,17 @@ export function useNotificationEngine(currentUser: any) {
     };
   }, []);
 
+  const notificationScope = (query: any) => {
+    if (!currentUser) return query;
+    const userId = currentUser.id || '';
+    const email = currentUser.email || '';
+    const role = (currentUser.role || 'customer').toLowerCase();
+    if (role === 'staff') return query.or(`user_id.eq.${userId},assigned_staff_id.eq.${userId},target_role.eq.staff,target_role.eq.all`);
+    if (role === 'admin' || role === 'manager') return query.or(`user_id.eq.${userId},assigned_staff_id.eq.${userId},target_role.eq.admin,target_role.eq.all`);
+    if (role === 'owner') return query.or(`user_id.eq.${userId},assigned_staff_id.eq.${userId}`);
+    return query.or(`user_id.eq.${userId},user_email.eq.${email}`);
+  };
+
   // Filtering notifications for currentUser (Double lock security)
   const userNotifications = useMemo(() => {
     return filterNotificationsByRole(notifications, currentUser);
@@ -151,7 +162,7 @@ export function useNotificationEngine(currentUser: any) {
       return prev.map(n => (n.id === id ? { ...n, read: true } : n));
     });
     try {
-      const { error } = await supabaseClient.from('zoal_notifications').update({ read: true }).eq('id', id);
+      const { error } = await notificationScope(supabaseClient.from('zoal_notifications').update({ read: true }).eq('id', id));
       if (error) {
         setNotifications(previousState);
         console.error('Failed to mark notification as read in DB:', error.message);
@@ -173,7 +184,7 @@ export function useNotificationEngine(currentUser: any) {
     try {
       const ids = userNotifications.map(n => n.id);
       if (ids.length > 0) {
-        const { error } = await supabaseClient.from('zoal_notifications').update({ read: true }).in('id', ids);
+        const { error } = await notificationScope(supabaseClient.from('zoal_notifications').update({ read: true }).in('id', ids));
         if (error) {
           setNotifications(previousState);
           console.error('Failed to mark all notifications as read in DB:', error.message);
@@ -194,7 +205,7 @@ export function useNotificationEngine(currentUser: any) {
       return prev.map(n => (n.id === id ? { ...n, archived: true } : n));
     });
     try {
-      const { error } = await supabaseClient.from('zoal_notifications').update({ archived: true }).eq('id', id);
+      const { error } = await notificationScope(supabaseClient.from('zoal_notifications').update({ archived: true }).eq('id', id));
       if (error) {
         setNotifications(previousState);
         console.error('Failed to archive notification in DB:', error.message);
@@ -214,7 +225,7 @@ export function useNotificationEngine(currentUser: any) {
       return prev.filter(n => n.id !== id);
     });
     try {
-      const { error } = await supabaseClient.from('zoal_notifications').delete().eq('id', id);
+      const { error } = await notificationScope(supabaseClient.from('zoal_notifications').delete().eq('id', id));
       if (error) {
         setNotifications(previousState);
         console.error('Failed to delete notification from DB:', error.message);
@@ -236,7 +247,7 @@ export function useNotificationEngine(currentUser: any) {
     });
     try {
       if (idsToClear.length > 0) {
-        const { error } = await supabaseClient.from('zoal_notifications').delete().in('id', idsToClear);
+        const { error } = await notificationScope(supabaseClient.from('zoal_notifications').delete().in('id', idsToClear));
         if (error) {
           setNotifications(previousState);
           console.error('Failed to clear notifications from DB:', error.message);
