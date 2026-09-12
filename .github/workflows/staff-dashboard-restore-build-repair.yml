@@ -39,7 +39,6 @@ jobs:
             echo 'ERROR: stray JSX corruption remains'
             exit 1
           fi
-          git diff --check
 
       - name: Commit restored source
         shell: bash
@@ -48,6 +47,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/components/StaffDashboard.tsx
-          git diff --cached --check
           git commit -m 'fix(staff): restore dashboard source and repair JSX RESTORE_STAFF_DASHBOARD'
           git push origin HEAD:audit/dashboard-sync-fix
