@@ -7,53 +7,74 @@ on:
 
 jobs:
   repair:
-    if: "!contains(github.event.head_commit.message, 'RESTORE_STAFF_DASHBOARD')"
+    if: "!contains(github.event.head_commit.message, 'REPAIR_STAFF_DASHBOARD')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout current branch
         uses: actions/checkout@v4
         with:
           ref: audit/dashboard-sync-fix
           fetch-depth: 0
 
-      - name: Restore last known StaffDashboard source and repair JSX
+      - name: Repair malformed Returns JSX deterministically
         shell: bash
         run: |
           set -euo pipefail
-          git checkout 7f0a3f7b8abd95e56f9fd9c17dc63b22919d9160 -- src/components/StaffDashboard.tsx
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/components/StaffDashboard.tsx')
           s = p.read_text(encoding='utf-8')
           names = ('nonReturnableEn','nonReturnableAr','exchangeOptionsEn','exchangeOptionsAr')
+          lines = s.splitlines(True)
           out = []
-          for line in s.splitlines(True):
+          i = 0
+          while i < len(lines):
+              line = lines[i]
               stripped = line.strip()
               if stripped == "') })}":
+                  i += 1
                   continue
-              replaced = False
+              matched = None
               for name in names:
-                  if f"{name}: e.target.value.split(" in line:
-                      indent = line[:len(line) - len(line.lstrip())]
-                      out.append(indent + f"onChange={{(e) => setLocalReturnsConfig({{ ...returnsConfig, {name}: e.target.value.split('\\n') }})}}\n")
-                      replaced = True
+                  if f'{name}: e.target.value.split(' in line:
+                      matched = name
                       break
-              if not replaced:
-                  out.append(line)
+              if matched:
+                  indent = line[:len(line) - len(line.lstrip())]
+                  out.append(indent + f"onChange={{(e) => setLocalReturnsConfig({{ ...returnsConfig, {matched}: e.target.value.split('\\n') }})}}\n")
+                  i += 1
+                  continue
+              out.append(line)
+              i += 1
           p.write_text(''.join(out), encoding='utf-8')
           PY
-          if grep -nF "') })}" src/components/StaffDashboard.tsx; then
-            echo 'ERROR: stray JSX corruption remains'
-            exit 1
-          fi
-          if grep -nE "split\('[^']*$" src/components/StaffDashboard.tsx; then
-            echo 'ERROR: unterminated split literal remains'
-            exit 1
-          fi
 
-      - name: Commit restored source
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('src/components/StaffDashboard.tsx').read_text(encoding='utf-8')
+          required = {
+              'nonReturnableEn': "nonReturnableEn: e.target.value.split('\\n')",
+              'nonReturnableAr': "nonReturnableAr: e.target.value.split('\\n')",
+              'exchangeOptionsEn': "exchangeOptionsEn: e.target.value.split('\\n')",
+              'exchangeOptionsAr': "exchangeOptionsAr: e.target.value.split('\\n')",
+          }
+          for name, fragment in required.items():
+              if fragment not in s:
+                  raise SystemExit(f'MISSING repaired handler: {name}')
+          if "') })}" in s:
+              raise SystemExit('Stray corrupted JSX remains')
+          Path('/tmp/verified').write_text('ok')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript/build verification
+        run: npm run build
+
+      - name: Commit repaired source
         shell: bash
         run: |
           set -euo pipefail
@@ -61,5 +82,9 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/components/StaffDashboard.tsx
           git diff --cached --check
-          git commit -m 'fix(staff): repair malformed returns JSX RESTORE_STAFF_DASHBOARD'
+          if git diff --cached --quiet; then
+            echo 'No source repair was necessary.'
+            exit 0
+          fi
+          git commit -m 'fix(staff): repair malformed returns JSX REPAIR_STAFF_DASHBOARD'
           git push origin HEAD:audit/dashboard-sync-fix
