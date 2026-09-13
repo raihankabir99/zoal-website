@@ -25,6 +25,7 @@
   },
   "exclude": [
     "src/app/api",
-    "api"
+    "api",
+    "server.ts"
   ]
 }

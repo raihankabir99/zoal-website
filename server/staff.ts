@@ -4,7 +4,7 @@ import { getServiceSupabaseClient, getSupabaseClient } from './supabase';
 const getClient = () => getServiceSupabaseClient() || getSupabaseClient();
 const VALID_DUTY_STATUSES = new Set(['active', 'break', 'offline']);
 
-export async function getDutyStatus(req: Request, res: Response) {
+export async function getDutyStatus(req: any, res: Response) {
   try {
     const client = getClient();
     if (!client || !req.user?.id) return res.status(503).json({ error: 'Staff data service unavailable' });
@@ -17,7 +17,7 @@ export async function getDutyStatus(req: Request, res: Response) {
   }
 }
 
-export async function updateDutyStatus(req: Request, res: Response) {
+export async function updateDutyStatus(req: any, res: Response) {
   try {
     const status = String(req.body?.status || '');
     if (!VALID_DUTY_STATUSES.has(status)) return res.status(400).json({ error: 'Invalid duty status' });
@@ -32,7 +32,7 @@ export async function updateDutyStatus(req: Request, res: Response) {
   }
 }
 
-export async function getStaffLogs(req: Request, res: Response) {
+export async function getStaffLogs(req: any, res: Response) {
   try {
     const client = getClient();
     if (!client) return res.status(503).json({ error: 'Staff data service unavailable' });
@@ -46,7 +46,7 @@ export async function getStaffLogs(req: Request, res: Response) {
   }
 }
 
-export async function createStaffLog(req: Request, res: Response) {
+export async function createStaffLog(req: any, res: Response) {
   try {
     const action = String(req.body?.action || '').trim();
     const target = String(req.body?.target || '').trim();
