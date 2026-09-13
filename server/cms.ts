@@ -92,16 +92,35 @@ export async function getCmsData(req: Request, res: Response) {
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
-  const { data: pages, error: pagesError } = await supabase.from('zoal_cms_pages').select('*');
-  const { data: sections, error: sectionsError } = await supabase.from('zoal_cms_sections').select('*');
-  const { data: banners, error: bannersError } = await supabase.from('zoal_banners').select('*');
-  const { data: blocks, error: blocksError } = await supabase.from('zoal_homepage_blocks').select('*');
+  const hasPrivilegedRole = (req as any).user && ['admin', 'staff', 'manager', 'owner'].includes((req as any).user.role);
+
+  let pagesQuery = supabase.from('zoal_cms_pages').select('*');
+  let sectionsQuery = supabase.from('zoal_cms_sections').select('*');
+  let bannersQuery = supabase.from('zoal_banners').select('*');
+  let blocksQuery = supabase.from('zoal_homepage_blocks').select('*');
+
+  if (!hasPrivilegedRole) {
+    pagesQuery = pagesQuery.eq('published', true);
+    bannersQuery = bannersQuery.eq('is_active', true);
+    blocksQuery = blocksQuery.eq('is_active', true);
+  }
+
+  const { data: pages, error: pagesError } = await pagesQuery;
+  const { data: sections, error: sectionsError } = await sectionsQuery;
+  const { data: banners, error: bannersError } = await bannersQuery;
+  const { data: blocks, error: blocksError } = await blocksQuery;
 
   if (pagesError || sectionsError || bannersError || blocksError) {
     return res.status(500).json({ error: 'Failed to fetch CMS data.' });
   }
 
-  res.json({ pages, sections, banners, blocks });
+  let filteredSections = sections || [];
+  if (!hasPrivilegedRole && pages) {
+    const publishedPageIds = new Set(pages.map(p => p.id));
+    filteredSections = (sections || []).filter(sec => publishedPageIds.has(sec.page_id));
+  }
+
+  res.json({ pages: pages || [], sections: filteredSections, banners: banners || [], blocks: blocks || [] });
 }
 
 export async function updateCmsPage(req: Request, res: Response) {
@@ -130,10 +149,14 @@ export async function getHomepageHeroes(req: Request, res: Response) {
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.json([]);
 
-  const { data, error } = await supabase
-    .from('zoal_homepage_heroes')
-    .select('*')
-    .order('display_order', { ascending: true });
+  const hasPrivilegedRole = (req as any).user && ['admin', 'staff', 'manager', 'owner'].includes((req as any).user.role);
+
+  let query = supabase.from('zoal_homepage_heroes').select('*');
+  if (!hasPrivilegedRole) {
+    query = query.eq('active', true);
+  }
+
+  const { data, error } = await query.order('display_order', { ascending: true });
 
   if (error) {
     console.error('Error fetching homepage heroes:', error);
@@ -504,9 +527,14 @@ export async function getHomepageEditorialBlocks(req: Request, res: Response) {
     }
   }
 
-  const { data, error } = await supabase
-    .from('zoal_homepage_editorial_blocks')
-    .select('*')
+  const hasPrivilegedRole = (req as any).user && ['admin', 'staff', 'manager', 'owner'].includes((req as any).user.role);
+
+  let query = supabase.from('zoal_homepage_editorial_blocks').select('*');
+  if (!hasPrivilegedRole) {
+    query = query.eq('status', 'published');
+  }
+
+  const { data, error } = await query
     .order('priority', { ascending: false })
     .order('display_order', { ascending: true });
 

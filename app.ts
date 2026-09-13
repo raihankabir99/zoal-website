@@ -147,7 +147,7 @@ app.use('/api', rateLimiterMiddleware(120, 15 * 60 * 1000)); // Max 120 requests
 app.use(telemetryMiddleware);
 
 // Expose telemetry metrics API
-app.get('/api/telemetry/metrics', (req, res) => {
+app.get('/api/telemetry/metrics', authenticateRequest, requireRole(['owner', 'admin']), (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -4869,7 +4869,7 @@ app.get('/api/support/teams', requirePermission('can_manage_support'), async (re
 // =========================================================================
 
 // CMS Routes
-app.get('/api/cms', cmsModule.getCmsData);
+app.get('/api/cms', optionalAuthenticate, cmsModule.getCmsData);
 app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
 
 // Global Texts & Translations Routes
@@ -4894,14 +4894,14 @@ app.delete('/api/admin/sessions/:token', authenticateRequest, requireRole(['admi
 app.post('/api/admin/invite', authenticateRequest, requireRole(['admin', 'owner']), adminModule.inviteAdmin);
 
 // Homepage Heroes routes
-app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);
+app.get('/api/homepage-heroes', optionalAuthenticate, cmsModule.getHomepageHeroes);
 app.post('/api/homepage-heroes', authenticateRequest, requireRole(['staff']), cmsModule.createHomepageHero);
 app.put('/api/homepage-heroes/:id', authenticateRequest, requireRole(['staff']), cmsModule.updateHomepageHero);
 app.delete('/api/homepage-heroes/:id', authenticateRequest, requireRole(['staff']), cmsModule.deleteHomepageHero);
 app.post('/api/homepage-heroes/:id/duplicate', authenticateRequest, requireRole(['staff']), cmsModule.duplicateHomepageHero);
 
 // Homepage Editorial Lookbook blocks routes
-app.get('/api/homepage-editorial', cmsModule.getHomepageEditorialBlocks);
+app.get('/api/homepage-editorial', optionalAuthenticate, cmsModule.getHomepageEditorialBlocks);
 app.post('/api/homepage-editorial', authenticateRequest, requireRole(['staff']), cmsModule.createHomepageEditorialBlock);
 app.put('/api/homepage-editorial/:id', authenticateRequest, requireRole(['staff']), cmsModule.updateHomepageEditorialBlock);
 app.delete('/api/homepage-editorial/:id', authenticateRequest, requireRole(['staff']), cmsModule.deleteHomepageEditorialBlock);

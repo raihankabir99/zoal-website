@@ -2,107 +2,28 @@ import { Request, Response } from 'express';
 import { getSupabaseClient } from './supabase';
 import { logAuditEvent } from './audit';
 
-const DEFAULT_WAREHOUSES = [
-  {
-    id: 'a1111111-1111-1111-1111-111111111111',
-    warehouse_name: 'Dammam Main Hub',
-    warehouse_code: 'WH-DMM-01',
-    country: 'Saudi Arabia',
-    city: 'Dammam',
-    address: 'King Fahd Road, Logistics Zone',
-    manager: 'Tariq Al-Harbi',
-    phone: '+966 50 123 4567',
-    email: 'dammam.wh@zoal.com',
-    capacity: 10000,
-    used_capacity: 8200,
-    status: 'Optimal',
-    latitude: 26.4207,
-    longitude: 50.0888
-  },
-  {
-    id: 'a2222222-2222-2222-2222-222222222222',
-    warehouse_name: 'Al Hofuf Lounge',
-    warehouse_code: 'WH-HOF-02',
-    country: 'Saudi Arabia',
-    city: 'Al Hofuf',
-    address: 'Al Ahsa Industrial District',
-    manager: 'Musa Al-Ghamdi',
-    phone: '+966 55 987 6543',
-    email: 'hofuf.wh@zoal.com',
-    capacity: 5000,
-    used_capacity: 2250,
-    status: 'Optimal',
-    latitude: 25.3835,
-    longitude: 49.5862
-  },
-  {
-    id: 'a3333333-3333-3333-3333-333333333333',
-    warehouse_name: 'Riyadh Distribution Gate',
-    warehouse_code: 'WH-RUH-03',
-    country: 'Saudi Arabia',
-    city: 'Riyadh',
-    address: 'Sully Logistics Park, Gate 4',
-    manager: 'Sami Al-Otaibi',
-    phone: '+966 51 444 3322',
-    email: 'riyadh.wh@zoal.com',
-    capacity: 25000,
-    used_capacity: 22750,
-    status: 'Near Capacity',
-    latitude: 24.7136,
-    longitude: 46.6753
-  },
-  {
-    id: 'a4444444-4444-4444-4444-444444444444',
-    warehouse_name: 'Jeddah Port Gateway',
-    warehouse_code: 'WH-JED-04',
-    country: 'Saudi Arabia',
-    city: 'Jeddah',
-    address: 'Jeddah Islamic Port Freezone',
-    manager: 'Faisal Al-Dosari',
-    phone: '+966 54 888 7766',
-    email: 'jeddah.wh@zoal.com',
-    capacity: 20000,
-    used_capacity: 3000,
-    status: 'Under-utilized',
-    latitude: 21.4858,
-    longitude: 39.1925
-  }
-];
-
 /**
  * GET /api/warehouses
- * Retrieves all enterprise warehouses.
+ * Retrieves all enterprise warehouses from the authoritative database.
  */
 export async function getWarehouses(req: Request, res: Response) {
   try {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      // If Supabase is not configured, fall back to default seeds
-      return res.json(DEFAULT_WAREHOUSES.map(wh => ({
-        ...wh,
-        utilizationPct: wh.capacity > 0 ? Math.round((wh.used_capacity / wh.capacity) * 100) : 0,
-        activeStockUnits: wh.used_capacity
-      })));
+      return res.status(503).json({ error: 'Database connection unavailable.' });
     }
 
-    let { data: warehouses, error } = await supabase
+    const { data: warehouses, error } = await supabase
       .from('zoal_warehouses')
       .select('*')
       .order('created_at', { ascending: true });
 
-    if (error || !warehouses || warehouses.length === 0) {
-      // Auto-seed defaults if table is empty
-      const { data: seeded, error: seedErr } = await supabase
-        .from('zoal_warehouses')
-        .upsert(DEFAULT_WAREHOUSES, { onConflict: 'warehouse_code' })
-        .select();
-
-      if (!seedErr && seeded && seeded.length > 0) {
-        warehouses = seeded;
-      } else {
-        warehouses = DEFAULT_WAREHOUSES as any;
-      }
+    if (error) {
+      console.error('Error fetching warehouses:', error);
+      return res.status(500).json({ error: error.message || 'Server error fetching warehouses' });
     }
+
+    const rows = warehouses || [];
 
     // Enrich with products stock counts per warehouse location if possible
     const { data: products } = await supabase
@@ -117,8 +38,8 @@ export async function getWarehouses(req: Request, res: Response) {
       });
     }
 
-    const enrichedWarehouses = (warehouses || []).map((wh: any) => {
-      const cap = Number(wh.capacity) || 10000;
+    const enrichedWarehouses = rows.map((wh: any) => {
+      const cap = Number(wh.capacity) || 0;
       const used = Number(wh.used_capacity) || 0;
       const utilizationPct = cap > 0 ? Math.round((used / cap) * 100) : 0;
       
@@ -145,9 +66,7 @@ export async function getWarehouseById(req: Request, res: Response) {
     const { id } = req.params;
     const supabase = getSupabaseClient();
     if (!supabase) {
-      const found = DEFAULT_WAREHOUSES.find(w => w.id === id || w.warehouse_code === id);
-      if (!found) return res.status(404).json({ error: 'Warehouse not found' });
-      return res.json(found);
+      return res.status(503).json({ error: 'Database connection unavailable.' });
     }
 
     let query = supabase.from('zoal_warehouses').select('*');
@@ -157,7 +76,7 @@ export async function getWarehouseById(req: Request, res: Response) {
       query = query.eq('warehouse_code', id);
     }
 
-    const { data: warehouse, error } = await query.single();
+    const { data: warehouse, error } = await query.maybeSingle();
     if (error || !warehouse) {
       return res.status(404).json({ error: 'Warehouse not found' });
     }
@@ -202,13 +121,7 @@ export async function createWarehouse(req: Request, res: Response) {
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      // In-memory/mock fallback response if not configured
-      const mockResult = {
-        id: `mock-${Date.now()}`,
-        ...payload,
-        created_at: new Date().toISOString()
-      };
-      return res.status(201).json(mockResult);
+      return res.status(503).json({ error: 'Database connection unavailable.' });
     }
 
     const { data, error } = await supabase
@@ -268,7 +181,7 @@ export async function updateWarehouse(req: Request, res: Response) {
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      return res.json({ id, ...updatePayload });
+      return res.status(503).json({ error: 'Database connection unavailable.' });
     }
 
     const { data: existing } = await supabase
@@ -312,7 +225,7 @@ export async function deleteWarehouse(req: Request, res: Response) {
     const { id } = req.params;
     const supabase = getSupabaseClient();
     if (!supabase) {
-      return res.json({ success: true, deletedId: id });
+      return res.status(503).json({ error: 'Database connection unavailable.' });
     }
 
     const { data: existing } = await supabase
