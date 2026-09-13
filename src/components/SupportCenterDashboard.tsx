@@ -60,38 +60,6 @@ export default function SupportCenterDashboard({ currentUser, orders, addLog, on
     return ['owner', 'admin', 'manager', 'staff'].includes(role);
   }, [currentUser]);
 
-  if (!isAuthorized) {
-    return (
-      <div className="bg-black text-white min-h-screen pt-28 pb-20 flex items-center justify-center px-4 font-sans select-none">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-zinc-950 border border-red-500/30 p-8 rounded-sm shadow-[0_24px_60px_rgba(255,0,0,0.08)] text-center space-y-6"
-        >
-          <div className="mx-auto w-16 h-16 bg-red-950/30 border border-red-500/40 rounded-full flex items-center justify-center">
-            <Lock className="w-8 h-8 text-red-500 animate-pulse" />
-          </div>
-          <div className="space-y-2">
-            <span className="text-[10px] tracking-[0.4em] text-red-500 uppercase font-display block">
-              Security Shield
-            </span>
-            <h1 className="text-xl font-bold tracking-wider uppercase font-display text-white">
-              Privilege Level Violation
-            </h1>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              This support panel is restricted exclusively for authorized roles: <span className="text-red-400 font-mono font-bold">Owner, Admin, Manager, Staff</span>. Customers and unauthorized principals are blocked by RBAC Route Policy.
-            </p>
-          </div>
-          <div className="p-3 bg-black border border-white/5 rounded-xs text-[10px] font-mono text-zinc-500 text-left space-y-1">
-            <p>• Principal ID: {currentUser ? currentUser.email : 'Unauthenticated'}</p>
-            <p>• Assigned Role: {currentUser ? currentUser.role : 'None'}</p>
-            <p>• Code Base Rule: Action & Route Guard V3</p>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
   // State Declarations
   const [activeSubTab, setActiveSubTab] = useState<'management' | 'automation' | 'knowledge' | 'reports' | 'provider'>('management');
   
@@ -562,6 +530,38 @@ export default function SupportCenterDashboard({ currentUser, orders, addLog, on
       setIsSandboxLoading(false);
     }
   };
+
+  if (!isAuthorized) {
+    return (
+      <div className="bg-black text-white min-h-screen pt-28 pb-20 flex items-center justify-center px-4 font-sans select-none">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md w-full bg-zinc-950 border border-red-500/30 p-8 rounded-sm shadow-[0_24px_60px_rgba(255,0,0,0.08)] text-center space-y-6"
+        >
+          <div className="mx-auto w-16 h-16 bg-red-950/30 border border-red-500/40 rounded-full flex items-center justify-center">
+            <Lock className="w-8 h-8 text-red-500 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <span className="text-[10px] tracking-[0.4em] text-red-500 uppercase font-display block">
+              Security Shield
+            </span>
+            <h1 className="text-xl font-bold tracking-wider uppercase font-display text-white">
+              Privilege Level Violation
+            </h1>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              This support panel is restricted exclusively for authorized roles: <span className="text-red-400 font-mono font-bold">Owner, Admin, Manager, Staff</span>. Customers and unauthorized principals are blocked by RBAC Route Policy.
+            </p>
+          </div>
+          <div className="p-3 bg-black border border-white/5 rounded-xs text-[10px] font-mono text-zinc-500 text-left space-y-1">
+            <p>• Principal ID: {currentUser ? currentUser.email : 'Unauthenticated'}</p>
+            <p>• Assigned Role: {currentUser ? currentUser.role : 'None'}</p>
+            <p>• Code Base Rule: Action & Route Guard V3</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in text-left font-sans text-white select-none">

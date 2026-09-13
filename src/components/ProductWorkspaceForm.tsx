@@ -82,8 +82,8 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
   const handleEnterpriseFileUpload = async (files: FileList | File[], target: 'gallery' | '360' | 'thumbnail' | 'video') => {
     if (!files || files.length === 0) return;
 
-    setUploadingStatus('Compressing & generating WebP container...');
-    setUploadProgress(20);
+    setUploadingStatus('Processing upload...');
+    setUploadProgress(10);
 
     try {
       const fileList = Array.from(files);
@@ -91,6 +91,8 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
         const file = fileList[i];
         setUploadingStatus(`Processing ${file.name} (${i + 1}/${fileList.length})...`);
         
+        const isVideo = target === 'video' || (file.type && file.type.startsWith('video/'));
+
         let bucket = 'products';
         let folderPath = 'products';
         if (target === 'thumbnail') {
@@ -99,23 +101,38 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           folderPath = 'products/gallery';
         } else if (target === '360') {
           folderPath = 'products/360';
+        } else if (target === 'video' || isVideo) {
+          folderPath = 'products/videos';
         }
 
-        const webpBlob = await compressAndConvertWebp(file);
+        let uploadBlob: Blob = file;
+        let fileExt = file.name.split('.').pop() || (isVideo ? 'mp4' : 'webp');
+
+        if (!isVideo) {
+          setUploadingStatus(`Compressing & converting ${file.name} to WebP...`);
+          uploadBlob = await compressAndConvertWebp(file);
+          fileExt = 'webp';
+        }
+
         const timestamp = Date.now();
         const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         const nameWithoutExt = sanitizedName.substring(0, sanitizedName.lastIndexOf('.')) || sanitizedName;
-        const filePath = `${folderPath}/${timestamp}_${nameWithoutExt}.webp`;
+        const filePath = `${folderPath}/${timestamp}_${nameWithoutExt}.${fileExt}`;
 
         setUploadProgress(60);
         setUploadingStatus(`Uploading to Supabase Storage (${filePath})...`);
 
         const formData = new FormData();
-        formData.append('file', webpBlob, `${nameWithoutExt}.webp`);
+        formData.append('file', uploadBlob, `${nameWithoutExt}.${fileExt}`);
         formData.append('bucket', bucket);
         formData.append('path', filePath);
 
-        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+        const token = localStorage.getItem('zoal_auth_token') ||
+                      sessionStorage.getItem('zoal_auth_token') ||
+                      localStorage.getItem('zoal_token') ||
+                      localStorage.getItem('token') ||
+                      sessionStorage.getItem('token') || '';
+
         let publicUrl = '';
 
         try {
@@ -140,13 +157,9 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           console.warn('Storage upload network request failed:', fetchErr);
         }
 
-        // Fallback to Data URL if storage upload failed or returned empty URL
+        // Safeguard: Throw clear error on storage upload failure instead of corrupting formState with megabytes of Base64
         if (!publicUrl) {
-          publicUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(webpBlob);
-          });
+          throw new Error(`Storage upload failed for ${file.name}. Please ensure server storage API is available.`);
         }
 
         setUploadProgress(100);
@@ -182,7 +195,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           }));
         }
       }
-      setUploadingStatus('✓ Enterprise upload & WebP compression completed successfully!');
+      setUploadingStatus('✓ Enterprise upload completed successfully!');
       setTimeout(() => setUploadingStatus(null), 3500);
     } catch (err: any) {
       console.error('Enterprise upload error:', err);
