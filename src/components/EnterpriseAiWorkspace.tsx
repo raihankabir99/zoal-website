@@ -81,7 +81,10 @@ export const EnterpriseAiWorkspace: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/ai/workspace');
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      const res = await fetch('/api/ai/workspace', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Failed to retrieve AI core metrics.');
       const data = await res.json();
       
@@ -127,7 +130,8 @@ export const EnterpriseAiWorkspace: React.FC = () => {
     };
   }, []);
 
-  // Submit new prompt
+  // Submit new prompt through the authenticated backend workspace endpoint.
+  // Do not create synthetic users, tokens, costs, or latency metrics in the client.
   const handleSubmitPrompt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPromptText.trim()) return;
@@ -136,43 +140,25 @@ export const EnterpriseAiWorkspace: React.FC = () => {
       setActionLoading(true);
       setError(null);
 
-      // 1. Insert prompt in Supabase
-      const { data: promptData, error: promptErr } = await supabaseClient
-        .from('zoal_ai_prompts')
-        .insert({
-          user_id: '00000000-0000-0000-0000-000000000000',
-          prompt_text: newPromptText
-        })
-        .select()
-        .single();
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      if (!token) throw new Error('Authentication required. Please sign in again.');
 
-      if (promptErr) throw promptErr;
-
-      // 2. Log action to backend
       const logRes = await fetch('/api/ai/workspace/logs', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer demo-token' // Auth header handled by authenticateRequest
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          user_id: '00000000-0000-0000-0000-000000000000',
           action_type: 'CustomPrompt',
           meta_data: { prompt_text: newPromptText }
         })
       });
 
-      if (!logRes.ok) console.warn('History log could not be captured.');
-
-      // 3. Simulate usage response
-      const tokensCount = Math.floor(Math.random() * 500) + 150;
-      const calculatedCost = tokensCount * 0.000005;
-      await supabaseClient.from('zoal_ai_usage').insert({
-        prompt_id: promptData.id,
-        tokens: tokensCount,
-        cost: parseFloat(calculatedCost.toFixed(6)),
-        time_ms: Math.floor(Math.random() * 800) + 400
-      });
+      const logData = await logRes.json().catch(() => ({}));
+      if (!logRes.ok) {
+        throw new Error(logData.error || 'AI workspace rejected the prompt.');
+      }
 
       setNewPromptText('');
       setSelectedTemplate('');
