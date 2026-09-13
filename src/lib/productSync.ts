@@ -368,6 +368,9 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
   }
 
   try {
+    if (typeof window === 'undefined') {
+      return null;
+    }
     console.log('[Cache] Fetching fresh product data from Supabase DB (Source of Truth)...');
     const res = await fetch('/api/products');
     if (!res.ok) throw new Error('API returned status ' + res.status);
