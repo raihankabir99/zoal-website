@@ -4846,7 +4846,7 @@ app.get('/api/support/teams', requirePermission('can_manage_support'), async (re
 
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
-app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
+app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
 
 // Global Texts & Translations Routes
 app.get('/api/texts', optionalAuthenticate, textsModule.getTexts);

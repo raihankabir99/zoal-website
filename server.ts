@@ -562,7 +562,7 @@ async function sendEmailWithRetry(order: any, emailLogId: string, maxAttempts = 
 
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
-app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
+app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
 
 // Homepage Heroes routes
 app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);
