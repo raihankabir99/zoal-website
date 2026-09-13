@@ -74,7 +74,18 @@ export default async function handler(req: any, res: any) {
     if (body.lowStockThreshold !== undefined || body.low_stock_threshold !== undefined) updatePayload.low_stock_threshold = cleanNonNegativeInteger(body.lowStockThreshold ?? body.low_stock_threshold, 'lowStockThreshold');
     if (updatePayload.max_stock !== undefined && updatePayload.max_stock !== null && Number(updatePayload.max_stock) < nextQuantity) return res.status(409).json({ error: 'maxStock cannot be below current quantity.' });
     if (updatePayload.min_stock !== undefined && Number(updatePayload.min_stock) > nextQuantity) return res.status(409).json({ error: 'minStock cannot exceed current quantity.' });
-    const { data: updated, error: updateError } = await adminClient.from('zoal_inventory').update(updatePayload).eq('id', current.id).select('*').single(); if (updateError) throw updateError;
+    const { data: updated, error: updateError } = await adminClient
+      .from('zoal_inventory')
+      .update(updatePayload)
+      .eq('id', current.id)
+      .eq('quantity', current.quantity)
+      .select('*')
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+    if (!updated) {
+      return res.status(409).json({ error: 'CONCURRENCY_ERROR', message: 'The inventory record was updated by another session. Please reload and try again.' });
+    }
     const { error: logError } = await adminClient.from('zoal_activity_logs').insert({ id: `inv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, user_id: auth.user.id, email: auth.email, action: `INVENTORY_${operation.toUpperCase()}`, timestamp: new Date().toISOString(), ip: requestIp(req), user_agent: req.headers?.['user-agent'] || 'inventory-api', resource_type: 'inventory', resource_id: current.id, before_state: before, after_state: updated, changed_fields: Object.keys(updatePayload), metadata: { product_id: productId, warehouse_id: warehouseId, reason: body.reason || null, reference_id: body.referenceId || null, batch_number: body.batchNumber || null }, result: 'success', severity: 'info', source: 'inventory' });
     if (logError) console.error('Inventory audit log error:', logError);
     return res.status(200).json({ success: true, data: updated });

@@ -90,10 +90,14 @@ export async function PATCH(req: NextRequest) {
       .from('zoal_inventory')
       .update({ quantity: nextQuantity, updated_at: new Date().toISOString() })
       .eq('id', row.id)
+      .eq('quantity', row.quantity)
       .select('id, product_id, warehouse_id, quantity, reserved_quantity, min_stock, max_stock, low_stock_threshold, updated_at')
-      .single();
+      .maybeSingle();
 
     if (error) return apiError(error.message, 500);
+    if (!data) {
+      return apiError('CONCURRENCY_ERROR: The inventory record was updated by another session. Please reload and try again.', 409);
+    }
 
     return apiResponse({
       inventory: data,

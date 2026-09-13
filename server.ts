@@ -631,55 +631,55 @@ app.post('/api/simulation/runs', authenticateRequest, requireRole(['admin', 'own
 app.post('/api/marketing/email', authenticateRequest, requireRole(['admin', 'manager', 'staff']), marketingModule.sendEmailCampaign);
 
 // AI Translation & Enterprise Multi-Language Routes (Phase 13)
-app.get('/api/ai/translations', aiTranslationsModule.getTranslations);
+app.get('/api/ai/translations', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getTranslations);
 app.post('/api/ai/translations/generate', authenticateRequest, userRateLimiterMiddleware(30), requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.generateAiTranslation);
 app.put('/api/ai/translations/:id/draft', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateTranslationDraft);
 app.post('/api/ai/translations/:id/submit', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.submitForReview);
 app.post('/api/ai/translations/:id/approve', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.approveTranslation);
 app.post('/api/ai/translations/:id/reject', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rejectTranslation);
-app.get('/api/ai/translations/:id/preview', aiTranslationsModule.previewPublishTranslation);
+app.get('/api/ai/translations/:id/preview', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.previewPublishTranslation);
 app.post('/api/ai/translations/:id/publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.publishTranslation);
 app.post('/api/ai/translations/:id/rollback', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rollbackTranslation);
-app.get('/api/ai/translations/:id/history', aiTranslationsModule.getPublishHistory);
-app.get('/api/ai/translations/:id/compare', aiTranslationsModule.compareVersions);
+app.get('/api/ai/translations/:id/history', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getPublishHistory);
+app.get('/api/ai/translations/:id/compare', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.compareVersions);
 app.delete('/api/ai/translations/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.deleteTranslation);
 
-app.get('/api/ai/translations/queue', aiTranslationsModule.getQueueJobs);
+app.get('/api/ai/translations/queue', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getQueueJobs);
 app.post('/api/ai/translations/queue/action', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.handleQueueAction);
 app.post('/api/ai/translations/batch', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createBatchTranslation);
-app.get('/api/ai/translations/cache', aiTranslationsModule.getCacheStats);
+app.get('/api/ai/translations/cache', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getCacheStats);
 app.post('/api/ai/translations/cache/invalidate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.invalidateCache);
-app.get('/api/ai/translations/metrics', aiTranslationsModule.getTranslationMetrics);
-app.get('/api/ai/translations/export', aiTranslationsModule.exportTranslationReport);
+app.get('/api/ai/translations/metrics', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getTranslationMetrics);
+app.get('/api/ai/translations/export', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.exportTranslationReport);
 
-app.get('/api/ai/translations/sync/health', aiTranslationsModule.getLocalizationHealth);
-app.get('/api/ai/translations/sync/tasks', aiTranslationsModule.getLocalizationTasks);
+app.get('/api/ai/translations/sync/health', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getLocalizationHealth);
+app.get('/api/ai/translations/sync/tasks', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getLocalizationTasks);
 app.post('/api/ai/translations/sync/tasks', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createLocalizationTask);
 app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateLocalizationTask);
-app.get('/api/ai/translations/sync/notifications', aiTranslationsModule.getNotifications);
+app.get('/api/ai/translations/sync/notifications', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getNotifications);
 app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.markNotificationsRead);
 app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.triggerSourceContentChange);
-app.get('/api/ai/translations/sync/diff', aiTranslationsModule.getContentDiff);
-app.get('/api/ai/translations/sync/dependencies', aiTranslationsModule.getDependencies);
-app.get('/api/ai/translations/sync/reports', aiTranslationsModule.getLocalizationReports);
+app.get('/api/ai/translations/sync/diff', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getContentDiff);
+app.get('/api/ai/translations/sync/dependencies', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getDependencies);
+app.get('/api/ai/translations/sync/reports', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getLocalizationReports);
 
-app.get('/api/ai/translations/quality/overview', aiTranslationsModule.getQualityIntelligence);
-app.get('/api/ai/translations/quality/prompts', aiTranslationsModule.getPromptPerformance);
-app.get('/api/ai/translations/quality/translators', aiTranslationsModule.getTranslatorAnalytics);
-app.get('/api/ai/translations/quality/reviewers', aiTranslationsModule.getReviewerAnalytics);
-app.get('/api/ai/translations/quality/learning', aiTranslationsModule.getLearningInsights);
-app.get('/api/ai/translations/quality/reports', aiTranslationsModule.getQualityReports);
-app.get('/api/ai/translations/quality/leaderboard', aiTranslationsModule.getQualityLeaderboard);
-app.get('/api/ai/translations/quality/alerts', aiTranslationsModule.getQualityAlerts);
-app.get('/api/ai/translations/quality/export', aiTranslationsModule.exportQualityReport);
+app.get('/api/ai/translations/quality/overview', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getQualityIntelligence);
+app.get('/api/ai/translations/quality/prompts', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getPromptPerformance);
+app.get('/api/ai/translations/quality/translators', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getTranslatorAnalytics);
+app.get('/api/ai/translations/quality/reviewers', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getReviewerAnalytics);
+app.get('/api/ai/translations/quality/learning', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getLearningInsights);
+app.get('/api/ai/translations/quality/reports', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getQualityReports);
+app.get('/api/ai/translations/quality/leaderboard', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getQualityLeaderboard);
+app.get('/api/ai/translations/quality/alerts', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getQualityAlerts);
+app.get('/api/ai/translations/quality/export', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.exportQualityReport);
 
 // Phase 13 Multi-Language Expansion Routes
 app.get('/api/ai/languages', aiTranslationsModule.getSupportedLanguages);
 app.post('/api/ai/languages/toggle', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.toggleLanguage);
-app.get('/api/ai/translations/matrix', aiTranslationsModule.getTranslationMatrix);
-app.get('/api/ai/translations/pack/export', aiTranslationsModule.exportLanguagePack);
+app.get('/api/ai/translations/matrix', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getTranslationMatrix);
+app.get('/api/ai/translations/pack/export', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.exportLanguagePack);
 app.post('/api/ai/translations/pack/import', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.importLanguagePack);
-app.get('/api/ai/translations/memory', aiTranslationsModule.getTranslationMemory);
+app.get('/api/ai/translations/memory', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.getTranslationMemory);
 app.get('/api/operations/health', operationsModule.getHealthData);
 app.get('/api/operations/backup', authenticateRequest, requireRole(['admin', 'owner']), operationsModule.getBackupData);
 app.get('/api/operations/alerts', operationsModule.getAlertData);
