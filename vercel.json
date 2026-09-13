@@ -47,6 +47,10 @@
       "dest": "/api/customer-invoices.ts"
     },
     {
+      "src": "/api/orders/my-orders",
+      "dest": "/api/customer-orders.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
