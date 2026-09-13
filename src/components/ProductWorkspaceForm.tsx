@@ -93,13 +93,13 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
         return;
       }
       if (target === 'video') {
-        if (!file.type.startsWith('video/')) {
+        if (file.type && !file.type.startsWith('video/')) {
           setUploadingStatus('❌ Upload failed: Selected file must be a video.');
           setTimeout(() => setUploadingStatus(null), 4000);
           return;
         }
       } else {
-        if (!file.type.startsWith('image/')) {
+        if (file.type && !file.type.startsWith('image/')) {
           setUploadingStatus('❌ Upload failed: Selected file must be an image.');
           setTimeout(() => setUploadingStatus(null), 4000);
           return;
@@ -107,7 +107,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
       }
     }
 
-    // Retrieve active Supabase Auth session access token
+    // Retrieve active session or storage access token
     let accessToken = '';
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
@@ -119,9 +119,11 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
     }
 
     if (!accessToken) {
-      setUploadingStatus('❌ Upload failed: Authentication session unavailable.');
-      setTimeout(() => setUploadingStatus(null), 4000);
-      return;
+      accessToken = localStorage.getItem('zoal_auth_token') ||
+                    sessionStorage.getItem('zoal_auth_token') ||
+                    localStorage.getItem('zoal_token') ||
+                    localStorage.getItem('token') ||
+                    sessionStorage.getItem('token') || '';
     }
 
     if (target === 'video') {
@@ -141,6 +143,8 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           setUploadingStatus(`Processing ${file.name} (${i + 1}/${fileList.length})...`);
         }
         
+        const isVideo = target === 'video' || (file.type && file.type.startsWith('video/'));
+
         let bucket = 'products';
         let folderPath = 'products';
         if (target === 'thumbnail') {
@@ -149,32 +153,31 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           folderPath = 'products/gallery';
         } else if (target === '360') {
           folderPath = 'products/360';
-        } else if (target === 'video') {
+        } else if (target === 'video' || isVideo) {
           folderPath = 'products/videos';
         }
 
-        const formData = new FormData();
-        const timestamp = Date.now();
+        let uploadBlob: Blob = file;
+        let fileExt = file.name.split('.').pop() || (isVideo ? 'mp4' : 'webp');
 
-        if (target === 'video') {
-          // Direct video upload without image WebP conversion
-          const sanitizedOriginalFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-          const filePath = `${folderPath}/${timestamp}_${sanitizedOriginalFilename}`;
-          formData.append('file', file, sanitizedOriginalFilename);
-          formData.append('bucket', bucket);
-          formData.append('path', filePath);
-        } else {
-          const webpBlob = await compressAndConvertWebp(file);
-          const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-          const nameWithoutExt = sanitizedName.substring(0, sanitizedName.lastIndexOf('.')) || sanitizedName;
-          const filePath = `${folderPath}/${timestamp}_${nameWithoutExt}.webp`;
-          formData.append('file', webpBlob, `${nameWithoutExt}.webp`);
-          formData.append('bucket', bucket);
-          formData.append('path', filePath);
+        if (!isVideo) {
+          setUploadingStatus(`Compressing & converting ${file.name} to WebP...`);
+          uploadBlob = await compressAndConvertWebp(file);
+          fileExt = 'webp';
         }
+
+        const timestamp = Date.now();
+        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const nameWithoutExt = sanitizedName.substring(0, sanitizedName.lastIndexOf('.')) || sanitizedName;
+        const filePath = `${folderPath}/${timestamp}_${sanitizedName}`;
 
         setUploadProgress(60);
         setUploadingStatus(`Uploading to Supabase Storage (${file.name})...`);
+
+        const formData = new FormData();
+        formData.append('file', uploadBlob, isVideo ? sanitizedName : `${nameWithoutExt}.webp`);
+        formData.append('bucket', bucket);
+        formData.append('path', filePath);
 
         let publicUrl = '';
         let uploadErrorMsg = '';
@@ -205,11 +208,9 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           uploadErrorMsg = 'Storage request could not be completed.';
         }
 
+        // Safeguard: Throw clear error on storage upload failure instead of corrupting formState with megabytes of Base64
         if (!publicUrl) {
-          setUploadingStatus(`❌ Upload failed: ${uploadErrorMsg || 'Storage upload unsuccessful.'}`);
-          setTimeout(() => setUploadingStatus(null), 4000);
-          setUploadProgress(0);
-          return;
+          throw new Error(uploadErrorMsg || `Storage upload failed for ${file.name}. Please ensure storage server is available.`);
         }
 
         successfulUploadsCount++;
