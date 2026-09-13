@@ -1336,7 +1336,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
 
             <div className="space-y-3">
               <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono block">Registered Options</span>
-              {formState.variantsList.length === 0 ? (
+              {(formState.variantsList || []).length === 0 ? (
                 <div className="text-center p-6 bg-black/40 border border-dashed border-white/5 rounded-xs text-zinc-500 font-sans">
                   No options defined. Use the builder below to add options like Size, roast grind, weight etc.
                 </div>
@@ -1456,7 +1456,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
             </h4>
 
             <div className="space-y-3 font-sans">
-              {Object.keys(formState.specifications).length === 0 ? (
+              {Object.keys(formState.specifications || {}).length === 0 ? (
                 <div className="text-center p-6 bg-black/40 border border-dashed border-white/5 rounded-xs text-zinc-500">
                   No specifications defined. Use the builder below to add custom fields.
                 </div>
@@ -2724,7 +2724,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
             </h4>
 
             <div className="space-y-3">
-              {formState.questions.length === 0 ? (
+              {(formState.questions || []).length === 0 ? (
                 <div className="text-center p-6 bg-black/40 border border-dashed border-white/5 rounded-xs text-zinc-500 font-sans">
                   No client inquiries listed. Generate a sample question using the button above to respond.
                 </div>

@@ -1,6 +1,6 @@
-import html2pdf from 'html2pdf.js';
-
-export const downloadHtmlAsPdf = (html: string, filename: string) => {
+export const downloadHtmlAsPdf = async (html: string, filename: string) => {
+  if (typeof window === 'undefined') return;
+  const html2pdf = (await import('html2pdf.js')).default;
   const element = document.createElement('div');
   element.innerHTML = html;
   

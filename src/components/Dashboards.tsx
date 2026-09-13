@@ -5,7 +5,7 @@ import {
   MapPin, CheckCircle, Users, RefreshCw, Star, ArrowUpRight, TrendingUp, Sparkles, Bell,
   Clock, CreditCard, X, Gift, ClipboardList, Check, Mail, PackageCheck, LogOut,
   Lock, Menu, ChevronRight, ArrowLeft, Search, Filter, Trash2, Edit3, Download, FileText, Printer, CheckCircle2, AlertCircle, Loader2,
-  Database, Copy, Server, Camera, Settings, Heart, Pencil, ShoppingBag
+  Database, Copy, Server, Camera, Settings, Heart, Pencil, ShoppingBag, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -385,7 +385,7 @@ export default function Dashboards({
 
   // Map products of wishlist
   const userWishlistProducts = useMemo(() => {
-    return allProducts.filter((p) => wishlist.includes(p.id));
+    return (allProducts || []).filter((p) => Array.isArray(wishlist) && p?.id && wishlist.includes(p.id));
   }, [allProducts, wishlist]);
 
   if (!userRole) {

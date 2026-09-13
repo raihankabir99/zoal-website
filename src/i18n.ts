@@ -122,15 +122,19 @@ if (typeof window !== 'undefined') {
 
 // Handle RTL direction when language changes
 i18n.on('languageChanged', (lng) => {
-  document.documentElement.dir = lng === 'ar' ? 'rtl' : 'ltr';
-  document.documentElement.lang = lng;
+  if (typeof document !== 'undefined') {
+    document.documentElement.dir = lng === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = lng;
+  }
   if (lng === 'ar' || lng === 'en') {
     void loadPublishedGlobalStrings(lng);
   }
 });
 
 // Set initial direction based on detected language
-document.documentElement.dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
-document.documentElement.lang = i18n.language || 'en';
+if (typeof document !== 'undefined') {
+  document.documentElement.dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
+  document.documentElement.lang = i18n.language || 'en';
+}
 
 export default i18n;
