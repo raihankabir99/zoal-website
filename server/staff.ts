@@ -1,14 +1,10 @@
 import { Request, Response } from 'express';
 import { getServiceSupabaseClient, getSupabaseClient } from './supabase';
-import { getStaffRoster } from './support';
-
-// Re-export getStaffRoster so it is available on staffModule in server.ts
-export { getStaffRoster };
 
 const getClient = () => getServiceSupabaseClient() || getSupabaseClient();
 const VALID_DUTY_STATUSES = new Set(['active', 'break', 'offline']);
 
-export async function getDutyStatus(req: any, res: Response) {
+export async function getDutyStatus(req: Request, res: Response) {
   try {
     const client = getClient();
     if (!client || !req.user?.id) return res.status(503).json({ error: 'Staff data service unavailable' });
@@ -21,7 +17,7 @@ export async function getDutyStatus(req: any, res: Response) {
   }
 }
 
-export async function updateDutyStatus(req: any, res: Response) {
+export async function updateDutyStatus(req: Request, res: Response) {
   try {
     const status = String(req.body?.status || '');
     if (!VALID_DUTY_STATUSES.has(status)) return res.status(400).json({ error: 'Invalid duty status' });
@@ -36,7 +32,7 @@ export async function updateDutyStatus(req: any, res: Response) {
   }
 }
 
-export async function getStaffLogs(req: any, res: Response) {
+export async function getStaffLogs(req: Request, res: Response) {
   try {
     const client = getClient();
     if (!client) return res.status(503).json({ error: 'Staff data service unavailable' });
@@ -50,7 +46,7 @@ export async function getStaffLogs(req: any, res: Response) {
   }
 }
 
-export async function createStaffLog(req: any, res: Response) {
+export async function createStaffLog(req: Request, res: Response) {
   try {
     const action = String(req.body?.action || '').trim();
     const target = String(req.body?.target || '').trim();
@@ -64,25 +60,5 @@ export async function createStaffLog(req: any, res: Response) {
   } catch (error) {
     console.error('createStaffLog error:', error);
     return res.status(500).json({ error: 'Failed to create staff log' });
-  }
-}
-
-export async function updateStaffOrder(req: any, res: Response) {
-  try {
-    const client = getClient();
-    if (!client) return res.status(503).json({ error: 'Staff data service unavailable' });
-    const { orderId, status } = req.body;
-    if (!orderId) return res.status(400).json({ error: 'Order ID is required' });
-    const { data, error } = await client
-      .from('zoal_orders')
-      .update({ status })
-      .eq('id', orderId)
-      .select('*')
-      .single();
-    if (error) return res.status(500).json({ error: 'Failed to update order' });
-    return res.json({ success: true, order: data });
-  } catch (error) {
-    console.error('updateStaffOrder error:', error);
-    return res.status(500).json({ error: 'Failed to update order' });
   }
 }
