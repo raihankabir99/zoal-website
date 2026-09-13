@@ -2192,10 +2192,8 @@ Assigned Master Tailor successfully notified.`);
                       </h4>
                       <textarea
                         rows={4}
-                        value={returnsConfig.nonReturnableEn.join('
-')}
-                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split('
-') })}
+                        value={returnsConfig.nonReturnableEn.join(String.fromCharCode(10))}
+                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableEn: e.target.value.split(String.fromCharCode(10)) })}
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans"
                       />
                     </div>
@@ -2209,8 +2207,7 @@ Assigned Master Tailor successfully notified.`);
                         rows={4}
                         value={returnsConfig.nonReturnableAr.join('
 ')}
-                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split('
-') })}
+                        onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, nonReturnableAr: e.target.value.split(String.fromCharCode(10)) })}
                         className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none font-sans text-right"
                         dir="rtl"
                       />
@@ -2225,8 +2222,7 @@ Assigned Master Tailor successfully notified.`);
                           rows={2}
                           value={returnsConfig.exchangeOptionsEn.join('
 ')}
-                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split('
-') })}
+                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsEn: e.target.value.split(String.fromCharCode(10)) })}
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans"
                           placeholder="EN options"
                         />
@@ -2234,8 +2230,7 @@ Assigned Master Tailor successfully notified.`);
                           rows={2}
                           value={returnsConfig.exchangeOptionsAr.join('
 ')}
-                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split('
-') })}
+                          onChange={(e) => setLocalReturnsConfig({ ...returnsConfig, exchangeOptionsAr: e.target.value.split(String.fromCharCode(10)) })}
                           className="w-full bg-black border border-white/10 rounded-xs p-2 text-xs text-white focus:outline-none font-sans text-right"
                           dir="rtl"
                           placeholder="AR options"
