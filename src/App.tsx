@@ -304,6 +304,40 @@ function AppContent() {
     };
   }, [currentUser]);
 
+  // Synchronize authenticated customer orders from the server of record (P0 Section 7).
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) return;
+
+    let cancelled = false;
+
+    const loadServerOrders = async () => {
+      try {
+        const res = await fetch('/api/orders/my-orders', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await res.json().catch(() => null);
+
+        if (!res.ok || !result?.success || !Array.isArray(result.orders)) {
+          return;
+        }
+
+        if (cancelled) return;
+        setOrders(result.orders);
+      } catch (error: any) {
+        console.error('Failed to synchronize server orders:', error);
+      }
+    };
+
+    loadServerOrders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
   const handleNotificationNavigate = (targetModule: string, _params?: any) => {
     setNotificationCenterOpen(false);
     const userRole = ((currentUser as any)?.role || 'customer').toLowerCase();

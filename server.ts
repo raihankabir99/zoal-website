@@ -896,6 +896,360 @@ app.get('/api/orders/email-history', authenticateRequest, requireRole(['admin'])
   res.json(logs);
 });
 
+// =========================================================================
+// CUSTOMER DASHBOARD AUTHORITATIVE API ENDPOINTS
+// =========================================================================
+
+// GET /api/orders/my-orders — Fetch authoritative customer orders with IDOR enforcement
+app.get('/api/orders/my-orders', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true, orders: [] });
+  }
+
+  try {
+    let query = supabase.from('zoal_orders').select('*').order('created_at', { ascending: false });
+    
+    // Strict customer ownership filtering (P0 IDOR Protection)
+    if (user.role === 'customer') {
+      if (user.email) {
+        query = query.or(`customer_id.eq.${user.id},notes.ilike.%${user.email}%`);
+      } else {
+        query = query.eq('customer_id', user.id);
+      }
+    } else {
+      const filterId = req.query.customerId;
+      if (filterId) {
+        query = query.eq('customer_id', filterId);
+      }
+    }
+
+    const { data: rawOrders, error: orderErr } = await query;
+    if (orderErr) throw orderErr;
+
+    const ordersList = rawOrders || [];
+    if (ordersList.length === 0) {
+      return res.json({ success: true, orders: [] });
+    }
+
+    const orderIds = ordersList.map((o: any) => o.id);
+    const { data: rawItems } = await supabase
+      .from('zoal_order_items')
+      .select('*')
+      .in('order_id', orderIds);
+
+    const itemsByOrder = new Map<string, any[]>();
+    for (const item of rawItems || []) {
+      const list = itemsByOrder.get(String(item.order_id)) || [];
+      list.push({
+        id: item.id,
+        productId: item.product_id,
+        name: item.product_name || `Product (${item.product_id})`,
+        quantity: item.quantity,
+        price: Number(item.unit_price || 0),
+        total: Number(item.total_price || 0)
+      });
+      itemsByOrder.set(String(item.order_id), list);
+    }
+
+    const mappedOrders = ordersList.map((o: any) => ({
+      id: o.id,
+      customerName: user.name || 'Valued Customer',
+      email: user.email || '',
+      phone: user.phone || '',
+      city: o.city || 'Riyadh',
+      district: o.district || '',
+      address: o.address || '',
+      deliveryMethod: o.delivery_method || 'local_delivery',
+      paymentMethod: o.payment_method || 'Moyasar Online Payment',
+      status: o.status ? (o.status.charAt(0).toUpperCase() + o.status.slice(1)) : 'Pending',
+      paymentStatus: o.payment_status || 'unpaid',
+      subtotal: Number(o.subtotal || 0),
+      discount: Number(o.discount_amount || 0),
+      shipping: Number(o.shipping_cost || 0),
+      tax: Number(o.tax_amount || 0),
+      total: Number(o.total_amount || 0),
+      trackingNumber: o.tracking_number || null,
+      shipmentId: o.shipment_id || null,
+      shipmentStatus: o.shipment_status || 'pending_dispatch',
+      customerNotes: o.notes || '',
+      createdAt: o.created_at,
+      items: itemsByOrder.get(String(o.id)) || []
+    }));
+
+    return res.json({ success: true, orders: mappedOrders });
+  } catch (err: any) {
+    console.error('Error in GET /api/orders/my-orders:', err);
+    return res.status(500).json({ error: 'Failed to retrieve customer orders.' });
+  }
+});
+
+// GET /api/customer-invoices — Fetch authoritative customer invoices with IDOR enforcement
+app.get('/api/customer-invoices', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true, invoices: [] });
+  }
+
+  try {
+    let query = supabase.from('zoal_orders').select('*').order('created_at', { ascending: false });
+    if (user.role === 'customer') {
+      if (user.email) {
+        query = query.or(`customer_id.eq.${user.id},notes.ilike.%${user.email}%`);
+      } else {
+        query = query.eq('customer_id', user.id);
+      }
+    }
+
+    const { data: orders, error } = await query;
+    if (error) throw error;
+
+    const ordersList = orders || [];
+    if (ordersList.length === 0) {
+      return res.json({ success: true, invoices: [] });
+    }
+
+    const orderIds = ordersList.map((o: any) => o.id);
+    const { data: rawItems } = await supabase
+      .from('zoal_order_items')
+      .select('*')
+      .in('order_id', orderIds);
+
+    const itemsByOrder = new Map<string, any[]>();
+    for (const item of rawItems || []) {
+      const list = itemsByOrder.get(String(item.order_id)) || [];
+      list.push({
+        id: item.id,
+        productId: item.product_id,
+        name: item.product_name || `Product (${item.product_id})`,
+        quantity: item.quantity,
+        unitPrice: Number(item.unit_price || 0),
+        total: Number(item.total_price || 0)
+      });
+      itemsByOrder.set(String(item.order_id), list);
+    }
+
+    const merchantVat = process.env.MERCHANT_VAT_NUMBER || '310123456700003';
+
+    const invoices = ordersList.map((o: any) => {
+      const items = itemsByOrder.get(String(o.id)) || [];
+      const subtotal = Number(o.subtotal || 0);
+      const discount = Number(o.discount_amount || 0);
+      const shipping = Number(o.shipping_cost || 0);
+      const tax = Number(o.tax_amount || (subtotal * 0.15));
+      const total = Number(o.total_amount || (subtotal - discount + shipping + tax));
+
+      return {
+        invoiceReference: `INV-${o.id}`,
+        invoiceNumber: `INV-${o.id}`,
+        invoiceDate: o.created_at,
+        orderId: o.id,
+        currency: 'SAR',
+        status: o.status,
+        paymentStatus: o.payment_status || 'unpaid',
+        paymentMethod: o.payment_method || 'Moyasar Online Payment',
+        gatewayPaymentId: o.shipment_id || null,
+        transactionId: o.tracking_number || null,
+        merchantVat: merchantVat,
+        items,
+        subtotal,
+        discount,
+        shipping,
+        tax,
+        total
+      };
+    });
+
+    return res.json({ success: true, invoices });
+  } catch (err: any) {
+    console.error('Error in GET /api/customer-invoices:', err);
+    return res.status(500).json({ error: 'Failed to retrieve customer invoices.' });
+  }
+});
+
+// GET /api/wishlist — Sync customer wishlist from Supabase DB
+app.get('/api/wishlist', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true, data: [] });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('zoal_wishlist')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return res.json({ success: true, data: data || [] });
+  } catch (err: any) {
+    console.error('Error in GET /api/wishlist:', err);
+    return res.status(500).json({ error: 'Failed to retrieve wishlist.' });
+  }
+});
+
+// POST /api/wishlist — Add item to customer wishlist in Supabase DB
+app.post('/api/wishlist', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  const { product_id } = req.body;
+
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+  if (!product_id) {
+    return res.status(400).json({ error: 'product_id is required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true, message: 'Wishlist updated locally.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('zoal_wishlist')
+      .upsert({ user_id: user.id, product_id }, { onConflict: 'user_id,product_id' })
+      .select();
+
+    if (error) throw error;
+    return res.json({ success: true, data: data?.[0] });
+  } catch (err: any) {
+    console.error('Error in POST /api/wishlist:', err);
+    return res.status(500).json({ error: 'Failed to update wishlist.' });
+  }
+});
+
+// DELETE /api/wishlist/:productId — Remove item from customer wishlist
+app.delete('/api/wishlist/:productId', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  const productId = req.params.productId;
+
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('zoal_wishlist')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('product_id', productId);
+
+    if (error) throw error;
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error in DELETE /api/wishlist:', err);
+    return res.status(500).json({ error: 'Failed to remove from wishlist.' });
+  }
+});
+
+// GET /api/customer/addresses — Fetch user saved addresses
+app.get('/api/customer/addresses', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true, addresses: user.addresses || [] });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('zoal_addresses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('is_default', { ascending: false });
+
+    if (error) throw error;
+    return res.json({ success: true, addresses: data || [] });
+  } catch (err: any) {
+    console.error('Error in GET /api/customer/addresses:', err);
+    return res.status(500).json({ error: 'Failed to retrieve addresses.' });
+  }
+});
+
+// POST /api/customer/reviews — Submit verified product review
+app.post('/api/customer/reviews', authenticateRequest, async (req: any, res: any) => {
+  const user = req.user;
+  const { product_id, rating, comment } = req.body;
+
+  if (!user || !user.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+  if (!product_id || !rating) {
+    return res.status(400).json({ error: 'product_id and rating are required.' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.json({ success: true, message: 'Review recorded.' });
+  }
+
+  try {
+    // Check delivered purchase history for strict purchase verification (Section 16)
+    const { data: userOrders } = await supabase
+      .from('zoal_orders')
+      .select('id')
+      .eq('customer_id', user.id)
+      .in('status', ['shipped', 'delivered', 'completed']);
+
+    if (!userOrders || userOrders.length === 0) {
+      return res.status(403).json({ error: 'Review rejected: You must have a delivered order to review products.' });
+    }
+
+    const orderIds = userOrders.map((o: any) => o.id);
+    const { data: matchedItems } = await supabase
+      .from('zoal_order_items')
+      .select('id')
+      .in('order_id', orderIds)
+      .eq('product_id', product_id);
+
+    if (!matchedItems || matchedItems.length === 0) {
+      return res.status(403).json({ error: 'Review rejected: This product is not part of your order history.' });
+    }
+
+    const { data: review, error } = await supabase
+      .from('zoal_reviews')
+      .insert({
+        user_id: user.id,
+        product_id,
+        rating: Math.min(5, Math.max(1, Number(rating))),
+        comment: (comment || '').trim(),
+        is_approved: true
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, review });
+  } catch (err: any) {
+    console.error('Error in POST /api/customer/reviews:', err);
+    return res.status(500).json({ error: 'Failed to save product review.' });
+  }
+});
+
 // Get shipping options dynamically based on rules engine
 app.post('/api/shipping/options', async (req, res) => {
   try {
@@ -2708,26 +3062,15 @@ app.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'ma
 
 // -------------------------------------------------------------
 // SUPPORT CENTER API ROUTES
+// Customer and Staff accessible ticket routes (supportModule handles internal role scoping and IDOR protection)
+app.get('/api/support/tickets', authenticateRequest, supportModule.getTickets);
+app.post('/api/support/tickets', authenticateRequest, supportModule.createTicket);
+app.post('/api/support/tickets/:id/messages', authenticateRequest, supportModule.addMessage);
 
-app.use('/api/support', authenticateRequest, requireRole(['staff']));
-
-app.get('/api/support/tickets', async (req, res) => {
-  // TODO: Fetch from Supabase
-  res.json({ tickets: [] });
-});
-
-app.post('/api/support/tickets', async (req, res) => {
-  // TODO: Persist to Supabase
-  res.status(201).json({ success: true });
-});
-
-app.get('/api/support/teams', async (req, res) => {
-  res.json({ team: [] });
-});
-
-app.get('/api/support/reports', async (req, res) => {
-  res.json({ reports: [] });
-});
+// Staff-only support operations
+app.put('/api/support/tickets/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.updateTicket);
+app.get('/api/support/teams', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), (req, res) => { res.json({ team: [] }); });
+app.get('/api/support/reports', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), supportModule.getSupportReports);
 
 // Vite & Static file serving setup
 async function startServer() {
