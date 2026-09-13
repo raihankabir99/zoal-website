@@ -248,7 +248,7 @@ export function EnterpriseBlogManager() {
       originalForm.append('bucket', 'blog-images');
       originalForm.append('path', originalPath);
       
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       
       const origRes = await fetch('/api/storage/upload', {
         method: 'POST',
@@ -1018,7 +1018,7 @@ export function EnterpriseBlogManager() {
       originalForm.append('bucket', 'blog-images');
       originalForm.append('path', originalPath);
       
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       
       const origRes = await fetch('/api/storage/upload', {
         method: 'POST',
@@ -1099,7 +1099,7 @@ export function EnterpriseBlogManager() {
       originalForm.append('bucket', 'blog-images');
       originalForm.append('path', originalPath);
       
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       
       const origRes = await fetch('/api/storage/upload', {
         method: 'POST',

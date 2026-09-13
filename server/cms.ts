@@ -1,5 +1,37 @@
 import { getSupabaseClient, getServiceSupabaseClient, getCleanSupabaseUrl } from './supabase';
 import { Request, Response } from 'express';
+import { logAuditEvent } from './audit';
+
+const PUBLIC_CMS_SETTING_KEYS = new Set(['navigation.menu', 'footer.settings', 'announcement.settings', 'popup.settings', 'seo.global']);
+
+
+// Generic authoritative registry for CMS settings that do not belong to a dedicated domain table.
+export async function getCmsSettings(req: Request, res: Response) {
+  const supabase = getServiceSupabaseClient() || getSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const { data, error } = await supabase.from('zoal_cms_settings').select('id,setting_key,setting_value,status,created_at,updated_at').eq('status', 'published').in('setting_key', Array.from(PUBLIC_CMS_SETTING_KEYS));
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+}
+
+export async function upsertCmsSetting(req: Request, res: Response) {
+  const { key } = req.params;
+  if (!/^[a-z0-9_.-]{2,120}$/i.test(String(key))) return res.status(400).json({ error: 'Invalid CMS setting key.' });
+  if (!PUBLIC_CMS_SETTING_KEYS.has(String(key))) return res.status(404).json({ error: 'Unknown CMS setting key.' });
+  const supabase = getServiceSupabaseClient() || getSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const value = req.body?.value;
+  if (value === undefined) return res.status(400).json({ error: 'CMS setting value is required.' });
+  if (JSON.stringify(value).length > 250000) return res.status(413).json({ error: 'CMS setting value is too large.' });
+  const actor = (req as any).user?.id || (req as any).user?.email || null;
+  const { data: existing } = await supabase.from('zoal_cms_settings').select('*').eq('setting_key', key).maybeSingle();
+  const { data, error } = await supabase.from('zoal_cms_settings').upsert({
+    setting_key: key, setting_value: value, status: 'published', updated_by: actor, created_by: existing?.created_by || actor, updated_at: new Date().toISOString()
+  }, { onConflict: 'setting_key' }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  logAuditEvent({ req, action: 'UPSERT_CMS_SETTING', resourceType: 'cms_setting', resourceId: String(data.id), beforeState: existing || null, afterState: data, source: 'cms' });
+  res.json(data);
+}
 
 // -------------------------------------------------------------
 // CENTRALIZED IMAGE URL NORMALIZATION (Option C)
@@ -77,8 +109,20 @@ export async function updateCmsPage(req: Request, res: Response) {
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
+  const { data: existing } = await supabase.from('zoal_cms_pages').select('*').eq('id', id).maybeSingle();
   const { data, error } = await supabase.from('zoal_cms_pages').update(req.body).eq('id', id).select().single();
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'UPDATE_CMS_PAGE',
+    resourceType: 'cms_page',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'cms'
+  });
+
   res.json(data);
 }
 
@@ -165,6 +209,15 @@ export async function createHomepageHero(req: Request, res: Response) {
     return res.status(500).json({ error: error.message });
   }
 
+  logAuditEvent({
+    req,
+    action: 'CREATE_HOMEPAGE_HERO',
+    resourceType: 'cms_hero',
+    resourceId: data.id,
+    afterState: data,
+    source: 'cms'
+  });
+
   res.status(201).json(normalizeHeroRecord(data));
 }
 
@@ -172,6 +225,12 @@ export async function updateHomepageHero(req: Request, res: Response) {
   const { id } = req.params;
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+
+  const { data: existing } = await supabase
+    .from('zoal_homepage_heroes')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const heroData = { ...getHeroPayload(req.body), updated_at: new Date().toISOString() };
   const { data, error } = await supabase
@@ -192,6 +251,16 @@ export async function updateHomepageHero(req: Request, res: Response) {
     return res.status(500).json({ error: error.message || 'Unknown update error' });
   }
 
+  logAuditEvent({
+    req,
+    action: 'UPDATE_HOMEPAGE_HERO',
+    resourceType: 'cms_hero',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'cms'
+  });
+
   res.json(normalizeHeroRecord(data));
 }
 
@@ -199,6 +268,12 @@ export async function deleteHomepageHero(req: Request, res: Response) {
   const { id } = req.params;
   const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+
+  const { data: existing } = await supabase
+    .from('zoal_homepage_heroes')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const { error } = await supabase
     .from('zoal_homepage_heroes')
@@ -209,6 +284,17 @@ export async function deleteHomepageHero(req: Request, res: Response) {
     console.error('Error deleting homepage hero:', error);
     return res.status(500).json({ error: error.message });
   }
+
+  logAuditEvent({
+    req,
+    action: 'DELETE_HOMEPAGE_HERO',
+    resourceType: 'cms_hero',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: null,
+    severity: 'WARN',
+    source: 'cms'
+  });
 
   res.json({ success: true, message: 'Hero deleted successfully.' });
 }
@@ -244,6 +330,16 @@ export async function duplicateHomepageHero(req: Request, res: Response) {
     console.error('Error duplicating homepage hero:', error);
     return res.status(500).json({ error: error.message });
   }
+
+  logAuditEvent({
+    req,
+    action: 'DUPLICATE_HOMEPAGE_HERO',
+    resourceType: 'cms_hero',
+    resourceId: data.id,
+    afterState: data,
+    metadata: { sourceHeroId: id },
+    source: 'cms'
+  });
 
   res.status(201).json(normalizeHeroRecord(data));
 }
@@ -467,6 +563,15 @@ export async function createHomepageEditorialBlock(req: Request, res: Response) 
     return res.status(500).json({ error: error.message });
   }
 
+  logAuditEvent({
+    req,
+    action: 'CREATE_EDITORIAL_BLOCK',
+    resourceType: 'cms_editorial_block',
+    resourceId: data.id,
+    afterState: data,
+    source: 'cms'
+  });
+
   res.status(201).json(data);
 }
 
@@ -474,6 +579,12 @@ export async function updateHomepageEditorialBlock(req: Request, res: Response) 
   const { id } = req.params;
   const supabase = getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+
+  const { data: existing } = await supabase
+    .from('zoal_homepage_editorial_blocks')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const blockData = { ...getEditorialPayload(req.body), updated_at: new Date().toISOString() };
   
@@ -489,6 +600,16 @@ export async function updateHomepageEditorialBlock(req: Request, res: Response) 
     return res.status(500).json({ error: error.message });
   }
 
+  logAuditEvent({
+    req,
+    action: 'UPDATE_EDITORIAL_BLOCK',
+    resourceType: 'cms_editorial_block',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'cms'
+  });
+
   res.json(data);
 }
 
@@ -496,6 +617,12 @@ export async function deleteHomepageEditorialBlock(req: Request, res: Response) 
   const { id } = req.params;
   const supabase = getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+
+  const { data: existing } = await supabase
+    .from('zoal_homepage_editorial_blocks')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const { error } = await supabase
     .from('zoal_homepage_editorial_blocks')
@@ -506,6 +633,17 @@ export async function deleteHomepageEditorialBlock(req: Request, res: Response) 
     console.error('Error deleting editorial block:', error);
     return res.status(500).json({ error: error.message });
   }
+
+  logAuditEvent({
+    req,
+    action: 'DELETE_EDITORIAL_BLOCK',
+    resourceType: 'cms_editorial_block',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: null,
+    severity: 'WARN',
+    source: 'cms'
+  });
 
   res.json({ success: true, message: 'Editorial block deleted successfully.' });
 }
@@ -543,6 +681,16 @@ export async function duplicateHomepageEditorialBlock(req: Request, res: Respons
     console.error('Error duplicating editorial block:', error);
     return res.status(500).json({ error: error.message });
   }
+
+  logAuditEvent({
+    req,
+    action: 'DUPLICATE_EDITORIAL_BLOCK',
+    resourceType: 'cms_editorial_block',
+    resourceId: data.id,
+    afterState: data,
+    metadata: { sourceEditorialBlockId: id },
+    source: 'cms'
+  });
 
   res.status(201).json(data);
 }

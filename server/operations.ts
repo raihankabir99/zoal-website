@@ -37,20 +37,56 @@ export async function getHealthData(req: Request, res: Response) {
 }
 
 export async function getBackupData(req: Request, res: Response) {
-  res.json({
-    lastBackup: '2026-07-27T04:00:00Z',
-    status: 'Completed',
-    scheduled: 'Daily'
+  // The application does not own the infrastructure backup ledger. Do not
+  // present branding_settings.updated_at as a completed backup timestamp.
+  return res.json({
+    lastBackup: null,
+    status: 'Infrastructure Managed',
+    scheduled: 'Managed by Infrastructure',
+    verifiedByApplication: false
   });
 }
 
 export async function getAlertData(req: Request, res: Response) {
+  const supabase = getSupabaseClient();
+  try {
+    if (supabase) {
+      // Fetch unread critical notifications as alerts
+      const { data } = await supabase
+        .from('zoal_notifications')
+        .select('*')
+        .eq('is_read', false)
+        .eq('priority', 'high')
+        .limit(10);
+      return res.json({ alerts: data || [] });
+    }
+  } catch (err) {}
   res.json({
     alerts: []
   });
 }
 
 export async function getCertificationData(req: Request, res: Response) {
+  const supabase = getSupabaseClient();
+  let stats = {
+    userCount: 0,
+    logCount: 0,
+    orderCount: 0
+  };
+
+  try {
+    if (supabase) {
+      const [u, l, o] = await Promise.all([
+        supabase.from('zoal_users').select('id', { count: 'exact', head: true }),
+        supabase.from('zoal_activity_logs').select('id', { count: 'exact', head: true }),
+        supabase.from('zoal_orders').select('id', { count: 'exact', head: true })
+      ]);
+      stats.userCount = u.count || 0;
+      stats.logCount = l.count || 0;
+      stats.orderCount = o.count || 0;
+    }
+  } catch (err) {}
+
   res.json({
     enterpriseReadinessPct: 100,
     securityScorePct: 99.8,
@@ -62,6 +98,12 @@ export async function getCertificationData(req: Request, res: Response) {
     productionReady: true,
     regressionRisk: 'Extremely Low (< 0.01%)',
     confidencePct: 99.99,
+    metrics: {
+      totalUsers: stats.userCount,
+      totalLogs: stats.logCount,
+      totalOrders: stats.orderCount,
+      timestamp: new Date().toISOString()
+    },
     checklists: [
       { category: 'Translation Engine', status: 'Passed', items: 14 },
       { category: 'Publishing & Rollback', status: 'Passed', items: 10 },

@@ -7,6 +7,46 @@
   },
   "routes": [
     {
+      "src": "/api/admin/dashboard-analytics",
+      "dest": "/api/admin/dashboard-analytics.ts"
+    },
+    {
+      "src": "/api/categories",
+      "dest": "/api/categories.ts"
+    },
+    {
+      "src": "/api/inventory",
+      "dest": "/api/inventory.ts"
+    },
+    {
+      "src": "/api/support",
+      "dest": "/api/support.ts"
+    },
+    {
+      "src": "/api/support/(.*)",
+      "dest": "/api/support.ts"
+    },
+    {
+      "src": "/api/cms",
+      "dest": "/api/cms.ts"
+    },
+    {
+      "src": "/api/cms/(.*)",
+      "dest": "/api/cms.ts"
+    },
+    {
+      "src": "/api/payments",
+      "dest": "/api/payments.ts"
+    },
+    {
+      "src": "/api/payments/(.*)",
+      "dest": "/api/payments.ts"
+    },
+    {
+      "src": "/api/customer-invoices",
+      "dest": "/api/customer-invoices.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },

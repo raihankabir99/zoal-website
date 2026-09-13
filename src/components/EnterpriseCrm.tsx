@@ -149,13 +149,10 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
   const { settings } = useBranding();
   const notificationEngine = useNotificationEngine(currentUser);
 
-  // Localized RBAC Override Simulator for Preview/Reviewers
-  const [activeRole, setActiveRole] = useState<string>(() => {
-    return currentUser?.role || 'admin';
-  });
-
+  // Role is derived from the authenticated session; the UI must not simulate RBAC.
+  const activeRole = currentUser?.role || 'guest';
   const isStaff = activeRole === 'staff';
-  const isAdmin = activeRole === 'admin';
+  const isAdmin = ['owner', 'admin', 'manager'].includes(activeRole);
 
   // Helper to trigger system alerts for the main Admin Dashboard
   const addAdminNotification = async (title: string, message: string, type: 'success' | 'warning' | 'error' | 'info', category: string) => {
@@ -243,96 +240,7 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
     fetchCrmCustomers();
   }, [fetchCrmCustomers]);
 
-  // Sync real-time shop orders with the customers database dynamic variables
-  const customersWithOrders = useMemo(() => {
-    return customers.map(cust => {
-      // Find orders matching this customer email
-      const matchedOrders = orders.filter(o => (o.email || '').toLowerCase() === (cust.email || '').toLowerCase());
-      
-      const totalSpendingFromOrders = matchedOrders.reduce((sum, o) => o.status !== 'Cancelled' ? sum + o.total : sum, 0);
-      const totalOrdersCountFromOrders = matchedOrders.length;
-
-      const baseSpend = cust.totalSpending !== undefined && cust.totalSpending > 0 
-        ? cust.totalSpending 
-        : totalSpendingFromOrders;
-      const baseOrders = cust.totalOrders !== undefined && cust.totalOrders > 0 
-        ? cust.totalOrders 
-        : totalOrdersCountFromOrders;
-      const lastPurchaseDate = matchedOrders.length > 0 ? matchedOrders[0].date : (cust.lastPurchase || undefined);
-
-      // Calculate AOV
-      const finalAov = baseOrders > 0 ? Math.round(baseSpend / baseOrders) : (cust.averageOrderValue || 0);
-
-      // Derive Loyalty parameters strictly from API records
-      const loyaltyPts = cust.loyaltyPoints ?? null;
-      const membershipLvl = cust.membershipLevel ?? null;
-      const refCredits = cust.referralCredits ?? null;
-      const birthdayRwd = cust.birthdayReward ?? null;
-
-      // Default coupons / rewards if not present
-      const crmCoupons = cust.coupons || [];
-
-      // Default loyalty rewards if not present
-      const crmRewards = cust.rewards || [];
-
-      // Enriched Review structures
-      const enrichedReviews = (cust.reviews || []).map((r, rIdx) => ({
-        id: r.id || `rev-${cust.id}-${rIdx}`,
-        productName: r.productName,
-        rating: r.rating,
-        comment: r.comment,
-        date: r.date,
-        approved: r.approved !== undefined ? r.approved : true,
-        rejected: r.rejected || false,
-        reply: r.reply || ''
-      }));
-
-      // Marketing preferences - pass null if no preference recorded
-      const enrichedMarketing = cust.marketingPreferences ?? null;
-
-      // Map communicationHistory to communicationsTimeline expected by UI
-      const enrichedCommunications = (cust.communicationHistory || []).map((comm) => ({
-        id: comm.id,
-        channel: comm.channel,
-        type: comm.subject,
-        content: comm.body,
-        date: comm.date,
-        status: comm.status || 'Sent'
-      }));
-
-      // Tags
-      const crmTags = cust.tags || [];
-
-      // Segment assignment from API or fallback to Customer
-      const calculatedSegment = cust.segment || 'Customer';
-
-      return {
-        ...cust,
-        segment: calculatedSegment,
-        orderHistory: matchedOrders.length > 0 ? matchedOrders : (cust.orderHistory || []),
-        totalOrders: baseOrders,
-        totalSpending: baseSpend,
-        averageOrderValue: finalAov,
-        lastPurchase: lastPurchaseDate,
-        
-        // Loyalty properties
-        loyaltyPoints: loyaltyPts,
-        membershipLevel: membershipLvl,
-        referralCredits: refCredits,
-        birthdayReward: birthdayRwd,
-        coupons: crmCoupons,
-        rewards: crmRewards,
-        
-        // Extended structures
-        reviews: enrichedReviews,
-        marketingPreferences: enrichedMarketing,
-        communicationsTimeline: enrichedCommunications,
-        tags: crmTags,
-        archived: cust.archived || false
-      };
-    });
-  }, [customers, orders]);
-
+  // Customer API already aggregates orders by canonical customer_id; do not reconstruct by email in the client.\n  const customersWithOrders = customers;\n
   // CRM Sub tabs
   const [crmSubTab, setCrmSubTab] = useState<'dashboard' | 'list'>('dashboard');
 
@@ -413,16 +321,21 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
   }, [customersWithOrders]);
 
   // --- RECHARTS CHART PREPARATIONS ---
-  // A. Customer Growth Over Time
-  const customerGrowthData = [
-    { month: 'Jan', registered: 1, cumulative: 1 },
-    { month: 'Feb', registered: 1, cumulative: 2 },
-    { month: 'Mar', registered: 1, cumulative: 3 },
-    { month: 'Apr', registered: 1, cumulative: 4 },
-    { month: 'May', registered: 1, cumulative: 5 },
-    { month: 'Jun', registered: 0, cumulative: 5 },
-    { month: 'Jul', registered: 2, cumulative: 7 }
-  ];
+  // A. Customer Growth Over Time — derived from authoritative registration dates.
+  const customerGrowthData = useMemo(() => {
+    const year = new Date().getFullYear();
+    const months = Array.from({ length: 12 }, (_, index) => ({
+      month: new Date(year, index, 1).toLocaleString(undefined, { month: 'short' }),
+      registered: 0,
+      cumulative: 0
+    }));
+    customers.forEach(customer => {
+      const date = customer.registrationDate ? new Date(customer.registrationDate) : null;
+      if (date && !Number.isNaN(date.getTime()) && date.getFullYear() === year) months[date.getMonth()].registered++;
+    });
+    let cumulative = 0;
+    return months.map(month => ({ ...month, cumulative: cumulative += month.registered }));
+  }, [customers]);
 
   // B. Repeat Customers Ratio
   const repeatCustomerData = [
@@ -439,12 +352,16 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
       .slice(0, 5);
   }, [customersWithOrders]);
 
-  // D. Monthly Registrations Split
-  const monthlyRegistrationsData = [
-    { name: 'Q1 2026', count: 3 },
-    { name: 'Q2 2026', count: 2 },
-    { name: 'Q3 2026 (July)', count: 2 }
-  ];
+  // D. Quarterly registrations — derived from authoritative registration dates.
+  const monthlyRegistrationsData = useMemo(() => {
+    const year = new Date().getFullYear();
+    const quarters = [0, 1, 2, 3].map(index => ({ name: `Q${index + 1} ${year}`, count: 0 }));
+    customers.forEach(customer => {
+      const date = customer.registrationDate ? new Date(customer.registrationDate) : null;
+      if (date && !Number.isNaN(date.getTime()) && date.getFullYear() === year) quarters[Math.floor(date.getMonth() / 3)].count++;
+    });
+    return quarters;
+  }, [customers]);
 
   // --- FILTERED AND SORTED CUSTOMERS LIST ---
   const filteredCustomers = useMemo(() => {
@@ -617,11 +534,11 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
           name: '',
           email: '',
           phone: '',
-          city: 'Branch A',
-          country: 'Saudi Arabia',
-          gender: 'Male',
+          city: '',
+          country: '',
+          gender: '',
           birthday: '',
-          language: 'Arabic'
+          language: ''
         });
       }
     } catch (err: any) {
@@ -692,15 +609,10 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
         })
       });
 
-      const data = res.ok ? await res.json() : null;
-      const noteRecord = data?.note || {
-        id: `n-${Date.now()}`,
-        type: newNoteType,
-        content: newNoteContent,
-        priority: newNotePriority,
-        author: currentUser?.name || 'Support Representative',
-        date: new Date().toISOString().replace('T', ' ').slice(0, 16)
-      };
+      if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.message || errData.error || 'Unable to persist customer note.'); }
+      const data = await res.json();
+      const noteRecord = data?.note;
+      if (!noteRecord) throw new Error('Server did not return the persisted customer note.');
 
       setCustomers(prev => prev.map(c => {
         if (c.id === selectedCustomerId) {
@@ -730,125 +642,57 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
 
   // --- NEW ENTERPRISE CRM INTERACTIVE ACTIONS ---
   
-  // Update Individual Marketing Preferences
-  const handleUpdateMarketingPreferences = (prefKey: string, value: boolean) => {
-    if (!selectedCustomerId) return;
-    setCustomers(prev => prev.map(c => {
-      if (c.id === selectedCustomerId) {
-        const updatedPrefs = {
-          ...c.marketingPreferences,
-          [prefKey]: value
-        };
-        return {
-          ...c,
-          marketingPreferences: updatedPrefs,
-          activityTimeline: [
-            {
-              id: `act-${Date.now()}`,
-              event: 'Preferences Updated' as const,
-              description: `Marketing outreach preference modified: [${prefKey}] set to ${value ? 'ON' : 'OFF'} by ${currentUser?.name || 'Staff'}`,
-              time: new Date().toLocaleString()
-            },
-            ...c.activityTimeline
-          ]
-        };
-      }
-      return c;
-    }));
-    addLog(`Updated Marketing Preferences for ${selectedCustomer?.name}`, selectedCustomerId);
-    addAdminNotification('Marketing Preference Updated', `Customer ${selectedCustomer?.name}'s outreach preference [${prefKey}] set to ${value ? 'ON' : 'OFF'}.`, 'info', 'marketing_preference');
-  };
-
-  // Direct Communication Send Dispatch
-  const handleSendCommunicationMessage = async (channel: 'Email' | 'SMS' | 'WhatsApp' | 'Notification' | 'Campaign' | 'Support Response', subject: string, body: string) => {
-    if (!selectedCustomerId || !body.trim()) return;
-    
+  // Update Individual Marketing Preferences — persist through the authoritative customer API.
+  const handleUpdateMarketingPreferences = async (prefKey: string, value: boolean) => {
+    if (!selectedCustomerId || !selectedCustomer) return;
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('CRM authentication required.'); return; }
+    const marketingPreferences = { ...selectedCustomer.marketingPreferences, [prefKey]: value };
     try {
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
-      if (!token) {
-        alert('CRM authentication required. Please log in with an administrative account.');
-        return;
-      }
-      const res = await fetch(`/api/admin/customers/${selectedCustomerId}/communications`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ channel, subject, body })
+      const res = await fetch(`/api/admin/customers/${selectedCustomerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ marketingPreferences })
       });
-
-      const data = res.ok ? await res.json() : null;
-      const commRecord = data?.communication || {
-        id: `comm-${Date.now()}`,
-        channel: channel as any,
-        subject: subject || `${channel} Dispatch`,
-        body: body,
-        date: new Date().toISOString().slice(0, 10),
-        status: 'Sent' as const
-      };
-
-      setCustomers(prev => prev.map(c => {
-        if (c.id === selectedCustomerId) {
-          return {
-            ...c,
-            communicationHistory: [commRecord, ...c.communicationHistory],
-            activityTimeline: [
-              {
-                id: `act-${Date.now()}`,
-                event: 'Marketing Interaction' as const,
-                description: `Direct CRM communication dispatched via ${channel}. Subject: "${subject || 'None'}"`,
-                time: new Date().toLocaleString()
-              },
-              ...c.activityTimeline
-            ]
-          };
-        }
-        return c;
-      }));
-
-      addLog(`Sent CRM ${channel} to ${selectedCustomer?.name}`, selectedCustomerId);
-      alert(`Success: CRM support has dispatched your ${channel} message to this Customer account successfully.`);
-    } catch (err) {
-      console.error('Error sending communication:', err);
+      if (!res.ok) throw new Error('Marketing preference update failed.');
+      const data = await res.json();
+      if (!data?.customer) throw new Error('Server did not return the persisted customer.');
+      setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? data.customer : c));
+      addLog(`Updated Marketing Preferences for ${selectedCustomer.name}`, selectedCustomerId);
+    } catch (err: any) {
+      alert(err?.message || 'Marketing preference was not changed.');
     }
   };
 
-  // Moderation of Reviews left by Customer
-  const handleUpdateReviewStatus = (reviewId: string, action: 'approve' | 'reject', replyText?: string) => {
-    if (!selectedCustomerId) return;
-    setCustomers(prev => prev.map(c => {
-      if (c.id === selectedCustomerId) {
-        const updatedReviews = c.reviews.map(r => {
-          if (r.id === reviewId) {
-            return {
-              ...r,
-              approved: action === 'approve',
-              rejected: action === 'reject',
-              reply: replyText !== undefined ? replyText : r.reply
-            };
-          }
-          return r;
-        });
+  // Direct communication updates the UI only after the server confirms persistence.
+  const handleSendCommunicationMessage = async (channel: 'Email' | 'SMS' | 'WhatsApp' | 'Notification' | 'Campaign' | 'Support Response', subject: string, body: string) => {
+    if (!selectedCustomerId || !body.trim()) return;
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('CRM authentication required.'); return; }
+    try {
+      const res = await fetch(`/api/admin/customers/${selectedCustomerId}/communications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ channel, subject, body })
+      });
+      if (!res.ok) throw new Error('Communication was not persisted.');
+      const data = await res.json();
+      const commRecord = data?.communication;
+      if (!commRecord) throw new Error('Server did not return the persisted communication.');
+      setCustomers(prev => prev.map(c => c.id === selectedCustomerId ? {
+        ...c,
+        communicationHistory: [commRecord, ...c.communicationHistory]
+      } : c));
+      addLog(`Sent CRM ${channel} to ${selectedCustomer?.name}`, selectedCustomerId);
+      alert('Communication recorded successfully.');
+    } catch (err: any) {
+      alert(err?.message || 'Communication was not sent or persisted.');
+    }
+  };
 
-        return {
-          ...c,
-          reviews: updatedReviews,
-          activityTimeline: [
-            {
-              id: `act-${Date.now()}`,
-              event: 'Review' as const,
-              description: `Product review moderated to: ${action.toUpperCase()}. ${replyText ? 'Support reply appended.' : ''}`,
-              time: new Date().toLocaleString()
-            },
-            ...c.activityTimeline
-          ]
-        };
-      }
-      return c;
-    }));
-    addLog(`Moderated Review for ${selectedCustomer?.name}`, selectedCustomerId);
-    alert(`Review has been successfully ${action === 'approve' ? 'approved & published' : 'rejected & hidden'}.`);
+  // No authoritative review moderation endpoint is currently provisioned: fail closed.
+  const handleUpdateReviewStatus = (_reviewId: string, _action: 'approve' | 'reject', _replyText?: string) => {
+    alert('Review moderation is unavailable until an authoritative backend endpoint is provisioned. No local review state was changed.');
   };
 
   // Submit Outreach Form
@@ -873,68 +717,9 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
     e.currentTarget.reset();
   };
 
-  // Simulate Large Purchase (>5,000 SAR) and trigger Admin notifications
-  const handleSimulateLargePurchase = () => {
-    if (!selectedCustomerId) return;
-    const newOrder = {
-      id: `ZL-${Math.floor(1000 + Math.random() * 9000)}`,
-      date: new Date().toISOString().slice(0, 10),
-      items: [{ name: "Heritage Custom Couture Toob Suite", quantity: 1, price: 7500 }],
-      total: 7500,
-      status: 'Completed' as const,
-      trackingNumber: `TRACK-${Math.floor(100000 + Math.random() * 900000)}`
-    };
-
-    setCustomers(prev => prev.map(c => {
-      if (c.id === selectedCustomerId) {
-        return {
-          ...c,
-          communicationHistory: [
-            {
-              id: `comm-${Date.now()}`,
-              channel: 'Email' as const,
-              subject: 'Invoice & Large Purchase Confirmation',
-              body: `Assalamu Alaikum Customer ${selectedCustomer?.name}. Your purchase of Heritage Custom Couture Toob Suite for 7,500 SAR has been confirmed.`,
-              date: new Date().toISOString().slice(0, 10),
-              status: 'Sent' as const
-            },
-            ...c.communicationHistory
-          ],
-          activityTimeline: [
-            {
-              id: `act-${Date.now()}`,
-              event: 'Large Purchase' as const,
-              description: `Purchased Heritage Custom Couture Toob Suite for 7,500 SAR`,
-              time: new Date().toLocaleString()
-            },
-            ...c.activityTimeline
-          ]
-        };
-      }
-      return c;
-    }));
-
-    addLog(`Simulated Large Purchase for ${selectedCustomer?.name} of 7500 SAR`, selectedCustomerId);
-    addAdminNotification(
-      'Large Purchase Completed',
-      `Checkout event: Customer ${selectedCustomer?.name} completed order of 7,500 SAR.`,
-      'success',
-      'large_purchase'
-    );
-    alert('Success: Simulated Large Purchase of 7,500 SAR. Admin notification triggered!');
-  };
-
-  // Simulate Support Request and trigger Admin notifications
-  const handleSimulateSupportRequest = () => {
-    if (!selectedCustomerId) return;
-    addAdminNotification(
-      'Support Request Received',
-      `Support Ticket: Customer ${selectedCustomer?.name} has requested assistance with Premium Couture Fit.`,
-      'warning',
-      'support_request'
-    );
-    alert('Success: Simulated Customer Support Request. Admin notification triggered!');
-  };
+  // Synthetic operational simulations are disabled in production mode.
+  const handleSimulateLargePurchase = () => alert('Simulation is disabled. Real purchase events must originate from the Orders backend.');
+  const handleSimulateSupportRequest = () => alert('Simulation is disabled. Real support requests must originate from the Support backend.');
 
   // Grant Birthday Reward
   const handleGrantBirthdayReward = () => {
@@ -1232,35 +1017,11 @@ export default function EnterpriseCrm({ currentUser, orders, addLog }: Enterpris
           </h2>
         </div>
 
-        {/* CONTROLS AREA WITH RBAC SIMULATOR */}
+        {/* CONTROLS AREA */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Active Role Switcher Indicator to demonstrate VIP RBAC controls in runtime */}
           <div className="bg-zinc-950 border border-white/5 rounded-xs p-1 px-2.5 flex items-center gap-2 select-none">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">RBAC Privilege:</span>
-            <div className="flex bg-black rounded-xs border border-white/5 p-0.5">
-              <button
-                onClick={() => {
-                  setActiveRole('admin');
-                  addLog('Switched interface view to Admin Level');
-                }}
-                className={`px-2 py-1 text-[7.5px] uppercase tracking-widest font-mono rounded-xs font-bold transition-all ${
-                  isAdmin ? 'bg-gold-pure text-black font-extrabold shadow-md' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                ADMIN
-              </button>
-              <button
-                onClick={() => {
-                  setActiveRole('staff');
-                  addLog('Switched interface view to Staff Level');
-                }}
-                className={`px-2 py-1 text-[7.5px] uppercase tracking-widest font-mono rounded-xs font-bold transition-all ${
-                  isStaff ? 'bg-gold-pure text-black font-extrabold shadow-md' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                STAFF
-              </button>
-            </div>
+            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">Authenticated Role:</span>
+            <span className="px-2 py-1 text-[7.5px] uppercase tracking-widest font-mono rounded-xs font-bold text-zinc-300">{activeRole}</span>
           </div>
 
           <button

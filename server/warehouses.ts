@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getSupabaseClient } from './supabase';
+import { logAuditEvent } from './audit';
 
 const DEFAULT_WAREHOUSES = [
   {
@@ -217,6 +218,16 @@ export async function createWarehouse(req: Request, res: Response) {
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    logAuditEvent({
+      req,
+      action: 'CREATE_WAREHOUSE',
+      resourceType: 'warehouse',
+      resourceId: data.id,
+      afterState: data,
+      source: 'logistics'
+    });
+
     return res.status(201).json(data);
   } catch (err: any) {
     console.error('Error in POST /api/warehouses:', err);
@@ -260,6 +271,12 @@ export async function updateWarehouse(req: Request, res: Response) {
       return res.json({ id, ...updatePayload });
     }
 
+    const { data: existing } = await supabase
+      .from('zoal_warehouses')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
     const { data: updated, error } = await supabase
       .from('zoal_warehouses')
       .update(updatePayload)
@@ -268,6 +285,17 @@ export async function updateWarehouse(req: Request, res: Response) {
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    logAuditEvent({
+      req,
+      action: 'UPDATE_WAREHOUSE',
+      resourceType: 'warehouse',
+      resourceId: id,
+      beforeState: existing || null,
+      afterState: updated,
+      source: 'logistics'
+    });
+
     return res.json(updated);
   } catch (err: any) {
     console.error('Error in PUT /api/warehouses/:id:', err);
@@ -287,12 +315,30 @@ export async function deleteWarehouse(req: Request, res: Response) {
       return res.json({ success: true, deletedId: id });
     }
 
+    const { data: existing } = await supabase
+      .from('zoal_warehouses')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('zoal_warehouses')
       .delete()
       .eq('id', id);
 
     if (error) return res.status(500).json({ error: error.message });
+
+    logAuditEvent({
+      req,
+      action: 'DELETE_WAREHOUSE',
+      resourceType: 'warehouse',
+      resourceId: id,
+      beforeState: existing || null,
+      afterState: null,
+      severity: 'WARN',
+      source: 'logistics'
+    });
+
     return res.json({ success: true, deletedId: id });
   } catch (err: any) {
     console.error('Error in DELETE /api/warehouses/:id:', err);

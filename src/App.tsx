@@ -265,6 +265,45 @@ function AppContent() {
   const [dashboardSubTab, setDashboardSubTab] = useState<string>('overview');
   const [adminSubTab, setAdminSubTab] = useState<string>('dashboard');
 
+  // Synchronize authenticated wishlist from the server of record.
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) return;
+
+    let cancelled = false;
+
+    const loadServerWishlist = async () => {
+      try {
+        const res = await fetch('/api/wishlist', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await res.json().catch(() => null);
+
+        if (!res.ok || !result?.success || !Array.isArray(result.data)) {
+          throw new Error(result?.error || 'Failed to load wishlist');
+        }
+
+        if (cancelled) return;
+
+        const productIds = result.data
+          .map((item: any) => item?.product_id)
+          .filter((id: any): id is string => typeof id === 'string');
+
+        setWishlist(productIds);
+      } catch (error: any) {
+        console.error('Failed to synchronize server wishlist:', error);
+      }
+    };
+
+    loadServerWishlist();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
   const handleNotificationNavigate = (targetModule: string, _params?: any) => {
     setNotificationCenterOpen(false);
     const userRole = ((currentUser as any)?.role || 'customer').toLowerCase();
@@ -524,11 +563,10 @@ function AppContent() {
     let active = true;
     let subscription: any = null;
 
-    // 1. Prioritize real Supabase sessions first
+    // 1. Check real Supabase session
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (!active) return;
       if (session) {
-        // Real authenticated session exists! Overwrite dev-preview-token if any
         const token = session.access_token;
         localStorage.setItem('zoal_auth_token', token);
         setAuthStatusMessage('Preparing Profile...');
@@ -538,49 +576,18 @@ function AppContent() {
           }
         });
       } else {
-        // No active Supabase session, check if Dev Preview is active
-        checkDevConfig();
+        proceedWithStandardNoSession();
       }
     }).catch((err) => {
       console.warn('Initial session check failed:', err);
       if (active) {
-        checkDevConfig();
+        proceedWithStandardNoSession();
       }
     });
 
-    function checkDevConfig() {
-      if (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) {
-        proceedWithStandardNoSession();
-        return;
-      }
-      fetch('/api/auth/dev-config')
-        .then(res => {
-          if (!res.ok) throw new Error('Not dev mode');
-          return res.json();
-        })
-        .then(config => {
-          if (!active) return;
-          if (config.devMode && config.user) {
-            // Dev Mode session is active! Set token and profiles
-            localStorage.setItem('zoal_auth_token', 'dev-preview-token');
-            setCurrentUser(config.user);
-            setCurrentPage('admin');
-            setIsAuthLoading(false);
-            setupAuthStateListener();
-          } else {
-            proceedWithStandardNoSession();
-          }
-        })
-        .catch(() => {
-          if (active) proceedWithStandardNoSession();
-        });
-    }
-
     function proceedWithStandardNoSession() {
-      // Clear dev-preview-token if it is stale and no real session is present
-      if (localStorage.getItem('zoal_auth_token') === 'dev-preview-token') {
-        localStorage.removeItem('zoal_auth_token');
-      }
+      localStorage.removeItem('zoal_auth_token');
+      sessionStorage.removeItem('zoal_auth_token');
       setIsAuthLoading(false);
       setupAuthStateListener();
     }
@@ -600,13 +607,10 @@ function AppContent() {
           }
           fetchProfile(token);
         } else {
-          const currentToken = localStorage.getItem('zoal_auth_token');
-          if (currentToken !== 'dev-preview-token') {
-            localStorage.removeItem('zoal_auth_token');
-            sessionStorage.removeItem('zoal_auth_token');
-            setCurrentUser(null);
-            setIsAuthLoading(false);
-          }
+          localStorage.removeItem('zoal_auth_token');
+          sessionStorage.removeItem('zoal_auth_token');
+          setCurrentUser(null);
+          setIsAuthLoading(false);
         }
       });
       subscription = sub.data?.subscription;
@@ -642,12 +646,9 @@ function AppContent() {
       .catch((err) => {
         console.warn('Auto-login session restoration failed:', err.message);
         if (active) {
-          const currentToken = localStorage.getItem('zoal_auth_token');
-          if (currentToken !== 'dev-preview-token') {
-            localStorage.removeItem('zoal_auth_token');
-            sessionStorage.removeItem('zoal_auth_token');
-            setCurrentUser(null);
-          }
+          localStorage.removeItem('zoal_auth_token');
+          sessionStorage.removeItem('zoal_auth_token');
+          setCurrentUser(null);
         }
       })
       .finally(() => {
@@ -921,28 +922,71 @@ function AppContent() {
     setCart((prevCart) => prevCart.filter((item) => item.product.id !== productId));
   };
 
-  // Wishlist toggle
-  const handleToggleWishlist = (productId: string) => {
+  // Wishlist toggle — authenticated users are server-authoritative; guests retain local-only behavior.
+  const handleToggleWishlist = async (productId: string) => {
     const product = allProducts.find((p) => p.id === productId);
     if (!product) return;
 
-    const isAlreadyInWishlist = wishlist.includes(productId);
-    if (isAlreadyInWishlist) {
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    const isAuthenticatedCustomer = !!currentUser && !!token;
+
+    if (!isAuthenticatedCustomer) {
+      const isAlreadyInWishlist = wishlist.includes(productId);
+      setWishlist((prevWish) =>
+        isAlreadyInWishlist
+          ? prevWish.filter((id) => id !== productId)
+          : [...prevWish, productId]
+      );
       dispatchNotification({
         type: 'wishlist',
         title: product.name,
-        message: 'Removed from wishlist',
+        message: isAlreadyInWishlist ? 'Removed from wishlist' : 'Saved to wishlist',
         image: resolveProductImage(product)
       });
-      setWishlist((prevWish) => prevWish.filter((id) => id !== productId));
-    } else {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ product_id: productId })
+      });
+
+      const result = await res.json().catch(() => null);
+      if (!res.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to update wishlist');
+      }
+
+      const toggled = result.data?.toggled;
+      if (toggled === 'added') {
+        setWishlist((prevWish) =>
+          prevWish.includes(productId) ? prevWish : [...prevWish, productId]
+        );
+      } else if (toggled === 'removed') {
+        setWishlist((prevWish) => prevWish.filter((id) => id !== productId));
+      } else {
+        throw new Error('Invalid wishlist response');
+      }
+
       dispatchNotification({
         type: 'wishlist',
         title: product.name,
-        message: 'Saved to wishlist',
+        message: toggled === 'removed' ? 'Removed from wishlist' : 'Saved to wishlist',
         image: resolveProductImage(product)
       });
-      setWishlist((prevWish) => [...prevWish, productId]);
+    } catch (error: any) {
+      console.error('Failed to update server wishlist:', error);
+      dispatchNotification({
+        type: 'system',
+        variant: 'toast',
+        title: 'Wishlist update failed',
+        message: error?.message || 'Please try again.',
+        metadata: { productId }
+      });
     }
   };
 
@@ -968,67 +1012,103 @@ function AppContent() {
     }
   };
 
-  // Handle successful payments confirmation
-  const handleOrderSuccess = (newOrder: Order) => {
-    setOrders((prev) => [newOrder, ...prev]);
-    setCart([]); // Clear cart
-    setDiscountPercent(0);
-    setCouponCode('');
-    
-    // Set success modal states
-    setActiveSuccessOrder(newOrder);
-    setCheckoutSuccessModalOpen(true);
-    setCurrentPage('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    // Trigger System Notifications
-    // 1. Customer Notification
-    notificationEngine.addNotification({
-      title: 'Order Confirmed',
-      message: `Your order #${newOrder.id} has been placed successfully.`,
-      category: 'Order',
-      priority: 'high',
-      target_role: 'customer',
-      user_id: (currentUser as any)?.id || currentUser?.email,
-      user_email: currentUser?.email,
-      metadata: { orderId: newOrder.id }
-    });
-
-    // 2. Admin/Staff Notification
-    notificationEngine.addNotification({
-      title: 'New Enterprise Order',
-      message: `A new order #${newOrder.id} (${newOrder.total} SAR) has been received.`,
-      category: 'Order',
-      priority: 'high',
-      target_role: 'admin',
-      metadata: { orderId: newOrder.id }
-    });
-
-    // Persist order to Supabase via backend proxy
-    fetch('/api/orders/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: newOrder })
-    })
-    .then(res => res.json())
-    .then(data => console.log('Order persistence response:', data))
-    .catch(err => console.error('Order persistence error:', err));
-
-    // Trigger full-stack order email confirmation and DB logger
-    fetch('/api/orders/email', {
-      method: 'POST',
-      headers: {
+  // Handle successful payments confirmation (Strict Server-Authoritative Sequencing)
+  const handleOrderSuccess = async (newOrder: Order) => {
+    try {
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ order: newOrder })
-    })
-    .then((res) => res.json())
-    .then((data) => {
-      console.log('Automated order email system response:', data);
-    })
-    .catch((err) => {
-      console.error('Error triggering automated order email system:', err);
-    });
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // 1. Authoritative persistence to database via backend proxy FIRST
+      const res = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          order: newOrder,
+          termsAccepted: true 
+        })
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || (data && data.success === false)) {
+        const errorMsg = data?.error || data?.message || 'Failed to record order. Please try again.';
+        console.error('❌ Order persistence failed:', errorMsg);
+        dispatchNotification({
+          type: 'order',
+          variant: 'toast',
+          title: 'Order Processing Failed',
+          message: errorMsg
+        });
+        alert(`Order Submission Failed: ${errorMsg}`);
+        return false;
+      }
+
+      // 2. Only upon verified database save: update local state, clear cart, and reveal success modal
+      setOrders((prev) => [newOrder, ...prev]);
+      setCart([]); // Clear cart
+      setDiscountPercent(0);
+      setCouponCode('');
+      
+      // Set success modal states
+      setActiveSuccessOrder(newOrder);
+      setCheckoutSuccessModalOpen(true);
+      setCurrentPage('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Trigger System Notifications
+      // 1. Customer Notification
+      notificationEngine.addNotification({
+        title: 'Order Confirmed',
+        message: `Your order #${newOrder.id} has been placed successfully.`,
+        category: 'Order',
+        priority: 'high',
+        target_role: 'customer',
+        user_id: (currentUser as any)?.id || currentUser?.email,
+        user_email: currentUser?.email,
+        metadata: { orderId: newOrder.id }
+      });
+
+      // 2. Admin/Staff Notification
+      notificationEngine.addNotification({
+        title: 'New Enterprise Order',
+        message: `A new order #${newOrder.id} (${newOrder.total} SAR) has been received.`,
+        category: 'Order',
+        priority: 'high',
+        target_role: 'admin',
+        metadata: { orderId: newOrder.id }
+      });
+
+      // Trigger full-stack order email confirmation and DB logger
+      fetch('/api/orders/email', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ order: newOrder })
+      })
+      .then((res) => res.json())
+      .then((data) => {
+        console.log('Automated order email system response:', data);
+      })
+      .catch((err) => {
+        console.error('Error triggering automated order email system:', err);
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error('❌ Unexpected order submission error:', err);
+      dispatchNotification({
+        type: 'order',
+        variant: 'toast',
+        title: 'Order Submission Error',
+        message: err.message || 'An unexpected error occurred while placing your order.'
+      });
+      alert(`Order Submission Error: ${err.message || 'Please try again.'}`);
+      return false;
+    }
   };
 
   const triggerSuccessToast = () => {

@@ -1,0 +1,207 @@
+name: Staff Dashboard Direct Remediation
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 2
+
+      - name: Apply controlled remediation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path('src/components/StaffDashboard.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          old = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('active');"
+          new = "const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');\n  const [staffPasswordError, setStaffPasswordError] = useState<string | null>(null);\n  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState<string | null>(null);\n  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);\n  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);"
+          if old not in s: raise SystemExit('duty state anchor not found')
+          s = s.replace(old, new, 1)
+
+          anchor = "  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.\n  const [staffLogs, setStaffLogs] = useState<any[]>([]);"
+          insert = """  React.useEffect(() => {
+    let cancelled = false;
+    const loadDutyStatus = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/duty-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const status = payload?.data?.dutyStatus || payload?.dutyStatus;
+        if (!cancelled && ['active', 'break', 'offline'].includes(status)) setStaffDutyStatus(status);
+      } catch {}
+    };
+    void loadDutyStatus();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadAuthoritativeCustomers = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/admin/customers?limit=100&page=1', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const customers = Array.isArray(payload?.customers) ? payload.customers : (Array.isArray(payload?.data?.customers) ? payload.data.customers : []);
+        if (!cancelled) setAuthoritativeCustomers(customers);
+      } catch {
+        if (!cancelled) setAuthoritativeCustomers([]);
+      }
+    };
+    void loadAuthoritativeCustomers();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.
+  const [staffLogs, setStaffLogs] = useState<any[]>([]);"""
+          if anchor not in s: raise SystemExit('staff logs anchor not found')
+          s = s.replace(anchor, insert, 1)
+
+          old = """  // Derived Customers
+  const uniqueCustomers = useMemo(() => {
+    const map = new Map();
+    orders.forEach(o => {
+      if (!map.has(o.phone)) {
+        map.set(o.phone, {
+          name: o.customerName,
+          phone: o.phone,
+          email: null,
+          address: o.address,
+          totalOrders: orders.filter(x => x.phone === o.phone).length,
+          totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),
+          status: 'Active VIP'
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [orders]);"""
+          new = """  // Customer Directory is CRM-authoritative; never derive identity from order phone/name fields.
+  const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);"""
+          if old not in s: raise SystemExit('fabricated customer derivation not found')
+          s = s.replace(old, new, 1)
+
+          anchor = "  const addStaffLog = (action: string, target: string) => {"
+          handler = """  const updateStaffDutyStatus = async (nextStatus: 'active' | 'break' | 'offline') => {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      const response = await fetch('/api/staff/duty-status', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dutyStatus: nextStatus }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return;
+      const confirmedStatus = payload?.data?.dutyStatus || payload?.dutyStatus;
+      if (['active', 'break', 'offline'].includes(confirmedStatus)) setStaffDutyStatus(confirmedStatus);
+    } catch (error) { console.error('Failed to update staff duty status:', error); }
+  };
+
+  const handleStaffPasswordChange = async () => {
+    setStaffPasswordError(null); setStaffPasswordSuccess(null);
+    if (!currentPassword || !newPassword) { setStaffPasswordError('Please fill in both current and new password fields.'); return; }
+    if (newPassword.length < 8) { setStaffPasswordError('Password must be at least 8 characters long.'); return; }
+    setStaffPasswordLoading(true);
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setStaffPasswordError('Authentication session not found. Please log in again.'); return; }
+      const response = await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ currentPassword, newPassword }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) { setStaffPasswordError(payload?.error || payload?.message || 'Password change failed.'); return; }
+      setStaffPasswordSuccess(payload?.message || 'Password changed successfully.');
+      setCurrentPassword(''); setNewPassword('');
+    } catch (error) { setStaffPasswordError(error instanceof Error ? error.message : 'Network error. Password change aborted.'); }
+    finally { setStaffPasswordLoading(false); }
+  };
+
+  const addStaffLog = (action: string, target: string) => {"""
+          if anchor not in s: raise SystemExit('staff log function anchor not found')
+          s = s.replace(anchor, handler, 1)
+
+          old = """                            onClick={() => {
+                              localStorage.setItem('zoal_staff_duty_status', st);
+                              setStaffDutyStatus(st);
+                            }}"""
+          new = """                            onClick={() => { void updateStaffDutyStatus(st); }}"""
+          if old not in s: raise SystemExit('localStorage duty handler not found')
+          s = s.replace(old, new, 1)
+
+          old = """                    <button
+                      onClick={() => {
+                        alert('Password changed successfully!');
+                        addStaffLog('Password Changed', 'Staff credentials updated securely');
+                      }}
+                      className=\"w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none\""" 
+          new = """                    {(staffPasswordError || staffPasswordSuccess) && (
+                      <div className={`mb-3 text-[10px] font-mono ${staffPasswordError ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {staffPasswordError || staffPasswordSuccess}
+                      </div>
+                    )}
+                    <button
+                      type=\"button\"
+                      disabled={staffPasswordLoading}
+                      onClick={() => { void handleStaffPasswordChange(); }}
+                      className=\"w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none disabled:opacity-50 disabled:cursor-not-allowed\""" 
+          if old not in s: raise SystemExit('fake password button not found')
+          s = s.replace(old, new, 1)
+
+          old = """                    <span className=\"text-2xl font-sans text-white font-bold block leading-none tabular-nums-fix\">3 Active</span>
+                  </div>
+                  <span className=\"text-[9px] text-indigo-400 block font-mono\">Premium custom thobe cuts</span>"""
+          new = """                    <span className=\"text-2xl font-sans text-white font-bold block leading-none tabular-nums-fix\">Not Available</span>
+                  </div>
+                  <span className=\"text-[9px] text-indigo-400 block font-mono\">No authoritative tailoring metric source</span>"""
+          if old not in s: raise SystemExit('fabricated tailoring metric not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+
+          h = Path('src/app/api/helpers.ts')
+          hs = h.read_text(encoding='utf-8')
+          old_helper = "allowedRoles: ('customer' | 'staff' | 'admin')[]"
+          new_helper = "allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]"
+          if old_helper in hs:
+              h.write_text(hs.replace(old_helper, new_helper, 1), encoding='utf-8')
+          PY
+
+      - name: Verify remediation
+        run: |
+          ! grep -n "zoal_staff_duty_status" src/components/StaffDashboard.tsx
+          ! grep -n "alert('Password changed successfully!')" src/components/StaffDashboard.tsx
+          grep -n "/api/staff/duty-status" src/components/StaffDashboard.tsx
+          grep -n "/api/auth/change-password" src/components/StaffDashboard.tsx
+          grep -n "authoritativeCustomers" src/components/StaffDashboard.tsx
+          grep -n "Not Available" src/components/StaffDashboard.tsx
+          git diff --check
+
+      - name: Commit remediation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/StaffDashboard.tsx src/app/api/helpers.ts
+          git diff --cached --check
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo "No remediation changes required."
+            exit 0
+          fi
+          git commit -m "fix(staff): remove fabricated dashboard behavior"
+          git push origin audit/dashboard-sync-fix

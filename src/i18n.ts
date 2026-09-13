@@ -80,10 +80,53 @@ i18n
     },
   });
 
+/**
+ * Load only published CMS-managed global strings.
+ * Existing JSON resources remain the authoritative fallback when the API is unavailable.
+ * Product/blog/page/hero/branding content is intentionally excluded from this resolver.
+ */
+async function loadPublishedGlobalStrings(locale: 'en' | 'ar'): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const response = await fetch(`/api/texts?locale=${encodeURIComponent(locale)}&status=published`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) return;
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.texts) ? payload.texts : [];
+    if (rows.length === 0) return;
+
+    const registry: Record<string, string> = {};
+    for (const row of rows) {
+      if (!row || typeof row.key !== 'string' || typeof row.value !== 'string') continue;
+      registry[row.key] = row.value;
+    }
+
+    if (Object.keys(registry).length > 0) {
+      i18n.addResourceBundle(locale, 'translation', registry, false, true);
+    }
+  } catch {
+    // Cloud registry is an additive enhancement; preserve static i18n fallback on failure.
+  }
+}
+
+// Load cloud-managed published strings without delaying application startup.
+if (typeof window !== 'undefined') {
+  void loadPublishedGlobalStrings(initialLng);
+}
+
 // Handle RTL direction when language changes
 i18n.on('languageChanged', (lng) => {
   document.documentElement.dir = lng === 'ar' ? 'rtl' : 'ltr';
   document.documentElement.lang = lng;
+  if (lng === 'ar' || lng === 'en') {
+    void loadPublishedGlobalStrings(lng);
+  }
 });
 
 // Set initial direction based on detected language

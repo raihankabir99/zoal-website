@@ -19,6 +19,55 @@ import { downloadHtmlAsPdf } from '../lib/pdf';
 import EnterpriseInventoryManagement from './EnterpriseInventoryManagement';
 
 import { useNotificationEngine } from '../lib/notificationStore';
+import { supabaseClient } from '../lib/supabaseClient';
+
+const STATUS_MAP: Record<string, Order['status']> = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  processing: 'Processing',
+  preparing: 'Preparing',
+  packed: 'Packed',
+  ready_for_shipping: 'Ready for Shipping',
+  shipped: 'Shipped',
+  out_for_delivery: 'Out for Delivery',
+  delivered: 'Delivered',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  returned: 'Returned',
+  refund_requested: 'Refund Requested',
+  refund_approved: 'Refund Approved',
+  refund_completed: 'Refund Completed',
+};
+
+function mapApiOrder(row: any): Order {
+  return {
+    id: String(row.id),
+    date: row.created_at || '',
+    items: Array.isArray(row.items) ? row.items.map((item: any) => ({
+      productId: String(item.product_id || ''),
+      name: item.name || '',
+      price: Number(item.unit_price || 0),
+      quantity: Number(item.quantity || 0),
+      image: item.image || undefined,
+    })) : [],
+    subtotal: Number(row.subtotal || 0),
+    shipping: Number(row.shipping_cost || 0),
+    discount: Number(row.discount_amount || 0),
+    total: Number(row.total_amount || 0),
+    status: STATUS_MAP[String(row.status || '').toLowerCase()] || 'Pending',
+    customerName: row.customer_name || '',
+    email: row.email || '',
+    phone: row.phone || '',
+    address: row.shipping_address || row.address || '',
+    paymentMethod: row.payment_method || '—',
+    trackingNumber: row.tracking_number || '',
+    assignedStaff: row.assigned_staff_name || row.assigned_staff_id || undefined,
+    adminNotes: row.admin_notes || undefined,
+    staffNotes: row.staff_notes || undefined,
+    customerNotes: row.customer_notes || undefined,
+    paymentStatus: row.payment_status ? String(row.payment_status).replace(/^./, (c: string) => c.toUpperCase()) as Order['paymentStatus'] : undefined,
+  };
+}
 
 interface StaffDashboardProps {
   currentUser: any;
@@ -53,7 +102,7 @@ interface StaffDashboardProps {
 
 export default function StaffDashboard({
   currentUser,
-  orders,
+  orders: _legacyOrders,
   setOrders,
   onUpdateOrderStatus,
   onLogout,
@@ -108,62 +157,229 @@ export default function StaffDashboard({
   const [staffInventoryFilter, setStaffInventoryFilter] = useState<'all' | 'low' | 'out'>('all');
   const [staffCustomerSearch, setStaffCustomerSearch] = useState('');
 
-  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>(() => {
-    return (localStorage.getItem('zoal_staff_duty_status') as any) || 'active';
-  });
+  const [authoritativeOrders, setAuthoritativeOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
-  // Simulated Logs
-  const [staffLogs, setStaffLogs] = useState<any[]>(() => {
+  const [staffDutyStatus, setStaffDutyStatus] = useState<'active' | 'break' | 'offline'>('offline');
+  const [authoritativeCustomers, setAuthoritativeCustomers] = useState<any[]>([]);
+  const [staffPasswordError, setStaffPasswordError] = useState('');
+  const [staffPasswordSuccess, setStaffPasswordSuccess] = useState('');
+  const [staffPasswordLoading, setStaffPasswordLoading] = useState(false);
+
+  // Authoritative activity logs: never seed or persist fabricated staff events in localStorage.
+  const [staffLogs, setStaffLogs] = useState<any[]>([]);
+  const [staffMemberCount, setStaffMemberCount] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadStaffOperations = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/logs', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (cancelled) return;
+        setStaffLogs(Array.isArray(payload?.logs) ? payload.logs : []);
+        setStaffMemberCount(typeof payload?.staffMemberCount === 'number' ? payload.staffMemberCount : null);
+      } catch {
+        if (!cancelled) {
+          setStaffLogs([]);
+          setStaffMemberCount(null);
+        }
+      }
+    };
+    void loadStaffOperations();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadAuthoritativeOrders = async () => {
+      setOrdersLoading(true);
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          if (!cancelled) setAuthoritativeOrders([]);
+          return;
+        }
+
+        const response = await fetch('/api/orders?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Orders request failed (${response.status})`);
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data?.orders)
+          ? payload.data.orders
+          : Array.isArray(payload?.orders)
+            ? payload.orders
+            : [];
+        if (!cancelled) setAuthoritativeOrders(rows.map(mapApiOrder));
+      } catch (error) {
+        console.error('Failed to load staff orders from authoritative API:', error);
+        if (!cancelled) setAuthoritativeOrders([]);
+      } finally {
+        if (!cancelled) setOrdersLoading(false);
+      }
+    };
+
+    void loadAuthoritativeOrders();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadAuthoritativeCustomers = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          if (!cancelled) setAuthoritativeCustomers([]);
+          return;
+        }
+        const response = await fetch('/api/admin/customers?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Customers request failed (${response.status})`);
+        const payload = await response.json();
+        const customers = Array.isArray(payload?.customers)
+          ? payload.customers
+          : Array.isArray(payload?.data?.customers)
+            ? payload.data.customers
+            : [];
+        if (!cancelled) setAuthoritativeCustomers(customers);
+      } catch (error) {
+        console.error('Failed to load staff customers from authoritative API:', error);
+        if (!cancelled) setAuthoritativeCustomers([]);
+      }
+    };
+    void loadAuthoritativeCustomers();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
+  // Staff Dashboard order state is API-authoritative; the legacy App.tsx orders prop is intentionally ignored.
+  const orders = authoritativeOrders;
+
+  const updateStaffDutyStatus = async (nextStatus: 'active' | 'break' | 'offline') => {
     try {
-      const raw = localStorage.getItem('zoal_staff_logs');
-      return raw ? JSON.parse(raw) : [
-        { id: 'log-1', action: 'Order Status Update', target: 'Order #ORD-9481', timestamp: new Date(Date.now() - 3600000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' },
-        { id: 'log-2', action: 'Stock Level Changed', target: 'Premium Blue Thobe (+50)', timestamp: new Date(Date.now() - 7200000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' },
-        { id: 'log-3', action: 'System Login', target: 'Authorized Portal Session', timestamp: new Date(Date.now() - 14400000).toLocaleString(), staff: currentUser?.name || 'Staff Member', ip: '192.168.1.105' }
-      ];
-    } catch (e) {
-      return [];
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      const response = await fetch('/api/staff/duty-status', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      if (!response.ok) throw new Error(`Duty status update failed (${response.status})`);
+      const payload = await response.json();
+      if (payload?.status) {
+        setStaffDutyStatus(payload.status);
+        addStaffLog('Duty Status Changed', `Set status to ${payload.status.toUpperCase()}`);
+      }
+    } catch (error) {
+      console.error('Failed to update authoritative staff duty status:', error);
     }
-  });
+  };
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadDutyStatus = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/duty-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!cancelled && ['active', 'break', 'offline'].includes(payload?.status)) setStaffDutyStatus(payload.status);
+      } catch (error) {
+        console.error('Failed to load authoritative staff duty status:', error);
+      }
+    };
+    void loadDutyStatus();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
 
   const addStaffLog = (action: string, target: string) => {
-    const newLog = {
-      id: `log-${Date.now()}`,
-      action,
-      target,
-      timestamp: new Date().toLocaleString(),
-      staff: currentUser?.name || 'Staff Member',
-      ip: '192.168.1.105'
-    };
-    setStaffLogs((prev) => {
-      const nextLogs = [newLog, ...prev];
-      localStorage.setItem('zoal_staff_logs', JSON.stringify(nextLogs));
-      return nextLogs;
-    });
+    void (async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const response = await fetch('/api/staff/logs', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action, target })
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (payload?.log) setStaffLogs((prev) => [payload.log, ...prev]);
+      } catch {
+        // Do not create a local or synthetic audit record when the authoritative API is unavailable.
+      }
+    })();
   };
 
 
 
-  // Derived Customers
-  const uniqueCustomers = useMemo(() => {
-    const map = new Map();
-    orders.forEach(o => {
-      if (!map.has(o.phone)) {
-        map.set(o.phone, {
-          name: o.customerName,
-          phone: o.phone,
-          email: `${(o.customerName || 'customer').toLowerCase().replace(/\s+/g, '')}@zoal-customer.sa`,
-          address: o.address,
-          totalOrders: orders.filter(x => x.phone === o.phone).length,
-          totalSpent: orders.filter(x => x.phone === o.phone).reduce((sum, ord) => sum + ord.total, 0),
-          status: 'Active VIP'
-        });
-      }
-    });
-    return Array.from(map.values());
-  }, [orders]);
+  // Customer Directory is API-authoritative; never derive customer records from order rows.
+  const uniqueCustomers = useMemo(() => authoritativeCustomers, [authoritativeCustomers]);
 
-  const simulatedEmployeesCount = 4;
+
+  const staffPasswordFeedback = (
+    <>
+      {staffPasswordError && <div className="text-red-400 text-[10px] mt-2" role="alert">{staffPasswordError}</div>}
+      {staffPasswordSuccess && <div className="text-emerald-400 text-[10px] mt-2" role="status">{staffPasswordSuccess}</div>}
+    </>
+  );
+
+  const handleStaffPasswordChange = async () => {
+    setStaffPasswordError('');
+    setStaffPasswordSuccess('');
+    if (!currentPassword || !newPassword) {
+      setStaffPasswordError('Current and new password are required.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setStaffPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+    setStaffPasswordLoading(true);
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Authentication session is unavailable.');
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Password change failed (${response.status})`);
+      setCurrentPassword('');
+      setNewPassword('');
+      setStaffPasswordSuccess('Password changed successfully.');
+    } catch (error) {
+      setStaffPasswordError(error instanceof Error ? error.message : 'Password change failed.');
+    } finally {
+      setStaffPasswordLoading(false);
+    }
+  };
+
 
   return (
     <div className="space-y-1 lg:space-y-6 text-left animate-fade-in">
@@ -1159,7 +1375,8 @@ export default function StaffDashboard({
                         <p className="text-[10px] uppercase font-semibold text-[#D4AF37] mb-2 leading-none">{bsp.status}</p>
                         <button
                           onClick={() => {
-                            alert(`Updating tailoring workflow progress for Order ${bsp.id}.\nAssigned Master Tailor successfully notified.`);
+                            alert(`Updating tailoring workflow progress for Order ${bsp.id}.
+Assigned Master Tailor successfully notified.`);
                             addStaffLog('Premium Advance', `Tailoring status advanced for ${bsp.id}`);
                           }}
                           className="px-3 py-1.5 border border-[#D4AF37]/25 hover:bg-[#D4AF37] text-zinc-300 hover:text-black rounded-xs transition-colors uppercase font-bold text-[9px]"
@@ -1324,11 +1541,7 @@ export default function StaffDashboard({
                         {['active', 'break', 'offline'].map((st: any) => (
                           <button
                             key={st}
-                            onClick={() => {
-                              localStorage.setItem('zoal_staff_duty_status', st);
-                              setStaffDutyStatus(st);
-                              addStaffLog('Duty Status Changed', `Set status to ${st.toUpperCase()}`);
-                            }}
+                            onClick={() => { void updateStaffDutyStatus(st); }}
                             className={`py-2 px-2.5 rounded-xs text-[9.5px] uppercase tracking-wider font-bold transition-all cursor-pointer font-mono ${
                               staffDutyStatus === st ? 'bg-white text-black font-semibold' : 'bg-black border border-white/5 text-zinc-500 hover:text-white'
                             }`}
@@ -1394,11 +1607,10 @@ export default function StaffDashboard({
                       <PasswordStrengthIndicator password={newPassword} />
                     </div>
 
+                    {staffPasswordFeedback}
                     <button
-                      onClick={() => {
-                        alert('Password changed successfully!');
-                        addStaffLog('Password Changed', 'Staff credentials updated securely');
-                      }}
+                      onClick={() => { void handleStaffPasswordChange(); }}
+                      disabled={staffPasswordLoading}
                       className="w-full py-3 bg-[#D4AF37] hover:bg-white text-black font-bold uppercase tracking-widest text-[9.5px] rounded-xs transition-colors cursor-pointer animate-none"
                     >
                       Update Password
@@ -1446,7 +1658,7 @@ export default function StaffDashboard({
                 <div className="bg-zinc-950 border border-white/5 p-5 rounded-sm text-center relative overflow-hidden">
                   <Users className="w-5 h-5 text-gold-pure absolute top-4 left-4" />
                   <span className="text-[10px] tracking-widest text-zinc-500 uppercase block mb-1">Active Labor Roster</span>
-                  <span className="text-2xl font-mono text-white font-bold">{simulatedEmployeesCount} Dedicated Artisans</span>
+                  <span className="text-2xl font-mono text-white font-bold">{staffMemberCount} Dedicated Artisans</span>
                   <span className="text-[9px] text-zinc-500 block mt-1">Branch B & Al Hofuf branches active</span>
                 </div>
 

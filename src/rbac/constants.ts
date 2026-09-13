@@ -8,7 +8,7 @@ export const RoleHierarchy: Record<Role, number> = {
   owner: 4,
 };
 
-export type Permission = 
+export type Permission =
   | 'view_orders'
   | 'manage_orders'
   | 'view_inventory'
@@ -19,11 +19,13 @@ export type Permission =
   | 'manage_platform';
 
 export interface PermissionMatrix {
-  required: Permission[];   // Explicitly allowed for this role
-  hidden: Permission[];     // Allowed but hidden in UI
-  blocked: Permission[];    // Explicitly denied
+  required: Permission[];
+  hidden: Permission[];
+  blocked: Permission[];
 }
 
+// Keep effective permissions compatible with the existing hierarchy while making
+// every role's grants explicit so permission checks never infer access implicitly.
 export const RolePermissions: Record<Role, PermissionMatrix> = {
   customer: {
     required: ['view_orders'],
@@ -31,22 +33,22 @@ export const RolePermissions: Record<Role, PermissionMatrix> = {
     blocked: ['manage_platform'],
   },
   staff: {
-    required: ['manage_orders', 'view_inventory'],
+    required: ['view_orders', 'manage_orders', 'view_inventory'],
     hidden: [],
     blocked: ['manage_platform'],
   },
   manager: {
-    required: ['manage_inventory', 'view_reports'],
+    required: ['view_orders', 'manage_orders', 'view_inventory', 'manage_inventory', 'view_reports'],
     hidden: [],
     blocked: ['manage_platform'],
   },
   admin: {
-    required: ['manage_reports', 'manage_users'],
+    required: ['view_orders', 'manage_orders', 'view_inventory', 'manage_inventory', 'view_reports', 'manage_reports', 'manage_users'],
     hidden: [],
     blocked: [],
   },
   owner: {
-    required: ['manage_platform'],
+    required: ['view_orders', 'manage_orders', 'view_inventory', 'manage_inventory', 'view_reports', 'manage_reports', 'manage_users', 'manage_platform'],
     hidden: [],
     blocked: [],
   },

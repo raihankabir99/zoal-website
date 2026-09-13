@@ -684,10 +684,6 @@ export const SafeImage = React.memo(function SafeImage({
   product,
   ...props
 }: SafeImageProps) {
-  // Sync-state derivation to handle prop changes seamlessly
-  const [prevSrc, setPrevSrc] = useState<string | undefined>(src);
-  const [prevProduct, setPrevProduct] = useState<Partial<Product> | null | undefined>(product);
-  const [prevCategory, setPrevCategory] = useState<BusinessCategory | undefined>(category);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   
@@ -722,11 +718,8 @@ export const SafeImage = React.memo(function SafeImage({
   const [retryKey, setRetryKey] = useState<number>(0);
   const [renderSkeleton, setRenderSkeleton] = useState<boolean>(false);
 
-  // Reset state on prop changes
-  if (src !== prevSrc || product !== prevProduct) {
-    setPrevSrc(src);
-    setPrevProduct(product);
-    setPrevCategory(category);
+  // Reset state on prop changes safely using useEffect
+  useEffect(() => {
     const newTarget = computeTarget();
     const newOptimized = optimizeImageUrl(newTarget);
     const isNewCached = isCachedInstantly(newOptimized) || isCachedInstantly(newTarget) || isCachedInstantly(src || '');
@@ -737,9 +730,7 @@ export const SafeImage = React.memo(function SafeImage({
     setIsLoading(!priority && !isNewCached);
     setRenderSkeleton(false);
     setShowPlaceholder(false);
-  } else if (category !== prevCategory) {
-    setPrevCategory(category);
-  }
+  }, [src, product?.id, (product?.images && product.images[0]), category, priority, isHero]);
 
   // Ref-based instant layout-effect cache check before DOM paint
   useLayoutEffect(() => {

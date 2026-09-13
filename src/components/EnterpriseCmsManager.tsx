@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Globe, LayoutGrid, Layers, FileText, Compass, PanelBottom, Megaphone,
   Bell, Check, X, Plus, Edit, Trash2, ArrowUp, ArrowDown, ExternalLink,
@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useBranding } from './BrandingContext';
 import { SafeImage } from '../imageRegistry';
+import CmsTextsPanel from './CmsTextsPanel';
 
 // Interfaces for our full CMS state
 export interface CmsDashboardStats {
@@ -131,175 +132,19 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     return (localStorage.getItem('cms_website_status') as 'active' | 'maintenance') || 'active';
   });
 
-  const [homepageSections, setHomepageSections] = useState<HomepageSection[]>(() => {
-    const raw = localStorage.getItem('cms_homepage_sections');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'hero', name: 'Hero Slider & Banner', enabled: true, order: 1, publishAt: '', expireAt: '' },
-      { id: 'featured_categories', name: 'Featured Categories Grid', enabled: true, order: 2, publishAt: '', expireAt: '' },
-      { id: 'featured_brands', name: 'Featured Brands', enabled: true, order: 3, publishAt: '', expireAt: '' },
-      { id: 'coffee_heritage', name: 'Al Zoal Coffee & Cafe Heritage Section', enabled: true, order: 4, publishAt: '', expireAt: '' },
-      { id: 'grocery_market', name: 'Traditional Organic Bakery & Grocery Market', enabled: true, order: 5, publishAt: '', expireAt: '' },
-      { id: 'cosmetics_botanicals', name: 'Cosmetics & Botanical Infusions', enabled: true, order: 6, publishAt: '', expireAt: '' },
-      { id: 'featured_products', name: 'Featured Premium Gowns & Thobes', enabled: true, order: 7, publishAt: '', expireAt: '' },
-      { id: 'flash_sale', name: 'Flash Sales & Active Countdown Banner', enabled: true, order: 8, publishAt: '', expireAt: '' },
-      { id: 'special_offers', name: 'Exclusive Special Offers Slider', enabled: true, order: 9, publishAt: '', expireAt: '' },
-      { id: 'latest_arrivals', name: 'Latest Products Carousel', enabled: true, order: 10, publishAt: '', expireAt: '' },
-      { id: 'best_sellers', name: 'Best Sellers Leaderboard', enabled: true, order: 11, publishAt: '', expireAt: '' },
-      { id: 'testimonials', name: 'Customer Voice & Testimonials', enabled: true, order: 12, publishAt: '', expireAt: '' },
-      { id: 'partners', name: 'Partner Logos & Cultural Alliances', enabled: true, order: 13, publishAt: '', expireAt: '' },
-      { id: 'newsletter', name: 'Newsletter Circle Invitation', enabled: true, order: 14, publishAt: '', expireAt: '' }
-    ];
-  });
+  const [homepageSections, setHomepageSections] = useState<HomepageSection[]>([]);
 
-  const [banners, setBanners] = useState<Banner[]>(() => {
-    const raw = localStorage.getItem('cms_banners');
-    if (raw) return JSON.parse(raw);
-    return [
-      {
-        id: 'banner-1',
-        type: 'homepage',
-        title: 'Sudanese Heritage',
-        subtitle: 'Premium Hand-Embroidered Toobs & Fine Tailoring',
-        description: 'Immerse your senses in luxurious drapes hand-woven with organic threads and tailored for elite Saudi gatherings.',
-        buttonText: 'Explore Collection',
-        buttonLink: '#store',
-        bgImage: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600',
-        mobileImage: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=600',
-        priority: 1,
-        scheduleStart: '2026-01-01',
-        scheduleEnd: '2026-12-31',
-        status: 'published',
-        animation: 'zoom'
-      },
-      {
-        id: 'banner-2',
-        type: 'promotion',
-        title: 'Specialty Saffron Coffee Blend',
-        subtitle: '100% Single-Origin Yemeni Coffee & Organic Spices',
-        description: 'Harvested directly from high-altitude terraces and masterfully roasted at our Dammam flagships.',
-        buttonText: 'Order Fresh Roast',
-        buttonLink: '#coffee',
-        bgImage: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=1600',
-        mobileImage: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=600',
-        priority: 2,
-        scheduleStart: '2026-07-01',
-        scheduleEnd: '2026-08-31',
-        status: 'published',
-        animation: 'slide'
-      }
-    ];
-  });
+  const [banners, setBanners] = useState<Banner[]>([]);
 
-  const [webPages, setWebPages] = useState<WebPage[]>(() => {
-    const raw = localStorage.getItem('cms_web_pages');
-    if (raw) return JSON.parse(raw);
-    return [
-      {
-        id: 'page-1',
-        key: 'about',
-        title: 'Boutique Sanctuary Story',
-        content: 'AL ZOAL is a premium boutique sanctuary celebrating Sudanese hospitality and artisanal heritage. Every coffee bean, baked crumb, herb harvest, and golden thread is curated with authentic luxury drapes.',
-        images: ['https://images.unsplash.com/photo-1541167760496-1628856ab772'],
-        videos: [],
-        seoTitle: 'Our Heritage | AL ZOAL Luxury Sudanese Artisanal Sanctuary',
-        seoDesc: 'Learn about the timeless cultural fusion of Sudanese premium craftsmanship and warm Saudi hospitality at AL ZOAL.',
-        status: 'published',
-        lastModified: '2026-07-15 11:30',
-        revisionHistory: [
-          { id: 'rev-1', version: 'v1.0', title: 'Our Sanctuary', content: 'Our initial about page content.', modifiedBy: 'Amjad Suliman', modifiedAt: '2026-05-10 14:22' }
-        ]
-      },
-      {
-        id: 'page-2',
-        key: 'privacy',
-        title: 'Digital Privacy Policy',
-        content: 'We store your cryptographic session identities and personal details securely under standard GCC security laws.',
-        images: [],
-        videos: [],
-        seoTitle: 'Privacy Protection Statement | AL ZOAL',
-        seoDesc: 'How we respect, encrypt, and secure your personal details and transactions in compliance with Saudi regulations.',
-        status: 'published',
-        lastModified: '2026-07-14 09:12',
-        revisionHistory: []
-      },
-      {
-        id: 'page-3',
-        key: 'shipping',
-        title: 'Express Shipping Policy',
-        content: 'Dispatched from Dammam and Al Hofuf main warehouses using premium high-care courier express. Overnight delivery available.',
-        images: [],
-        videos: [],
-        seoTitle: 'Saudi Courier Shipping & Logistics | AL ZOAL',
-        seoDesc: 'Fast high-security dispatch terms for fresh botanical products and luxury thobes across Saudi Arabia.',
-        status: 'published',
-        lastModified: '2026-07-12 18:44',
-        revisionHistory: []
-      }
-    ];
-  });
+  const [webPages, setWebPages] = useState<WebPage[]>([]);
 
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
-    const raw = localStorage.getItem('cms_menu_items');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'menu-1', label: 'Boutique Sanctuary', link: '#store', icon: 'Compass', displayOrder: 1, external: false },
-      { id: 'menu-2', label: 'The Coffee Roasters', link: '#coffee', icon: 'Sparkles', displayOrder: 2, external: false },
-      { id: 'menu-3', label: 'Artisanal Bakery', link: '#bakery', icon: 'Award', displayOrder: 3, external: false },
-      { id: 'menu-4', label: 'Premium Sudanese Toob', link: '#fashion', icon: 'FileText', displayOrder: 4, external: false },
-      { id: 'menu-5', label: 'The Saudi Flagships', link: '#branches', icon: 'MapPin', displayOrder: 5, external: false }
-    ];
-  });
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
-  const [footerSettings, setFooterSettings] = useState<FooterSettings>(() => {
-    const raw = localStorage.getItem('cms_footer_settings');
-    if (raw) return JSON.parse(raw);
-    return {
-      companyInfo: 'AL ZOAL is a premium cultural bridge celebrating fine Sudanese artistry, organic agricultural marvels, and authentic Arabian luxury hospitality.',
-      address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-      phone: '+966 56 769 9315',
-      email: 'alzoal3003@gmail.com',
-      workingHours: 'Everyday: 07:00 AM - 11:30 PM (Special prayer pauses apply)',
-      socialLinks: { facebook: 'https://facebook.com/alzoal', instagram: 'https://instagram.com/alzoal', twitter: 'https://twitter.com/alzoal', snapchat: 'https://snapchat.com/add/alzoal', whatsapp: 'https://wa.me/966567699315' },
-      paymentIcons: ['mada', 'visa', 'mastercard', 'applepay', 'stcpay', 'banktransfer'],
-      certifications: ['Saudi Ministry of Commerce Registered', 'Maroof Elite Platform Bronze Stamp', 'SFDA Approved Food Grade Facilities'],
-      copyright: '© 2026 AL ZOAL Boutique Co. All rights reserved. Developed to Saudi e-Commerce standards.',
-      mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1m4!2sAl+Hofuf!3m2!1i1024!2i768!4f13.1!3m3!1m2!2sAbu+Bakr+As+Siddiq+Rd!5e0!3m2!1sen!2ssa!4v1'
-    };
-  });
+  const [footerSettings, setFooterSettings] = useState<FooterSettings>({ companyInfo: '', address: '', phone: '', email: '', workingHours: '', socialLinks: {}, paymentIcons: [], certifications: [], copyright: '', mapEmbedUrl: '' });
 
-  const [announcement, setAnnouncement] = useState<AnnouncementSettings>(() => {
-    const raw = localStorage.getItem('cms_announcement_settings');
-    if (raw) return JSON.parse(raw);
-    return {
-      enabled: true,
-      text: '✨ GRAND CULTURAL GALA: Celebrate Sudanese Heritage at our Dammam flagship. Premium coffee is complimentary.',
-      bgCol: '#D4AF37',
-      txtCol: '#000000',
-      btnText: 'View Location',
-      btnLink: '#branches',
-      countdownEnd: '2026-09-01T20:00:00',
-      scheduleStart: '2026-07-01',
-      scheduleEnd: '2026-09-01'
-    };
-  });
+  const [announcement, setAnnouncement] = useState<AnnouncementSettings>({ enabled: false, text: '', bgCol: '#D4AF37', txtCol: '#000000', btnText: '', btnLink: '', countdownEnd: '', scheduleStart: '', scheduleEnd: '' });
 
-  const [popup, setPopup] = useState<PopupSettings>(() => {
-    const raw = localStorage.getItem('cms_popup_settings');
-    if (raw) return JSON.parse(raw);
-    return {
-      enabled: true,
-      type: 'coupon',
-      title: 'Join The Elite Circle',
-      content: 'Subscribe to our botanical market circle & receive an exclusive 15% discount coupon on your first order of hand-tailored Sudanese Toobs.',
-      imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=400',
-      videoUrl: '',
-      couponCode: 'ZOALGOLD',
-      rule: 'seconds',
-      ruleSeconds: 5,
-      status: 'active'
-    };
-  });
+  const [popup, setPopup] = useState<PopupSettings>({ enabled: false, type: 'newsletter', title: '', content: '', imageUrl: '', videoUrl: '', couponCode: '', rule: 'first_visit', ruleSeconds: 5, status: 'inactive' });
 
 
   // Recent changes log inside CMS
@@ -308,6 +153,124 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     { id: 'chg-2', user: 'Sumaya Bashir', action: 'Enabled Coffee Section Schedule', time: '2 hours ago' },
     { id: 'chg-3', user: 'System Auto', action: 'Archived Eid Al-Adha Promo Banner', time: '1 day ago' }
   ]);
+
+  // --- AUTHORITATIVE CMS DATA BOOTSTRAP ---
+  const fetchAuthoritativeCmsData = useCallback(async () => {
+    try {
+      const response = await fetch('/api/cms');
+      if (!response.ok) throw new Error(`CMS API returned HTTP ${response.status}`);
+      const data = await response.json();
+
+      if (Array.isArray(data.homepageSections)) {
+        setHomepageSections(data.homepageSections.map((item: any, index: number) => ({
+          id: String(item.section_key ?? item.id),
+          name: String(item.title ?? item.section_key ?? `Section ${index + 1}`),
+          enabled: Boolean(item.is_active),
+          order: Number(item.display_order ?? index + 1),
+          publishAt: item.schedule_start ? String(item.schedule_start) : '',
+          expireAt: item.schedule_end ? String(item.schedule_end) : ''
+        })));
+      }
+
+      if (Array.isArray(data.heroes)) {
+        setBanners(data.heroes.map((hero: any) => ({
+          id: String(hero.id),
+          type: 'homepage',
+          title: String(hero.hero_title ?? ''),
+          subtitle: String(hero.hero_subtitle ?? ''),
+          description: String(hero.hero_description ?? ''),
+          buttonText: String(hero.cta_text ?? ''),
+          buttonLink: String(hero.cta_link ?? ''),
+          bgImage: String(hero.hero_image_desktop ?? ''),
+          mobileImage: String(hero.hero_image_mobile ?? ''),
+          priority: Number(hero.priority ?? 0),
+          scheduleStart: hero.start_date ? String(hero.start_date) : '',
+          scheduleEnd: hero.end_date ? String(hero.end_date) : '',
+          status: hero.active ? 'published' : 'archived',
+          animation: 'fade'
+        })) as Banner[]);
+      }
+
+      if (Array.isArray(data.pages)) {
+        setWebPages(data.pages.map((page: any) => {
+          const contentJson = page.content_json && typeof page.content_json === 'object' ? page.content_json : {};
+          return {
+            id: String(page.id),
+            key: String(page.slug ?? page.id),
+            title: String(page.title ?? ''),
+            content: String(contentJson.content ?? contentJson.body ?? ''),
+            images: Array.isArray(contentJson.images) ? contentJson.images : [],
+            videos: Array.isArray(contentJson.videos) ? contentJson.videos : [],
+            seoTitle: String(contentJson.seo_title ?? ''),
+            seoDesc: String(contentJson.seo_description ?? ''),
+            status: 'published',
+            lastModified: String(page.updated_at ?? page.created_at ?? ''),
+            revisionHistory: []
+          };
+        }));
+      }
+    } catch (error) {
+      console.error('[CMS] Authoritative bootstrap failed:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchAuthoritativeCmsData();
+  }, [fetchAuthoritativeCmsData]);
+
+  const [cmsSettingsLoaded, setCmsSettingsLoaded] = useState(false);
+  const cmsSettingsBaselineRef = useRef<string>('');
+  const cmsSettingsDirtyRef = useRef(false);
+  const saveCmsSetting = useCallback(async (key: string, value: unknown) => {
+    try {
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      const response = await fetch(`/api/cms/settings/${encodeURIComponent(key)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ value }) });
+      if (!response.ok) throw new Error(`CMS setting ${key} returned HTTP ${response.status}`);
+    } catch (error) { console.error(`[CMS] Failed to persist ${key}:`, error); }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch('/api/cms/settings');
+        if (!response.ok) throw new Error(`CMS settings API returned HTTP ${response.status}`);
+        const records = await response.json();
+        const byKey = new Map((Array.isArray(records) ? records : []).map((item: any) => [item.setting_key, item.setting_value]));
+        if (cancelled) return;
+        const menu = byKey.get('navigation.menu');
+        const footer = byKey.get('footer.settings');
+        const announcementValue = byKey.get('announcement.settings');
+        const popupValue = byKey.get('popup.settings');
+        if (Array.isArray(menu)) setMenuItems(menu);
+        if (footer && typeof footer === 'object') setFooterSettings(footer);
+        if (announcementValue && typeof announcementValue === 'object') setAnnouncement(announcementValue);
+        if (popupValue && typeof popupValue === 'object') setPopup(popupValue);
+      cmsSettingsBaselineRef.current = JSON.stringify({ menu, footer, announcement: announcementValue, popup: popupValue });
+      } catch (error) { console.error('[CMS] Authoritative global settings bootstrap failed:', error); }
+      finally { if (!cancelled) setCmsSettingsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!cmsSettingsLoaded || !cmsSettingsDirtyRef.current) return;
+    const timer = window.setTimeout(() => {
+      void saveCmsSetting('navigation.menu', menuItems);
+      void saveCmsSetting('footer.settings', footerSettings);
+      void saveCmsSetting('announcement.settings', announcement);
+      void saveCmsSetting('popup.settings', popup);
+      cmsSettingsDirtyRef.current = false;
+      cmsSettingsBaselineRef.current = JSON.stringify({ menu: menuItems, footer: footerSettings, announcement, popup });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup, saveCmsSetting]);
+
+  useEffect(() => {
+    if (!cmsSettingsLoaded) return;
+    const current = JSON.stringify({ menu: menuItems, footer: footerSettings, announcement, popup });
+    if (cmsSettingsBaselineRef.current && current !== cmsSettingsBaselineRef.current) cmsSettingsDirtyRef.current = true;
+  }, [cmsSettingsLoaded, menuItems, footerSettings, announcement, popup]);
 
   // --- EDITORIAL LOOKBOOK STATE & HANDLERS ---
   const [editorialBlocks, setEditorialBlocks] = useState<any[]>([]);
@@ -881,9 +844,6 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
   // --- STATE FOR PHASE 11 PART 2 ADVANCED CMS ---
   const [lang, setLang] = useState<'en' | 'ar'>('en');
-  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'staff' | 'customer'>(() => {
-    return (currentUser?.role as any) || 'owner';
-  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFolder, setSelectedFolder] = useState('All');
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
@@ -931,14 +891,34 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
   const [folders, setFolders] = useState<string[]>(['Apparel Images', 'Coffee Heritage', 'Media Streams', 'Documents']);
 
-  const [activityLogs, setActivityLogs] = useState(() => {
-    const raw = localStorage.getItem('cms_activity_logs');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'log-1', user: 'Amjad Suliman (Owner)', action: 'Initialized CMS Sentry Environment', timestamp: '2026-07-16 04:30', affectedContent: 'System Settings', severity: 'info' },
-      { id: 'log-2', user: 'Sumaya Bashir (Admin)', action: 'Updated About Sanctuary SEO title', timestamp: '2026-07-16 04:45', affectedContent: 'SEO / About', severity: 'info' }
-    ];
-  });
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+
+  const fetchCmsActivityLogs = useCallback(async () => {
+    try {
+      const token = (currentUser as any)?.token || localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const formatted = logsArray.map((l: any) => ({
+          id: l.id,
+          user: l.email || l.user_id || `${currentUser?.name || 'Support Office'} (${String(currentUser?.role || 'unknown').toUpperCase()})`,
+          action: l.action,
+          timestamp: l.timestamp ? new Date(l.timestamp).toISOString().replace('T', ' ').slice(0, 16) : new Date().toISOString().replace('T', ' ').slice(0, 16),
+          affectedContent: l.resource_type || l.source || 'CMS / System',
+          severity: (l.severity || 'info').toLowerCase()
+        }));
+        setActivityLogs(formatted);
+      }
+    } catch (e) {
+      console.error('Failed to load CMS activity logs:', e);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    fetchCmsActivityLogs();
+  }, [fetchCmsActivityLogs]);
 
   const [revisions, setRevisions] = useState(() => {
     const raw = localStorage.getItem('cms_revisions');
@@ -952,7 +932,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   const handleAddCmsActivityLog = (action: string, affected: string, type: 'info' | 'warning' | 'critical' = 'info') => {
     const newLog = {
       id: `log-${Date.now()}`,
-      user: `${currentUser?.name || 'Support Office'} (${userRole.toUpperCase()})`,
+      user: `${currentUser?.name || 'Support Office'} (${String(currentUser?.role || 'unknown').toUpperCase()})`,
       action,
       timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
       affectedContent: affected,
@@ -990,19 +970,11 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   // Sync to localStorage on local state changes & bubble up to parent if needed
   useEffect(() => {
     localStorage.setItem('cms_website_status', websiteStatus);
-    localStorage.setItem('cms_homepage_sections', JSON.stringify(homepageSections));
-    localStorage.setItem('cms_banners', JSON.stringify(banners));
     const nonLegalPages = webPages.filter(p => !p.isLegalDoc && p.key !== 'terms' && p.key !== 'privacy' && p.key !== 'terms-and-conditions' && p.key !== 'privacy-policy');
-    localStorage.setItem('cms_web_pages', JSON.stringify(nonLegalPages));
-    localStorage.setItem('cms_menu_items', JSON.stringify(menuItems));
-    localStorage.setItem('cms_footer_settings', JSON.stringify(footerSettings));
-    localStorage.setItem('cms_announcement_settings', JSON.stringify(announcement));
-    localStorage.setItem('cms_popup_settings', JSON.stringify(popup));
     localStorage.setItem('cms_homepage_layout_configs', JSON.stringify(homepageLayoutConfigs));
     localStorage.setItem('cms_promotions', JSON.stringify(promotions));
     localStorage.setItem('cms_seo_settings', JSON.stringify(seoSettings));
     localStorage.setItem('cms_media_assets', JSON.stringify(mediaAssets));
-    localStorage.setItem('cms_activity_logs', JSON.stringify(activityLogs));
     localStorage.setItem('cms_revisions', JSON.stringify(revisions));
 
     if (onSave) {
@@ -1022,7 +994,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
         revisions
       });
     }
-  }, [websiteStatus, homepageSections, banners, webPages, menuItems, footerSettings, announcement, popup, homepageLayoutConfigs, promotions, seoSettings, mediaAssets, activityLogs, revisions]);
+  }, [websiteStatus, homepageSections, banners, webPages, homepageLayoutConfigs, promotions, seoSettings, mediaAssets, activityLogs, revisions]);
 
   // --- ACTIONS ---
   // Reorder Sections
@@ -1389,24 +1361,12 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
             )}
           </div>
 
-          {/* 2. Interactive Role Swapper (RBAC simulation) */}
+          {/* 2. Server-authoritative role indicator */}
           <div className="flex items-center gap-1.5 bg-zinc-900 border border-white/5 py-1 px-2.5 rounded-xs">
             <Shield className="w-3.5 h-3.5 text-gold-pure" />
-            <select
-              value={userRole}
-              onChange={(e) => {
-                const selected = e.target.value as any;
-                setUserRole(selected);
-                handleAddCmsActivityLog(`Switched simulator role to ${selected.toUpperCase()}`, 'System Sentry');
-                alert(`Simulated Role Swapped to: ${selected.toUpperCase()}`);
-              }}
-              className="bg-transparent text-[9.5px] uppercase tracking-wider font-mono text-zinc-300 outline-none cursor-pointer"
-            >
-              <option value="owner" className="bg-black text-white">👑 Owner (Full Rollback)</option>
-              <option value="admin" className="bg-black text-white">🛡️ Admin (Full Access)</option>
-              <option value="staff" className="bg-black text-white">📋 Staff (Limited Edit)</option>
-              <option value="customer" className="bg-black text-white">👤 Customer (Blocked)</option>
-            </select>
+            <span className="text-[9.5px] uppercase tracking-wider font-mono text-zinc-300">
+              Role: {String(currentUser?.role || 'unknown').toUpperCase()}
+            </span>
           </div>
 
           {/* 3. English/Arabic RTL Switcher */}
@@ -1432,7 +1392,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
           
           <button
             onClick={() => {
-              if (userRole === 'customer') {
+              if (!['owner', 'admin', 'manager'].includes(String(currentUser?.role || '').toLowerCase())) {
                 alert("Permission Denied: Customer accounts are blocked from deploying CMS changes.");
                 return;
               }
@@ -1453,6 +1413,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
           { id: 'dashboard', label: lang === 'ar' ? '📊 لوحة القيادة والمؤشرات' : '📊 Overview' },
           { id: 'heroes', label: lang === 'ar' ? '✨ إدارة البانر الرئيسي (Hero)' : '✨ Hero Sliders' },
           { id: 'editorial-lookbook', label: lang === 'ar' ? '📖 لوك بوك التحريري' : '📖 Editorial Lookbook' },
+          { id: 'texts', label: lang === 'ar' ? '🔤 النصوص والترجمات العالمية' : '🔤 Texts & Translations' },
           { id: 'homepage', label: lang === 'ar' ? '🏠 أقسام الصفحة الرئيسية' : '🏠 Homepage' },
           { id: 'banners', label: lang === 'ar' ? '🎏 لافتات العرض' : '🎏 Banners' },
           { id: 'pages', label: lang === 'ar' ? '📄 الصفحات التحريرية' : '📄 Pages' },
@@ -1534,7 +1495,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
       <div className="space-y-6">
 
         {/* Access Denied Shield Guard if role is customer */}
-        {userRole === 'customer' ? (
+        {!['owner', 'admin', 'manager'].includes(String(currentUser?.role || '').toLowerCase()) ? (
           <div className="bg-zinc-950 border border-rose-500/35 p-8 rounded-xs text-center space-y-4">
             <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center rounded-full mx-auto">
               <Lock className="w-6 h-6" />
@@ -1547,9 +1508,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
             </div>
             <button
               onClick={() => {
-                setUserRole('owner');
-                handleAddCmsActivityLog("Escalated permissions from CUSTOMER to OWNER", "System Sentry");
-                alert("Simulated role upgraded back to OWNER. Full systems unlocked.");
+                alert("Permission denied. Your server-authoritative role does not allow CMS access.");
               }}
               className="py-1 px-4 bg-white hover:bg-gold-pure text-black font-mono font-bold text-[9px] uppercase tracking-widest rounded-xs cursor-pointer"
             >
@@ -5889,6 +5848,11 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
           </div>
         )}
 
+        {/* GLOBAL TEXTS & TRANSLATIONS CMS TAB */}
+        {cmsTab === 'texts' && (
+          <CmsTextsPanel currentUser={currentUser} addLog={addLog} />
+        )}
+
         {/* 12. VERSION HISTORY & SNAPSHOT ROLLBACK CMS TAB */}
         {cmsTab === 'history' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-[10px]">
@@ -5926,7 +5890,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                       <div className="flex gap-2 pt-1 border-t border-white/5 justify-end">
                         <button
                           onClick={() => {
-                            if (userRole === 'staff') {
+                            if (String(currentUser?.role || '').toLowerCase() === 'staff') {
                               alert("Permissions Guard: Staff role is restricted from restoring rollbacks.");
                               return;
                             }

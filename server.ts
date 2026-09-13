@@ -24,10 +24,12 @@ import * as simulationModule from './server/simulation';
 import * as blogModule from './server/blog';
 import * as aiTranslationsModule from './server/ai_translations';
 import * as operationsModule from './server/operations';
+import * as adminModule from './server/admin';
 import * as productImportModule from './server/product_import';
 import * as productsCrudModule from './server/products_crud';
 import * as warehousesModule from './server/warehouses';
 import * as crmModule from './server/crm';
+import * as staffModule from './server/staff';
 import pg from 'pg';
 import { resolveShippingOptions, calculateAuthoritativeShippingFee, getProvider, isMockShippingEnabled } from './server/shipping';
 const { Client } = pg;
@@ -560,25 +562,25 @@ async function sendEmailWithRetry(order: any, emailLogId: string, maxAttempts = 
 
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
-app.put('/api/cms/pages/:id', authenticateRequest, cmsModule.updateCmsPage);
+app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
 
 // Homepage Heroes routes
 app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);
-app.post('/api/homepage-heroes', authenticateRequest, cmsModule.createHomepageHero);
-app.put('/api/homepage-heroes/:id', authenticateRequest, cmsModule.updateHomepageHero);
-app.delete('/api/homepage-heroes/:id', authenticateRequest, cmsModule.deleteHomepageHero);
-app.post('/api/homepage-heroes/:id/duplicate', authenticateRequest, cmsModule.duplicateHomepageHero);
+app.post('/api/homepage-heroes', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.createHomepageHero);
+app.put('/api/homepage-heroes/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateHomepageHero);
+app.delete('/api/homepage-heroes/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.deleteHomepageHero);
+app.post('/api/homepage-heroes/:id/duplicate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.duplicateHomepageHero);
 
 // Homepage Editorial routes
 app.get('/api/homepage-editorial', cmsModule.getHomepageEditorialBlocks);
-app.post('/api/homepage-editorial', authenticateRequest, cmsModule.createHomepageEditorialBlock);
-app.put('/api/homepage-editorial/:id', authenticateRequest, cmsModule.updateHomepageEditorialBlock);
-app.delete('/api/homepage-editorial/:id', authenticateRequest, cmsModule.deleteHomepageEditorialBlock);
-app.post('/api/homepage-editorial/:id/duplicate', authenticateRequest, cmsModule.duplicateHomepageEditorialBlock);
+app.post('/api/homepage-editorial', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.createHomepageEditorialBlock);
+app.put('/api/homepage-editorial/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateHomepageEditorialBlock);
+app.delete('/api/homepage-editorial/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.deleteHomepageEditorialBlock);
+app.post('/api/homepage-editorial/:id/duplicate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.duplicateHomepageEditorialBlock);
 
 // Marketing Automation Routes
 app.get('/api/marketing-data', marketingModule.getMarketingData);
-app.post('/api/marketing/campaigns', authenticateRequest, marketingModule.createCampaign);
+app.post('/api/marketing/campaigns', authenticateRequest, requireRole(['admin', 'manager', 'staff']), marketingModule.createCampaign);
 
 // Legal Policy Routes
 app.get('/api/legal/documents', optionalAuthenticate, legalModule.getLegalDocuments);
@@ -591,7 +593,7 @@ app.delete('/api/legal/documents/:id', authenticateRequest, requireRole(['admin'
 
 // Tax Management Routes
 app.get('/api/taxes', taxModule.getTaxData);
-app.put('/api/taxes/rates/:id', authenticateRequest, taxModule.updateTaxRate);
+app.put('/api/taxes/rates/:id', authenticateRequest, requireRole(['admin', 'manager', 'owner']), taxModule.updateTaxRate);
 
 // AI Workspace Routes
 app.get('/api/ai/workspace', authenticateRequest, aiModule.getAiWorkspaceData);
@@ -606,6 +608,7 @@ app.get('/api/analytics/regional', authenticateRequest, requireRole(['admin', 'o
 // KPI Engine Routes
 app.get('/api/kpi', authenticateRequest, requireRole(['admin', 'owner']), kpiModule.getKpiData);
 app.post('/api/kpi/targets', authenticateRequest, requireRole(['admin', 'owner']), kpiModule.setKpiTarget);
+app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['admin', 'owner']), kpiModule.deleteKpiTarget);
 
 // Growth Analytics Routes
 app.get('/api/analytics/growth', authenticateRequest, requireRole(['admin', 'owner']), growthModule.getGrowthReports);
@@ -615,43 +618,47 @@ app.get('/api/forecasting', authenticateRequest, requireRole(['admin', 'owner'])
 
 // AI Briefing Routes
 app.get('/api/ai/briefings', authenticateRequest, requireRole(['admin', 'owner']), userRateLimiterMiddleware(15), briefingModule.getAiBriefings);
+app.post('/api/ai/briefings/generate', authenticateRequest, requireRole(['owner', 'admin']), userRateLimiterMiddleware(10), briefingModule.generateAiBriefing);
+app.post('/api/ai/briefings', authenticateRequest, requireRole(['owner', 'admin']), briefingModule.createManualBriefing);
+app.put('/api/ai/briefings/:id', authenticateRequest, requireRole(['owner', 'admin']), briefingModule.updateManualBriefing);
+app.delete('/api/ai/briefings/:id', authenticateRequest, requireRole(['owner', 'admin']), briefingModule.deleteBriefing);
 
 // Simulation Routes
 app.get('/api/simulation/models', authenticateRequest, requireRole(['admin', 'owner']), simulationModule.getDecisionModels);
 app.get('/api/simulation/runs', authenticateRequest, requireRole(['admin', 'owner']), simulationModule.getSimulationRuns);
 app.post('/api/simulation/runs', authenticateRequest, requireRole(['admin', 'owner']), simulationModule.createSimulationRun);
 
-app.post('/api/marketing/email', authenticateRequest, marketingModule.sendEmailCampaign);
+app.post('/api/marketing/email', authenticateRequest, requireRole(['admin', 'manager', 'staff']), marketingModule.sendEmailCampaign);
 
 // AI Translation & Enterprise Multi-Language Routes (Phase 13)
 app.get('/api/ai/translations', aiTranslationsModule.getTranslations);
-app.post('/api/ai/translations/generate', authenticateRequest, userRateLimiterMiddleware(30), aiTranslationsModule.generateAiTranslation);
-app.put('/api/ai/translations/:id/draft', authenticateRequest, aiTranslationsModule.updateTranslationDraft);
-app.post('/api/ai/translations/:id/submit', authenticateRequest, aiTranslationsModule.submitForReview);
-app.post('/api/ai/translations/:id/approve', authenticateRequest, aiTranslationsModule.approveTranslation);
-app.post('/api/ai/translations/:id/reject', authenticateRequest, aiTranslationsModule.rejectTranslation);
+app.post('/api/ai/translations/generate', authenticateRequest, userRateLimiterMiddleware(30), requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.generateAiTranslation);
+app.put('/api/ai/translations/:id/draft', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateTranslationDraft);
+app.post('/api/ai/translations/:id/submit', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.submitForReview);
+app.post('/api/ai/translations/:id/approve', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.approveTranslation);
+app.post('/api/ai/translations/:id/reject', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rejectTranslation);
 app.get('/api/ai/translations/:id/preview', aiTranslationsModule.previewPublishTranslation);
-app.post('/api/ai/translations/:id/publish', authenticateRequest, aiTranslationsModule.publishTranslation);
-app.post('/api/ai/translations/:id/rollback', authenticateRequest, aiTranslationsModule.rollbackTranslation);
+app.post('/api/ai/translations/:id/publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.publishTranslation);
+app.post('/api/ai/translations/:id/rollback', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rollbackTranslation);
 app.get('/api/ai/translations/:id/history', aiTranslationsModule.getPublishHistory);
 app.get('/api/ai/translations/:id/compare', aiTranslationsModule.compareVersions);
-app.delete('/api/ai/translations/:id', authenticateRequest, aiTranslationsModule.deleteTranslation);
+app.delete('/api/ai/translations/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.deleteTranslation);
 
 app.get('/api/ai/translations/queue', aiTranslationsModule.getQueueJobs);
-app.post('/api/ai/translations/queue/action', authenticateRequest, aiTranslationsModule.handleQueueAction);
-app.post('/api/ai/translations/batch', authenticateRequest, aiTranslationsModule.createBatchTranslation);
+app.post('/api/ai/translations/queue/action', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.handleQueueAction);
+app.post('/api/ai/translations/batch', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createBatchTranslation);
 app.get('/api/ai/translations/cache', aiTranslationsModule.getCacheStats);
-app.post('/api/ai/translations/cache/invalidate', authenticateRequest, aiTranslationsModule.invalidateCache);
+app.post('/api/ai/translations/cache/invalidate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.invalidateCache);
 app.get('/api/ai/translations/metrics', aiTranslationsModule.getTranslationMetrics);
 app.get('/api/ai/translations/export', aiTranslationsModule.exportTranslationReport);
 
 app.get('/api/ai/translations/sync/health', aiTranslationsModule.getLocalizationHealth);
 app.get('/api/ai/translations/sync/tasks', aiTranslationsModule.getLocalizationTasks);
-app.post('/api/ai/translations/sync/tasks', authenticateRequest, aiTranslationsModule.createLocalizationTask);
-app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, aiTranslationsModule.updateLocalizationTask);
+app.post('/api/ai/translations/sync/tasks', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createLocalizationTask);
+app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateLocalizationTask);
 app.get('/api/ai/translations/sync/notifications', aiTranslationsModule.getNotifications);
-app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, aiTranslationsModule.markNotificationsRead);
-app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, aiTranslationsModule.triggerSourceContentChange);
+app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.markNotificationsRead);
+app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.triggerSourceContentChange);
 app.get('/api/ai/translations/sync/diff', aiTranslationsModule.getContentDiff);
 app.get('/api/ai/translations/sync/dependencies', aiTranslationsModule.getDependencies);
 app.get('/api/ai/translations/sync/reports', aiTranslationsModule.getLocalizationReports);
@@ -668,15 +675,25 @@ app.get('/api/ai/translations/quality/export', aiTranslationsModule.exportQualit
 
 // Phase 13 Multi-Language Expansion Routes
 app.get('/api/ai/languages', aiTranslationsModule.getSupportedLanguages);
-app.post('/api/ai/languages/toggle', authenticateRequest, aiTranslationsModule.toggleLanguage);
+app.post('/api/ai/languages/toggle', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.toggleLanguage);
 app.get('/api/ai/translations/matrix', aiTranslationsModule.getTranslationMatrix);
 app.get('/api/ai/translations/pack/export', aiTranslationsModule.exportLanguagePack);
-app.post('/api/ai/translations/pack/import', authenticateRequest, aiTranslationsModule.importLanguagePack);
+app.post('/api/ai/translations/pack/import', authenticateRequest, requireRole(['admin', 'manager', 'owner']), aiTranslationsModule.importLanguagePack);
 app.get('/api/ai/translations/memory', aiTranslationsModule.getTranslationMemory);
 app.get('/api/operations/health', operationsModule.getHealthData);
-app.get('/api/operations/backup', operationsModule.getBackupData);
+app.get('/api/operations/backup', authenticateRequest, requireRole(['admin', 'owner']), operationsModule.getBackupData);
 app.get('/api/operations/alerts', operationsModule.getAlertData);
 app.get('/api/operations/certification', operationsModule.getCertificationData);
+
+// Admin Management & Security Center Endpoints
+app.get('/api/admin/roster', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getAdminRoster);
+app.patch('/api/admin/roster/:id', authenticateRequest, requireRole(['admin', 'owner']), adminModule.updateAdminRole);
+app.delete('/api/admin/roster/:id', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeAdminAccess);
+app.get('/api/admin/audit-logs', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getAuditLogs);
+app.get('/api/admin/active-sessions', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getActiveSessions);
+app.get('/api/admin/rbac-matrix', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getRbacMatrix);
+app.delete('/api/admin/sessions/:token', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeSession);
+app.post('/api/admin/invite', authenticateRequest, requireRole(['admin', 'owner']), adminModule.inviteAdmin);
 
 // ENDPOINTS
 
@@ -753,73 +770,45 @@ app.post('/api/auth/session', handleSessionSync);
 
 // Development Configuration & Bypass Verification
 app.get('/api/auth/dev-config', (req, res) => {
-  const isDevMode = 
-    process.env.NODE_ENV !== 'production' &&
-    process.env.VERCEL_ENV !== 'production' &&
-    process.env.AI_STUDIO_DEV_MODE === 'true' &&
-    process.env.DEV_ADMIN_BYPASS === 'true';
-
-  if (isDevMode) {
-    return res.json({
-      devMode: true,
-      user: {
-        id: 'dev-preview',
-        email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-        firstName: 'RKInfinity',
-        lastName: 'Developer',
-        name: 'RKInfinity Developer',
-        phone: '',
-        role: 'owner',
-        isVerified: true,
-        addresses: [],
-        permissions: [
-          'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-          'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-          'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-          'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-        ]
-      }
-    });
-  } else {
-    return res.json({ devMode: false });
-  }
+  return res.json({ devMode: false });
 });
 
 // Change Password (Authenticated User)
 app.post('/api/auth/change-password', authenticateRequest, async (req: any, res) => {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword) {
-      return res.status(400).json({ error: 'New password is required.' });
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required.' });
     }
-
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!passwordRegex.test(newPassword)) {
-      return res.status(400).json({
-        error: 'New password must be at least 8 characters long, contain at least one uppercase letter, one number, and one special character.'
-      });
+      return res.status(400).json({ error: 'New password must be at least 8 characters long, contain at least one uppercase letter, one number, and one special character.' });
     }
-
     const supabase = getSupabaseClient();
-    if (!supabase) {
-      return res.status(500).json({ error: 'Supabase client not initialized.' });
-    }
+    if (!supabase || !req.user?.id) return res.status(503).json({ error: 'Authentication service unavailable.' });
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
+    const { data: user, error: userError } = await supabase
+      .from('zoal_users')
+      .select('id,password_hash')
+      .eq('id', req.user.id)
+      .single();
+    if (userError || !user) return res.status(401).json({ error: 'Unable to verify account credentials.' });
 
-    if (error) throw error;
+    const currentHash = Buffer.from(currentPassword).toString('base64');
+    if (user.password_hash !== currentHash) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+    const nextHash = Buffer.from(newPassword).toString('base64');
+    const { error: updateError } = await supabase
+      .from('zoal_users')
+      .update({ password_hash: nextHash })
+      .eq('id', req.user.id);
+    if (updateError) return res.status(500).json({ error: 'Failed to update password.' });
 
     await logActivityAsync(req.user.id, req.user.email, 'PASSWORD_CHANGED', req.ip || '', req.headers['user-agent'] || '');
-
-    return res.json({
-      success: true,
-      message: 'Password updated successfully!'
-    });
+    return res.json({ success: true, message: 'Password updated successfully!' });
   } catch (error: any) {
     console.error('Password change error:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error during password change.' });
+    return res.status(500).json({ error: 'Password change failed.' });
   }
 });
 
@@ -1201,11 +1190,17 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Create a new order in Supabase
-app.post('/api/orders/create', authenticateRequest, async (req, res) => {
+app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) => {
   const { order } = req.body;
   if (!order || !order.id || !order.items) {
     return res.status(400).json({ error: 'Invalid order structure.' });
   }
+
+  // Server-Authoritative Customer Identity Resolution (P0 Security)
+  // Authenticated sessions MUST use verified session user ID.
+  // Unauthenticated (guest) checkout MUST use NULL.
+  // Never trust client-supplied order.customerId.
+  const resolvedCustomerId = req.user?.id || null;
 
   // Authoritatively validate shipping rules on the server before persisting
   const clientCity = order.city || order.region || '';
@@ -1279,7 +1274,7 @@ app.post('/api/orders/create', authenticateRequest, async (req, res) => {
     // 1. Insert into zoal_orders
     const orderData: any = {
       id: order.id,
-      customer_id: order.customerId || null,
+      customer_id: resolvedCustomerId,
       status: (order.status || 'pending').toLowerCase(),
       subtotal: order.subtotal,
       discount_amount: order.discount || 0,
@@ -1919,213 +1914,153 @@ async function initializeShippingDatabase() {
   }
 }
 
-app.get('/api/branding', authenticateRequest, async (req: any, res) => {
+// Safe browser projection: never expose secrets or private credentials.
+function mapBrandingToSafeClientSettings(row: any) {
+  const social = row?.social_links || {};
+  const socialLinks = typeof social === 'string' ? (() => { try { return JSON.parse(social); } catch { return {}; } })() : social;
+  return {
+    businessName: row?.business_name ?? 'AL ZOAL Enterprise',
+    businessLogo: row?.business_logo ?? '/assets/branding/zoal-main-logo.jpg',
+    favicon: row?.favicon ?? '/assets/branding/zoal-main-logo.jpg',
+    companyDescription: row?.company_description ?? 'Al Zoal Luxury Boutique',
+    phone: row?.phone ?? '+966 56 769 9315',
+    email: row?.email ?? 'alzoal3003@gmail.com',
+    website: row?.website ?? 'https://alzoal.sa',
+    address: row?.address ?? 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+    instagram: socialLinks?.instagram || '',
+    twitter: socialLinks?.twitter || '',
+    accentColor: row?.accent_color ?? '#D4AF37',
+    theme: row?.theme ?? 'dark',
+    language: row?.language ?? 'en',
+    currency: row?.currency ?? 'SAR',
+    shippingFeeDefault: Number(row?.shipping_fee_default ?? 35),
+    shippingFreeThreshold: Number(row?.shipping_free_threshold ?? 500),
+    taxRate: Number(row?.tax_rate ?? 15),
+    taxId: row?.tax_id ?? 'VAT-789-ZOAL-99',
+    // Non-secret operational metadata only.
+    smtpHost: row?.smtp_host ?? 'smtp.zoal-cloud.sa',
+    smtpPort: String(row?.smtp_port ?? '587'),
+    smtpUser: row?.smtp_user ?? 'relays@zoal.sa',
+    ipWhitelist: row?.ip_whitelist ?? '0.0.0.0/0',
+    sessionExpirationMinutes: Number(row?.session_expiration_minutes ?? 120),
+    autoBackupFrequency: row?.auto_backup_frequency ?? 'daily'
+  };
+}
+
+function brandingFallbackSettings() {
+  return mapBrandingToSafeClientSettings({});
+}
+
+app.get('/api/branding', authenticateRequest, async (_req: any, res) => {
+  let client: pg.Client | null = null;
   try {
-    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'owner');
     const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      return res.json({
-        businessName: 'AL ZOAL Enterprise',
-        businessLogo: '/assets/branding/zoal-main-logo.jpg',
-        favicon: '/assets/branding/zoal-main-logo.jpg',
-        address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-        email: 'alzoal3003@gmail.com',
-        phone: '+966 56 769 9315',
-        instagram: 'https://instagram.com/alzoal',
-        twitter: 'https://twitter.com/alzoal',
-        language: 'en',
-        currency: 'SAR',
-        shippingFeeDefault: 35,
-        shippingFreeThreshold: 500,
-        taxRate: 15,
-        taxId: 'VAT-789-ZOAL-99',
-        smtpHost: 'smtp.zoal-cloud.sa',
-        smtpPort: '587',
-        smtpUser: 'relays@zoal.sa',
-        smtpPass: '**********',
-        ipWhitelist: '0.0.0.0/0',
-        sessionExpirationMinutes: 120,
-        autoBackupFrequency: 'daily',
-        accentColor: '#D4AF37',
-        companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-        website: 'https://alzoal.sa',
-        theme: 'dark'
-      });
-    }
+    if (!connectionString) return res.json(brandingFallbackSettings());
 
-    const client = new Client({
-      connectionString,
-      ssl: { rejectUnauthorized: false }
-    });
-
+    client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
     await client.connect();
     const result = await client.query('SELECT * FROM branding_settings WHERE id = 1 LIMIT 1');
-    await client.end();
-
-    if (result.rows.length > 0) {
-      const data = MAP_DB_TO_SETTINGS(result.rows[0]);
-      if (!isAdmin) {
-        data.smtpPass = '**********';
-        data.smtpUser = '**********';
-        data.ipWhitelist = '***.***.***.***';
-      }
-      return res.json(data);
-    } else {
-      return res.json({
-        businessName: 'AL ZOAL Enterprise',
-        businessLogo: '/assets/branding/zoal-main-logo.jpg',
-        favicon: '/assets/branding/zoal-main-logo.jpg',
-        address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-        email: 'alzoal3003@gmail.com',
-        phone: '+966 56 769 9315',
-        instagram: 'https://instagram.com/alzoal',
-        twitter: 'https://twitter.com/alzoal',
-        language: 'en',
-        currency: 'SAR',
-        shippingFeeDefault: 35,
-        shippingFreeThreshold: 500,
-        taxRate: 15,
-        taxId: 'VAT-789-ZOAL-99',
-        smtpHost: 'smtp.zoal-cloud.sa',
-        smtpPort: '587',
-        smtpUser: 'relays@zoal.sa',
-        smtpPass: '**********',
-        ipWhitelist: '0.0.0.0/0',
-        sessionExpirationMinutes: 120,
-        autoBackupFrequency: 'daily',
-        accentColor: '#D4AF37',
-        companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-        website: 'https://alzoal.sa',
-        theme: 'dark'
-      });
-    }
+    return res.json(result.rows.length > 0
+      ? mapBrandingToSafeClientSettings(result.rows[0])
+      : brandingFallbackSettings());
   } catch (err: any) {
-    console.error('❌ Error fetching branding settings:', err);
-    return res.json({
-      businessName: 'AL ZOAL Enterprise',
-      businessLogo: '/assets/branding/zoal-main-logo.jpg',
-      favicon: '/assets/branding/zoal-main-logo.jpg',
-      address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-      email: 'alzoal3003@gmail.com',
-      phone: '+966 56 769 9315',
-      instagram: 'https://instagram.com/alzoal',
-      twitter: 'https://twitter.com/alzoal',
-      language: 'en',
-      currency: 'SAR',
-      shippingFeeDefault: 35,
-      shippingFreeThreshold: 500,
-      taxRate: 15,
-      taxId: 'VAT-789-ZOAL-99',
-      smtpHost: 'smtp.zoal-cloud.sa',
-      smtpPort: '587',
-      smtpUser: 'relays@zoal.sa',
-      smtpPass: '**********',
-      ipWhitelist: '0.0.0.0/0',
-      sessionExpirationMinutes: 120,
-      autoBackupFrequency: 'daily',
-      accentColor: '#D4AF37',
-      companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-      website: 'https://alzoal.sa',
-      theme: 'dark'
-    });
+    console.error('❌ Error fetching branding settings:', err?.message || err);
+    return res.json(brandingFallbackSettings());
+  } finally {
+    if (client) await client.end().catch(() => {});
   }
 });
 
 app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (req: any, res) => {
+  let client: pg.Client | null = null;
   try {
     const config = req.body;
-    if (!config) {
+    if (!config || typeof config !== 'object') {
       return res.status(400).json({ error: 'Missing configuration body.' });
     }
 
     const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      return res.status(500).json({ error: 'Database is not configured.' });
+    if (!connectionString) return res.status(500).json({ error: 'Database is not configured.' });
+
+    const numberOrDefault = (value: any, fallback: number, min = 0) => {
+      if (value === undefined || value === null || value === '') return fallback;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < min) throw new Error('Invalid numeric settings value.');
+      return n;
+    };
+
+    const email = config.email || 'alzoal3003@gmail.com';
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address.' });
     }
 
-    const client = new Client({
-      connectionString,
-      ssl: { rejectUnauthorized: false }
+    const socialLinks = JSON.stringify({
+      instagram: typeof config.instagram === 'string' ? config.instagram : '',
+      twitter: typeof config.twitter === 'string' ? config.twitter : ''
     });
 
+    client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
     await client.connect();
 
-    const socialLinks = JSON.stringify({
-      instagram: config.instagram || '',
-      twitter: config.twitter || ''
-    });
+    // Lock/read current row so secrets are preserved and never sourced from browser payload.
+    const current = await client.query('SELECT * FROM branding_settings WHERE id = 1 FOR UPDATE');
+    const existing = current.rows[0] || null;
 
     const query = `
       INSERT INTO branding_settings (
-        id, business_name, business_logo, favicon, company_description, phone, email, website, address, social_links, accent_color, theme, language, currency, shipping_fee_default, shipping_free_threshold, tax_rate, tax_id, smtp_host, smtp_port, smtp_user, smtp_pass, ip_whitelist, session_expiration_minutes, auto_backup_frequency, updated_by
+        id, business_name, business_logo, favicon, company_description, phone, email, website, address, social_links,
+        accent_color, theme, language, currency, shipping_fee_default, shipping_free_threshold, tax_rate, tax_id,
+        smtp_host, smtp_port, smtp_user, smtp_pass, ip_whitelist, session_expiration_minutes, auto_backup_frequency, updated_by
       ) VALUES (
-        1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
-      ) ON CONFLICT (id) DO UPDATE SET
-        business_name = EXCLUDED.business_name,
-        business_logo = EXCLUDED.business_logo,
-        favicon = EXCLUDED.favicon,
-        company_description = EXCLUDED.company_description,
-        phone = EXCLUDED.phone,
-        email = EXCLUDED.email,
-        website = EXCLUDED.website,
-        address = EXCLUDED.address,
-        social_links = EXCLUDED.social_links,
-        accent_color = EXCLUDED.accent_color,
-        theme = EXCLUDED.theme,
-        language = EXCLUDED.language,
-        currency = EXCLUDED.currency,
-        shipping_fee_default = EXCLUDED.shipping_fee_default,
-        shipping_free_threshold = EXCLUDED.shipping_free_threshold,
-        tax_rate = EXCLUDED.tax_rate,
-        tax_id = EXCLUDED.tax_id,
-        smtp_host = EXCLUDED.smtp_host,
-        smtp_port = EXCLUDED.smtp_port,
-        smtp_user = EXCLUDED.smtp_user,
-        smtp_pass = EXCLUDED.smtp_pass,
-        ip_whitelist = EXCLUDED.ip_whitelist,
-        session_expiration_minutes = EXCLUDED.session_expiration_minutes,
-        auto_backup_frequency = EXCLUDED.auto_backup_frequency,
-        updated_at = CURRENT_TIMESTAMP,
-        updated_by = EXCLUDED.updated_by
+        1, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        business_name=EXCLUDED.business_name, business_logo=EXCLUDED.business_logo, favicon=EXCLUDED.favicon,
+        company_description=EXCLUDED.company_description, phone=EXCLUDED.phone, email=EXCLUDED.email,
+        website=EXCLUDED.website, address=EXCLUDED.address, social_links=EXCLUDED.social_links,
+        accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, language=EXCLUDED.language, currency=EXCLUDED.currency,
+        shipping_fee_default=EXCLUDED.shipping_fee_default, shipping_free_threshold=EXCLUDED.shipping_free_threshold,
+        tax_rate=EXCLUDED.tax_rate, tax_id=EXCLUDED.tax_id, smtp_host=EXCLUDED.smtp_host,
+        smtp_port=EXCLUDED.smtp_port, smtp_user=EXCLUDED.smtp_user,
+        smtp_pass=branding_settings.smtp_pass,
+        ip_whitelist=EXCLUDED.ip_whitelist, session_expiration_minutes=EXCLUDED.session_expiration_minutes,
+        auto_backup_frequency=EXCLUDED.auto_backup_frequency, updated_at=CURRENT_TIMESTAMP, updated_by=EXCLUDED.updated_by
       RETURNING *;
     `;
 
     const values = [
-      config.businessName || 'AL ZOAL Enterprise',
-      config.businessLogo || '/assets/branding/zoal-main-logo.jpg',
-      config.favicon || '/assets/branding/zoal-main-logo.jpg',
-      config.companyDescription || 'Al Zoal Luxury Boutique',
-      config.phone || '+966 56 769 9315',
-      config.email || 'alzoal3003@gmail.com',
-      config.website || 'https://alzoal.sa',
-      config.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-      socialLinks,
-      config.accentColor || '#D4AF37',
-      config.theme || 'dark',
-      config.language || 'en',
-      config.currency || 'SAR',
-      config.shippingFeeDefault !== undefined ? Number(config.shippingFeeDefault) : 35,
-      config.shippingFreeThreshold !== undefined ? Number(config.shippingFreeThreshold) : 500,
-      config.taxRate !== undefined ? Number(config.taxRate) : 15,
-      config.taxId || 'VAT-789-ZOAL-99',
-      config.smtpHost || 'smtp.zoal-cloud.sa',
-      config.smtpPort || '587',
-      config.smtpUser || 'relays@zoal.sa',
-      config.smtpPass || '**********',
-      config.ipWhitelist || '0.0.0.0/0',
-      config.sessionExpirationMinutes !== undefined ? Number(config.sessionExpirationMinutes) : 120,
-      config.autoBackupFrequency || 'daily',
+      config.businessName || existing?.business_name || 'AL ZOAL Enterprise',
+      config.businessLogo || existing?.business_logo || '/assets/branding/zoal-main-logo.jpg',
+      config.favicon || existing?.favicon || '/assets/branding/zoal-main-logo.jpg',
+      config.companyDescription || existing?.company_description || 'Al Zoal Luxury Boutique',
+      config.phone || existing?.phone || '+966 56 769 9315',
+      email, config.website || existing?.website || 'https://alzoal.sa',
+      config.address || existing?.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+      socialLinks, config.accentColor || existing?.accent_color || '#D4AF37',
+      config.theme || existing?.theme || 'dark', config.language || existing?.language || 'en',
+      config.currency || existing?.currency || 'SAR',
+      numberOrDefault(config.shippingFeeDefault, Number(existing?.shipping_fee_default ?? 35)),
+      numberOrDefault(config.shippingFreeThreshold, Number(existing?.shipping_free_threshold ?? 500)),
+      numberOrDefault(config.taxRate, Number(existing?.tax_rate ?? 15)),
+      config.taxId || existing?.tax_id || 'VAT-789-ZOAL-99',
+      config.smtpHost || existing?.smtp_host || 'smtp.zoal-cloud.sa',
+      String(config.smtpPort || existing?.smtp_port || '587'),
+      config.smtpUser || existing?.smtp_user || 'relays@zoal.sa',
+      existing?.smtp_pass ?? null,
+      config.ipWhitelist || existing?.ip_whitelist || '0.0.0.0/0',
+      numberOrDefault(config.sessionExpirationMinutes, Number(existing?.session_expiration_minutes ?? 120), 1),
+      config.autoBackupFrequency || existing?.auto_backup_frequency || 'daily',
       req.user.email || 'Admin'
     ];
 
     const result = await client.query(query, values);
-    await client.end();
-
-    const updatedRow = result.rows[0];
-    return res.json({ success: true, settings: MAP_DB_TO_SETTINGS(updatedRow) });
+    return res.json({ success: true, settings: mapBrandingToSafeClientSettings(result.rows[0]) });
   } catch (err: any) {
-    console.error('❌ Error updating branding settings:', err);
-    return res.status(500).json({ error: err.message || String(err) });
+    console.error('❌ Error updating branding settings:', err?.message || err);
+    const message = err?.message === 'Invalid numeric settings value.' ? err.message : 'Failed to update branding settings.';
+    return res.status(500).json({ error: message });
+  } finally {
+    if (client) await client.end().catch(() => {});
   }
 });
 
@@ -2682,34 +2617,34 @@ app.post('/api/contact', validateContactSecurity, async (req, res) => {
 // ENTERPRISE BLOG & NEWS CMS API ROUTES
 // -------------------------------------------------------------
 app.get('/api/blog', blogModule.getBlogPosts);
-app.post('/api/blog', authenticateRequest, blogModule.createBlogPost);
-app.put('/api/blog/:id', authenticateRequest, blogModule.updateBlogPost);
-app.delete('/api/blog/:id', authenticateRequest, blogModule.deleteBlogPost);
+app.post('/api/blog', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createBlogPost);
+app.put('/api/blog/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateBlogPost);
+app.delete('/api/blog/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteBlogPost);
 
 app.get('/api/blog/categories', blogModule.getCategories);
-app.post('/api/blog/categories', authenticateRequest, blogModule.createCategory);
-app.put('/api/blog/categories/:id', authenticateRequest, blogModule.updateCategory);
-app.delete('/api/blog/categories/:id', authenticateRequest, blogModule.deleteCategory);
+app.post('/api/blog/categories', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createCategory);
+app.put('/api/blog/categories/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateCategory);
+app.delete('/api/blog/categories/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteCategory);
 
 app.get('/api/blog/tags', blogModule.getTags);
-app.post('/api/blog/tags', authenticateRequest, blogModule.createTag);
-app.delete('/api/blog/tags/:id', authenticateRequest, blogModule.deleteTag);
+app.post('/api/blog/tags', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createTag);
+app.delete('/api/blog/tags/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteTag);
 
 app.get('/api/blog/comments', blogModule.getComments);
-app.post('/api/blog/comments', authenticateRequest, blogModule.createComment);
-app.put('/api/blog/comments/:id', authenticateRequest, blogModule.updateCommentStatus);
-app.delete('/api/blog/comments/:id', authenticateRequest, blogModule.deleteComment);
+app.post('/api/blog/comments', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createComment);
+app.put('/api/blog/comments/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateCommentStatus);
+app.delete('/api/blog/comments/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteComment);
 
 app.get('/api/blog/authors', blogModule.getAuthors);
-app.post('/api/blog/authors', authenticateRequest, blogModule.createAuthor);
+app.post('/api/blog/authors', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createAuthor);
 
 app.get('/api/blog/media', blogModule.getMedia);
-app.post('/api/blog/media', authenticateRequest, blogModule.uploadMedia);
-app.put('/api/blog/media/:id', authenticateRequest, blogModule.updateMedia);
-app.delete('/api/blog/media/:id', authenticateRequest, blogModule.deleteMedia);
+app.post('/api/blog/media', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.uploadMedia);
+app.put('/api/blog/media/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateMedia);
+app.delete('/api/blog/media/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteMedia);
 
 app.get('/api/blog/seo/:postId', blogModule.getSeo);
-app.post('/api/blog/seo', authenticateRequest, blogModule.upsertSeo);
+app.post('/api/blog/seo', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.upsertSeo);
 
 app.get('/api/blog/search', blogModule.searchBlog);
 app.get('/api/blog/sitemap', blogModule.generateBlogSitemap);
@@ -2717,10 +2652,10 @@ app.get('/api/blog/rss', blogModule.generateBlogRss);
 
 app.post('/api/blog/newsletter', blogModule.subscribeNewsletter);
 app.get('/api/blog/revisions/:postId', blogModule.getRevisions);
-app.post('/api/blog/revisions', authenticateRequest, blogModule.createRevision);
-app.get('/api/blog/schedule', authenticateRequest, blogModule.getSchedules);
-app.post('/api/blog/schedule', authenticateRequest, blogModule.scheduleBlogPost);
-app.post('/api/blog/schedule/cancel', authenticateRequest, blogModule.cancelPostSchedule);
+app.post('/api/blog/revisions', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createRevision);
+app.get('/api/blog/schedule', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.getSchedules);
+app.post('/api/blog/schedule', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.scheduleBlogPost);
+app.post('/api/blog/schedule/cancel', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.cancelPostSchedule);
 app.post('/api/blog/posts/:id/view', blogModule.trackBlogPostView);
 app.post('/api/blog/:id/view', blogModule.trackBlogPostView);
 
@@ -2742,9 +2677,9 @@ app.post('/api/admin/products/sync-verify', authenticateRequest, requireRole(['a
 // -------------------------------------------------------------
 app.get('/api/warehouses', warehousesModule.getWarehouses);
 app.get('/api/warehouses/:id', warehousesModule.getWarehouseById);
-app.post('/api/warehouses', warehousesModule.createWarehouse);
-app.put('/api/warehouses/:id', warehousesModule.updateWarehouse);
-app.delete('/api/warehouses/:id', warehousesModule.deleteWarehouse);
+app.post('/api/warehouses', authenticateRequest, requireRole(['admin', 'staff']), warehousesModule.createWarehouse);
+app.put('/api/warehouses/:id', authenticateRequest, requireRole(['admin', 'staff']), warehousesModule.updateWarehouse);
+app.delete('/api/warehouses/:id', authenticateRequest, requireRole(['admin', 'staff']), warehousesModule.deleteWarehouse);
 
 // -------------------------------------------------------------
 // ENTERPRISE CUSTOMER CRM & INVITATION AUTHENTICATION API ROUTES
@@ -2761,6 +2696,15 @@ app.post('/api/admin/customers/:id/status', authenticateRequest, requireRole(['s
 app.post('/api/admin/customers/:id/notes', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.addCustomerNote);
 app.post('/api/admin/customers/:id/communications', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.addCustomerCommunication);
 app.delete('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.deleteOrDeactivateCustomer);
+
+// -------------------------------------------------------------
+// STAFF DASHBOARD API ROUTES
+app.get('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffRoster);
+app.put('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateStaffOrder);
+app.post('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.createStaffLog);
+app.get('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
+app.post('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateDutyStatus);
+app.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getDutyStatus);
 
 // -------------------------------------------------------------
 // SUPPORT CENTER API ROUTES

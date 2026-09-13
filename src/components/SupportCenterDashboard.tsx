@@ -400,112 +400,66 @@ export default function SupportCenterDashboard({ currentUser, orders, addLog, on
       }
     } catch (err: any) {
       console.error('Error fetching AI responder:', err);
-      // Fallback draft generation locally
-      const mockReply = `[Premium Luxury Fallback Draft] Shukran, esteemed ${activeTicket.customerName}, for your request. Regarding your inquiry about "${activeTicket.subject}", our support officers are coordinating with the tailor to verify the exact specifications. Peace be upon you.`;
-      setReplyText(mockReply);
-      setAiResponseStatus({
-        source: 'local-frontend-fallback',
-        apiConfigured: false,
-        warning: 'Network/server error occurred. Loaded offline draft.'
-      });
+      setAiResponseStatus({ source: 'unavailable', apiConfigured: false, warning: 'AI responder unavailable. No synthetic draft was created.' });
     } finally {
       setIsAiDrafting(false);
     }
   };
 
-  // Add message or manually type response
-  const handleSendMessage = (e: React.FormEvent) => {
+  // Add message only after authoritative server persistence succeeds.
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || !activeTicket) return;
-
-    const newMsg: any = {
-      user_id: currentUser?.id || '00000000-0000-0000-0000-000000000000',
-      message: replyText.trim(),
-      text: replyText.trim(),
-      sender: 'staff',
-      is_internal_note: false,
-      created_at: new Date().toISOString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      ticket_id: activeTicket.id,
-      id: `msg-${Date.now()}`
-    };
-
-    setTickets(prev => {
-      const list = Array.isArray(prev) ? prev : [];
-      return list.map(t => {
-        if (t && t.id === activeTicket.id) {
-          const prevMessages = Array.isArray(t.messages) ? t.messages : [];
-          return {
-            ...t,
-            messages: [...prevMessages, newMsg],
-            status: 'Pending' // mark as pending customer response or staff handoff
-          };
-        }
-        return t;
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('Support authentication required.'); return; }
+    try {
+      const res = await fetch(`/api/support/tickets/${activeTicket.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ticket_id: activeTicket.id, message: replyText.trim(), is_internal_note: false })
       });
-    });
-
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || localStorage.getItem('zoal_token') || localStorage.getItem('token') || sessionStorage.getItem('token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      if (!res.ok) throw new Error('Failed to persist support message.');
+      const data = await res.json();
+      if (!data?.message) throw new Error('Server did not return the persisted message.');
+      setTickets(prev => prev.map(t => t?.id === activeTicket.id ? {
+        ...t,
+        messages: [...(Array.isArray(t.messages) ? t.messages : []), {
+          ...data.message,
+          text: data.message.message,
+          sender: 'staff',
+          created_at: data.message.created_at,
+          time: new Date(data.message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]
+      } : t));
+      setReplyText('');
+      setAiResponseStatus(null);
+      fetchAuditLogs();
+    } catch (err: any) {
+      console.error('Failed to save message to database:', err);
+      alert(err?.message || 'Support message was not sent. Local state was not changed.');
     }
-
-    // Persist new message to the server
-    fetch(`/api/support/tickets/${activeTicket.id}/messages`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        ticket_id: activeTicket.id,
-        user_id: currentUser?.id || '00000000-0000-0000-0000-000000000000',
-        message: replyText.trim(),
-        is_internal_note: false
-      })
-    })
-      .then(res => {
-        if (res.ok) fetchAuditLogs();
-      })
-      .catch(err => {
-        console.error('Failed to save message to database:', err);
-      });
-
-    const custName = activeTicket.customerName || activeTicket.customer_name || 'Customer';
-    setReplyText('');
-    setAiResponseStatus(null);
   };
 
-  // Update ticket attributes
-  const updateTicketField = (ticketId: string, field: keyof Ticket, value: any) => {
-    setTickets(prev => {
-      const list = Array.isArray(prev) ? prev : [];
-      return list.map(t => {
-        if (t && t.id === ticketId) {
-          return { ...t, [field]: value };
-        }
-        return t;
+  // Update ticket attributes only after the authoritative API accepts the change.
+  const updateTicketField = async (ticketId: string, field: keyof Ticket, value: any) => {
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('Support authentication required.'); return; }
+    try {
+      const res = await fetch(`/api/support/tickets/${ticketId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ field, value })
       });
-    });
-
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || localStorage.getItem('zoal_token') || localStorage.getItem('token') || sessionStorage.getItem('token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      if (!res.ok) throw new Error('Failed to persist ticket update.');
+      const data = await res.json().catch(() => ({}));
+      const persisted = data?.ticket;
+      setTickets(prev => prev.map(t => t?.id === ticketId ? (persisted ? { ...t, ...persisted } : { ...t, [field]: value }) : t));
+      fetchAuditLogs();
+    } catch (err: any) {
+      console.error('Failed to update ticket field on server:', err);
+      alert(err?.message || 'Ticket update failed. Local state was not changed.');
     }
-
-    // Persist status or priority update to the server
-    fetch(`/api/support/tickets/${ticketId}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({ field, value })
-    })
-      .then(res => {
-        if (res.ok) fetchAuditLogs();
-      })
-      .catch(err => {
-        console.error('Failed to update ticket field on server:', err);
-      });
   };
-
   // KB CRUD adding
   const handleAddKBArticle = (e: React.FormEvent) => {
     e.preventDefault();

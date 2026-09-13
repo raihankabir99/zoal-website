@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import EnterpriseHealthMonitor from './EnterpriseHealthMonitor';
 import {
   User, Shield, Landmark, BarChart3, Package, Truck, Compass, Languages,
   MapPin, CheckCircle, Users, RefreshCw, Star, ArrowUpRight, TrendingUp, Sparkles, Bell,
@@ -63,10 +64,12 @@ const EnterpriseDecisionSimulation = lazyWithRetry(() => import('./EnterpriseDec
 const EnterpriseGrowthAnalytics = lazyWithRetry(() => import('./EnterpriseGrowthAnalytics').then(m => ({ default: m.EnterpriseGrowthAnalytics })));
 const AnalyticsOverview = lazyWithRetry(() => import('./dashboard/AnalyticsOverview'));
 const OwnerExecutiveDashboard = lazyWithRetry(() => import('./OwnerExecutiveDashboard'));
+const StrategicReport = lazyWithRetry(() => import('./StrategicReport').then(m => ({ default: m.StrategicReport || m.default })));
 
 import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
 import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 import { useBranding } from './BrandingContext';
+import { supabaseClient } from '../lib/supabaseClient';
 import { useNotificationEngine } from '../lib/notificationStore';
 import { ConfirmationModal } from './common/ConfirmationModal';
 
@@ -108,6 +111,30 @@ export default function AdminDashboard({
 
   // State management for navigation
   const [activeTab, setActiveTab] = useState<string>(initialTab || 'dashboard');
+  const [dashboardSyncState, setDashboardSyncState] = useState<'unknown' | 'refreshing' | 'verified' | 'failed'>('unknown');
+
+  const refreshDashboardData = async () => {
+    setDashboardSyncState('refreshing');
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) throw new Error('No active authenticated session');
+
+      const response = await fetch('/api/admin/dashboard-analytics', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error(`Dashboard verification failed (${response.status})`);
+      await response.json();
+
+      setDashboardSyncState('verified');
+      addLog('Dashboard server verification completed successfully');
+      window.setTimeout(() => window.location.reload(), 150);
+    } catch (error) {
+      console.error('Dashboard refresh verification failed:', error);
+      setDashboardSyncState('failed');
+      addLog('Dashboard server verification failed');
+    }
+  };
 
   useEffect(() => {
     if (initialTab) {
@@ -482,7 +509,7 @@ export default function AdminDashboard({
   }, [subscribers]);
 
   useEffect(() => {
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
     const authHeaders = { 'Authorization': `Bearer ${token}` };
 
     fetch('/api/marketing-data', { headers: authHeaders })
@@ -1078,18 +1105,43 @@ export default function AdminDashboard({
   const [editingRole, setEditingRole] = useState<any | null>(null);
   const [isAddRoleOpen, setIsAddRoleOpen] = useState<boolean>(false);
 
-  // System Logs list
-  const [systemLogs, setSystemLogs] = useState<any[]>(() => {
+  // System Logs list - Server Authoritative backed by Supabase zoal_activity_logs
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [loadingSystemLogs, setLoadingSystemLogs] = useState<boolean>(false);
+
+  const fetchSystemLogs = useCallback(async () => {
     try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'log-101', user: currentUser?.name || 'Administrator', action: 'Admin Login', target: 'Management Secure Panel', ip: '192.168.1.1', time: new Date().toLocaleString() },
-      { id: 'log-102', user: currentUser?.name || 'Administrator', action: 'Settings Updated', target: 'Synchronized Supabase Database', ip: '192.168.1.1', time: new Date(Date.now() - 300000).toLocaleString() },
-      { id: 'log-103', user: 'Khalid Al-Mansoori', action: 'Order Updated', target: 'Shipped Order ZL-9543', ip: '192.168.1.25', time: new Date(Date.now() - 7200000).toLocaleString() }
-    ];
-  });
+      setLoadingSystemLogs(true);
+      const token = (currentUser as any)?.token || localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const formatted = logsArray.map((l: any) => ({
+          id: l.id,
+          user: l.email || l.user_id || 'Administrator',
+          action: l.action,
+          target: l.resource_id ? `${l.resource_type || ''}: ${l.resource_id}` : (l.resource_type || 'System'),
+          ip: l.ip || '127.0.0.1',
+          time: l.timestamp ? new Date(l.timestamp).toLocaleString() : new Date().toLocaleString(),
+          severity: l.severity || 'INFO',
+          metadata: l.metadata,
+          before_state: l.before_state,
+          after_state: l.after_state
+        }));
+        setSystemLogs(formatted);
+      }
+    } catch (err) {
+      console.error('Failed to fetch audit logs:', err);
+    } finally {
+      setLoadingSystemLogs(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    fetchSystemLogs();
+  }, [fetchSystemLogs]);
 
   // Save categories/brands back to localStorage
   useEffect(() => {
@@ -1100,10 +1152,6 @@ export default function AdminDashboard({
     localStorage.setItem('zoal_admin_brands', JSON.stringify(brands));
   }, [brands]);
 
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_logs', JSON.stringify(systemLogs));
-  }, [systemLogs]);
-
   // Log function helper
   const addLog = (action: string, target?: string) => {
     const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
@@ -1112,7 +1160,7 @@ export default function AdminDashboard({
       user: currentUser?.name || 'Admin',
       action,
       target: target || 'System Interface',
-      ip: '192.168.1.16',
+      ip: '127.0.0.1',
       time: new Date().toLocaleString()
     };
     setSystemLogs(prev => [newLog, ...prev]);
@@ -3108,9 +3156,33 @@ export default function AdminDashboard({
           </div>
 
           {/* Quick status indicator */}
-          <div className="hidden lg:flex items-center gap-2 border border-emerald-500/20 bg-emerald-900/10 px-3 py-1 rounded-full text-emerald-400 text-[9px] uppercase tracking-widest font-mono">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Supabase Server: Fully Synchronized</span>
+          <div className="hidden lg:flex items-center gap-2 border border-white/10 bg-white/[0.02] px-3 py-1 rounded-full text-[9px] uppercase tracking-widest font-mono" aria-live="polite">
+            <div className={`w-1.5 h-1.5 rounded-full ${
+              dashboardSyncState === 'verified'
+                ? 'bg-emerald-500'
+                : dashboardSyncState === 'refreshing'
+                  ? 'bg-amber-400 animate-pulse'
+                  : dashboardSyncState === 'failed'
+                    ? 'bg-red-500'
+                    : 'bg-zinc-500'
+            }`} />
+            <span className={
+              dashboardSyncState === 'verified'
+                ? 'text-emerald-400'
+                : dashboardSyncState === 'refreshing'
+                  ? 'text-amber-300'
+                  : dashboardSyncState === 'failed'
+                    ? 'text-red-400'
+                    : 'text-zinc-500'
+            }>
+              {dashboardSyncState === 'verified'
+                ? 'Server Data Verified'
+                : dashboardSyncState === 'refreshing'
+                  ? 'Verifying Server Data…'
+                  : dashboardSyncState === 'failed'
+                    ? 'Verification Failed'
+                    : 'Server Sync Status Unknown'}
+            </span>
           </div>
 
           {/* Action Tools */}
@@ -3172,13 +3244,13 @@ export default function AdminDashboard({
                   {/* Sync & Refresh Actions */}
                   <div className="flex items-center shrink-0">
                     <button 
-                      onClick={() => {
-                        addLog('Triggered Manual Supabase Re-Sync');
-                        alert('Supabase master records verified and up-to-date!');
-                      }}
-                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
+                      type="button"
+                      onClick={refreshDashboardData}
+                      disabled={dashboardSyncState === 'refreshing'}
+                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 disabled:opacity-60 disabled:cursor-not-allowed rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
                     >
-                      <RefreshCw className="w-3 h-3 text-gold-pure" /> Refresh Data
+                      <RefreshCw className={`w-3 h-3 text-gold-pure ${dashboardSyncState === 'refreshing' ? 'animate-spin' : ''}`} />
+                      {dashboardSyncState === 'refreshing' ? 'Verifying…' : 'Refresh Data'}
                     </button>
                   </div>
                 </div>
@@ -7085,8 +7157,8 @@ export default function AdminDashboard({
                           <input 
                             type={showAdminSmtpPass ? 'text' : 'password'} 
                             id="settings-smtp-pass"
-                            defaultValue={globalSettings.smtpPass}
-                            className="bg-black w-full border border-white/10 text-white p-2 pr-11 text-[10px] rounded-xs outline-none focus:border-gold-pure"
+                            placeholder="•••••••••••• (Leave blank to keep existing secret)"
+                            className="bg-black w-full border border-white/10 text-white p-2 pr-11 text-[10px] rounded-xs outline-none focus:border-gold-pure placeholder:text-zinc-600"
                           />
                           <button
                             type="button"
@@ -7280,7 +7352,11 @@ export default function AdminDashboard({
                       if (smtpHostEl) updated.smtpHost = smtpHostEl.value;
                       if (smtpPortEl) updated.smtpPort = smtpPortEl.value;
                       if (smtpUserEl) updated.smtpUser = smtpUserEl.value;
-                      if (smtpPassEl) updated.smtpPass = smtpPassEl.value;
+                      if (smtpPassEl && smtpPassEl.value && smtpPassEl.value.trim() !== '' && smtpPassEl.value !== '**********' && !smtpPassEl.value.includes('••••')) {
+                        updated.smtpPass = smtpPassEl.value.trim();
+                      } else {
+                        delete updated.smtpPass;
+                      }
 
                       if (ipEl) updated.ipWhitelist = ipEl.value;
                       if (expEl) updated.sessionExpirationMinutes = Number(expEl.value);
@@ -7316,31 +7392,47 @@ export default function AdminDashboard({
 
               <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
                 <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                  <span className="text-zinc-500 font-mono text-[9.5px]">Track all admin activities, system settings updates, and security events in real-time.</span>
-                  <button 
-                    onClick={() => {
-                      setSystemLogs([
-                        { id: `log-${Date.now()}`, user: currentUser?.name || 'Administrator', action: 'Cleared system log files', ip: '192.168.1.1', time: new Date().toLocaleString() }
-                      ]);
-                      alert("Audit logs database cleared except current terminal session master log.");
-                    }}
-                    className="text-rose-500 hover:underline font-mono text-[9px] font-bold"
-                  >
-                    Clear Logs
-                  </button>
+                  <span className="text-zinc-500 font-mono text-[9.5px]">Authoritative immutable audit log stream backed by PostgreSQL/Supabase ledger.</span>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => fetchSystemLogs()}
+                      className="text-gold-pure hover:underline font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Refresh Logs
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const csvText = `id,user,action,target,ip,time\n` + systemLogs.map(l => `"${l.id}","${l.user}","${l.action}","${l.target}","${l.ip}","${l.time}"`).join('\n');
+                        const blob = new Blob([csvText], { type: 'text/csv' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `zoal_security_audit_logs_${new Date().toISOString().slice(0,10)}.csv`;
+                        link.click();
+                      }}
+                      className="text-zinc-400 hover:text-white font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3 h-3 text-emerald-500" /> Export CSV
+                    </button>
+                  </div>
                 </div>
                 
-                <div className="divide-y divide-white/5 font-mono text-[9.5px]">
-                  {systemLogs.map((log, idx) => (
-                    <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
-                      <div>
-                        <span className="text-white block font-sans">{log.action}</span>
-                        <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip}</span>
+                {loadingSystemLogs ? (
+                  <div className="py-8 text-center text-zinc-500 font-mono text-[10px]">Loading audit ledger...</div>
+                ) : systemLogs.length === 0 ? (
+                  <div className="py-8 text-center text-zinc-600 font-mono text-[10px]">No audit logs recorded yet in authoritative database.</div>
+                ) : (
+                  <div className="divide-y divide-white/5 font-mono text-[9.5px]">
+                    {systemLogs.map((log, idx) => (
+                      <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
+                        <div>
+                          <span className="text-white block font-sans">{log.action}</span>
+                          <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip} {log.target ? `• Target: ${log.target}` : ''}</span>
+                        </div>
+                        <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
                       </div>
-                      <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -8616,34 +8708,7 @@ export default function AdminDashboard({
           )}
 
           {activeTab === 'strategic' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4 flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">BOARDROOM DECREES</span>
-                  <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">STRATEGIC BOARDROOM BRIEFINGS</h2>
-                </div>
-                <button
-                  onClick={() => alert('Strategic briefs compiled and saved to local secure cache.')}
-                  className="bg-gold-pure text-black font-bold uppercase font-mono text-[9px] tracking-wider py-1.5 px-3 rounded-xs hover:bg-gold-light transition-all cursor-pointer"
-                >
-                  Compile Board Briefing
-                </button>
-              </div>
-
-              <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
-                <h3 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-2">Corporate Decrees & Directives (YTD)</h3>
-                <div className="space-y-3 font-sans text-xs">
-                  <div className="p-4 bg-black border border-white/5 rounded-xs space-y-1">
-                    <h4 className="text-gold-pure font-bold text-xs">Directive #2026-004: Sudanese Hospitality Scale-up</h4>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">Mandated the acquisition of micro-batches of premium single-origin Arabica varieties sourced directly from Yemen highlands to diversify coffee hospitality. Confirmed allocation of 15,000 SAR capital expenditure.</p>
-                  </div>
-                  <div className="p-4 bg-black border border-white/5 rounded-xs space-y-1">
-                    <h4 className="text-gold-pure font-bold text-xs">Directive #2026-003: Premium Sudanese Toob Intellectual Registry</h4>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">Authorized filing copyright and design protection trademarks for custom golden embroidery drapes to avoid copycat market distributions in neighboring GCC states.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <StrategicReport />
           )}
 
           {activeTab === 'kpi' && (
@@ -8655,25 +8720,12 @@ export default function AdminDashboard({
           )}
 
           {activeTab === 'health' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4">
-                <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">TELEMETRY MATRIX</span>
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">LIVE TELEMETRY</span>
                 <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">ENTERPRISE SYSTEM HEALTH MONITOR</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center font-mono">
-                {[
-                  { metric: 'API Gateway Response Time', val: '24ms', state: 'Exceptional' },
-                  { metric: 'Database Sync Success', val: '100.00%', state: 'Protected' },
-                  { metric: 'Supabase Storage Capacity', val: '0.8% used', state: 'Nominal' },
-                  { metric: 'Cloud Run Ingress Latency', val: '8ms', state: 'Exceptional' }
-                ].map((item, idx) => (
-                  <div key={idx} className="p-5 bg-zinc-950 border border-white/5 rounded-xs space-y-2">
-                    <span className="text-zinc-500 text-[9px] block uppercase font-mono leading-none">{item.metric}</span>
-                    <span className="text-2xl text-white font-bold block">{item.val}</span>
-                    <span className="text-[9px] text-emerald-400 font-bold uppercase block bg-emerald-500/10 px-2 py-0.5 rounded-full w-max mx-auto">{item.state}</span>
-                  </div>
-                ))}
-              </div>
+              <EnterpriseHealthMonitor />
             </div>
           )}
 

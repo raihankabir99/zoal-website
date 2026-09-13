@@ -69,10 +69,15 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
   const [assigning, setAssigning] = useState<boolean>(false);
 
   // Fetch warehouses from Supabase API endpoint
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchWarehouses = async (isSilent = false) => {
     if (!isSilent) setRefreshing(true);
     try {
-      const res = await fetch('/api/warehouses');
+      const res = await fetch('/api/warehouses', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setWarehouses(data || []);
@@ -206,7 +211,7 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
     try {
       const res = await fetch('/api/warehouses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       });
 
@@ -232,7 +237,7 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
     try {
       const res = await fetch(`/api/warehouses/${formData.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       });
 
@@ -256,7 +261,8 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
     setSaving(true);
     try {
       const res = await fetch(`/api/warehouses/${selectedWarehouse.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
 
       if (res.ok) {
@@ -284,7 +290,7 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
       if (!targetProd) return;
 
       const newLoc = `${selectedWarehouse.warehouse_name} - Shelf A1`;
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch(`/api/products/${assignProductId}`, {
         method: 'PUT',
         headers: { 
@@ -615,7 +621,7 @@ export const WarehouseManagement: React.FC<WarehouseManagementProps> = ({
                             onClick={() => {
                               const newLocation = prompt('Enter new Warehouse Location string:', loc);
                               if (newLocation && newLocation !== loc) {
-                                const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+                                const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
                                 fetch(`/api/products/${p.id}`, {
                                   method: 'PUT',
                                   headers: { 

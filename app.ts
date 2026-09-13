@@ -8,7 +8,8 @@ import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getSupabaseClient, getServiceSupabaseClient, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.ts';
+import { getSupabaseClient, getServiceSupabaseClient, getCleanSupabaseUrl, isSupabaseConfigured, SUPABASE_SQL_SCHEMA } from './backend/supabase.ts';
+import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 const { Client } = pg;
 
@@ -62,10 +63,18 @@ import {
 } from './server/blog.ts';
 
 import * as cmsModule from './server/cms.ts';
+import * as textsModule from './server/texts.ts';
 import * as marketingModule from './server/marketing.ts';
 import * as legalModule from './server/legal.ts';
 import * as taxModule from './server/taxes.ts';
 import * as aiModule from './server/ai.ts';
+import {
+  aiGatewayGenerate,
+  aiGatewayBatch,
+  getAIProviderStatus,
+  rotateAIProviderKey,
+  disableAIProvider
+} from './server/ai_gateway.ts';
 import * as aiTranslationsModule from './server/ai_translations.ts';
 import * as analyticsModule from './server/analytics.ts';
 import * as kpiModule from './server/kpi.ts';
@@ -79,6 +88,9 @@ import * as productImportModule from './server/product_import.ts';
 import * as healthMonitorModule from './server/health_monitor.ts';
 import * as supportModule from './server/support.ts';
 import * as crmModule from './server/crm.ts';
+import * as staffModule from './server/staff.ts';
+import * as adminModule from './server/admin.ts';
+import * as operationsModule from './server/operations.ts';
 
 import {
   securityHeadersMiddleware,
@@ -823,7 +835,7 @@ async function sendEmailWithRetry(
 
 // ENDPOINTS
 
-import crypto from 'crypto';
+import crypto, { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
 // ==========================================
 // AL ZOAL SOVEREIGN AUTHENTICATION SYSTEM API
@@ -862,34 +874,6 @@ async function handleSessionSync(req: any, res: any) {
       token = headerValue.substring(7);
     }
 
-    if (
-      process.env.NODE_ENV !== 'production' &&
-      process.env.AI_STUDIO_DEV_MODE === 'true' &&
-      process.env.DEV_ADMIN_BYPASS === 'true' &&
-      token === 'dev-preview-token'
-    ) {
-      return res.json({
-        success: true,
-        user: {
-          id: 'dev-preview',
-          email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-          firstName: 'RKInfinity',
-          lastName: 'Developer',
-          name: 'RKInfinity Developer',
-          phone: '',
-          role: 'owner',
-          isVerified: true,
-          addresses: [],
-          permissions: [
-            'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-            'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-            'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-            'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-          ]
-        }
-      });
-    }
-
     if (!token) {
       return res.status(401).json({ error: 'No session token provided.' });
     }
@@ -914,35 +898,7 @@ app.post('/api/auth/session', handleSessionSync);
 
 // Development Configuration & Bypass Verification
 app.get('/api/auth/dev-config', (req, res) => {
-  const isDevMode =
-    process.env.NODE_ENV !== 'production' &&
-    process.env.AI_STUDIO_DEV_MODE === 'true' &&
-    process.env.DEV_ADMIN_BYPASS === 'true';
-
-  if (isDevMode) {
-    return res.json({
-      devMode: true,
-      user: {
-        id: 'dev-preview',
-        email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-        firstName: 'RKInfinity',
-        lastName: 'Developer',
-        name: 'RKInfinity Developer',
-        phone: '',
-        role: 'owner',
-        isVerified: true,
-        addresses: [],
-        permissions: [
-          'can_manage_products', 'can_manage_orders', 'can_manage_customers',
-          'can_manage_inventory', 'can_issue_refund', 'can_view_reports',
-          'can_manage_settings', 'can_manage_cms', 'can_manage_media',
-          'can_manage_branding', 'can_manage_support', 'can_manage_aistudio'
-        ]
-      }
-    });
-  } else {
-    return res.json({ devMode: false });
-  }
+  return res.json({ devMode: false });
 });
 
 // Secure User Promotion API
@@ -1398,7 +1354,10 @@ app.get('/api/system/auth-health', async (req, res) => {
 // Change Password (Authenticated User)
 app.post('/api/auth/change-password', authenticateRequest, async (req: any, res) => {
   try {
-    const { newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
     if (!newPassword) {
       return res.status(400).json({ error: 'New password is required.' });
     }
@@ -1410,16 +1369,27 @@ app.post('/api/auth/change-password', authenticateRequest, async (req: any, res)
       });
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return res.status(500).json({ error: 'Supabase client not initialized.' });
+    const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!accessToken || !anonKey) {
+      return res.status(500).json({ error: 'Supabase authentication configuration is unavailable.' });
     }
 
-    const { error } = await supabase.auth.updateUser({
+    // Supabase supports current_password verification in updateUser; bind the auth client to the
+    // already-authenticated request token so the password check is performed by Auth.
+    const authClient = createClient(getCleanSupabaseUrl(), anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${accessToken}` } }
+    });
+
+    const { error } = await authClient.auth.updateUser({
+      current_password: currentPassword,
       password: newPassword
     });
 
-    if (error) throw error;
+    if (error) {
+      return res.status(400).json({ error: 'Current password is incorrect or the password change was rejected.' });
+    }
 
     await logActivityAsync(req.user.id, req.user.email, 'PASSWORD_CHANGED', req.ip || '', req.headers['user-agent'] || '');
 
@@ -1511,14 +1481,210 @@ app.get('/api/auth/activity-logs', authenticateRequest, requireRole(['admin']), 
   }
 });
 
+// ---------------------------------------------------------------------------
+// STAFF DASHBOARD AUTHORITATIVE ORDER + STAFF CONTRACT
+// ---------------------------------------------------------------------------
+
+// GET /api/orders — authoritative staff/admin order roster.
+app.get('/api/orders', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), async (req: any, res) => {
+  try {
+    const supabase = getServiceSupabaseClient() || getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database connection unavailable.' });
+
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100) : 100;
+    const requestedPage = Number(req.query.page);
+    const page = Number.isFinite(requestedPage) ? Math.max(Math.floor(requestedPage), 1) : 1;
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+
+    let query = supabase.from('zoal_orders').select('*', { count: 'exact' });
+    if (status) query = query.eq('status', status);
+    query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+
+    const { data: orders, error, count } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const rows = orders || [];
+    const orderIds = rows.map((order: any) => order.id).filter(Boolean);
+    let items: any[] = [];
+    if (orderIds.length > 0) {
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('zoal_order_items')
+        .select('order_id, product_id, quantity, unit_price, total_price')
+        .in('order_id', orderIds);
+      if (itemsError) return res.status(500).json({ error: itemsError.message });
+      items = itemRows || [];
+    }
+
+    const itemsByOrder = new Map<string, any[]>();
+    for (const item of items) {
+      const key = String(item.order_id);
+      const list = itemsByOrder.get(key) || [];
+      list.push(item);
+      itemsByOrder.set(key, list);
+    }
+
+    const enrichedOrders = rows.map((order: any) => ({
+      ...order,
+      items: itemsByOrder.get(String(order.id)) || []
+    }));
+
+    return res.json({
+      orders: enrichedOrders,
+      data: { orders: enrichedOrders },
+      pagination: {
+        page,
+        limit,
+        totalItems: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    });
+  } catch (error: any) {
+    console.error('GET /api/orders error:', error);
+    return res.status(500).json({ error: 'Failed to load authoritative orders.' });
+  }
+});
+
+// GET /api/staff — authoritative staff roster.
+app.get('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), async (req: any, res) => {
+  try {
+    const supabase = getServiceSupabaseClient() || getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database connection unavailable.' });
+
+    const { data, error } = await supabase
+      .from('zoal_users')
+      .select('id, first_name, last_name, email, role')
+      .in('role', ['staff', 'admin', 'owner', 'manager']);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ data: data || [] });
+  } catch (error: any) {
+    console.error('GET /api/staff error:', error);
+    return res.status(500).json({ error: 'Failed to load staff roster.' });
+  }
+});
+
+// PUT /api/staff — authoritative order status/assignment/notes mutation.
+app.put('/api/staff', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), async (req: any, res) => {
+  try {
+    const body = req.body || {};
+    const orderId = String(body.orderId || '').trim();
+    if (!orderId) return res.status(400).json({ error: 'orderId is required.' });
+
+    const supabase = getServiceSupabaseClient() || getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database connection unavailable.' });
+
+    const statusMap: Record<string, string> = {
+      pending: 'pending', Pending: 'pending',
+      confirmed: 'processing', Confirmed: 'processing',
+      processing: 'processing', Processing: 'processing', Preparing: 'processing',
+      packed: 'processing', Packed: 'processing',
+      'ready for shipping': 'processing', 'Ready for Shipping': 'processing',
+      shipped: 'shipped', Shipped: 'shipped',
+      'out for delivery': 'shipped', 'Out for Delivery': 'shipped',
+      delivered: 'delivered', Delivered: 'delivered', Completed: 'delivered',
+      cancelled: 'cancelled', Cancelled: 'cancelled',
+      refunded: 'refunded', 'Refund Completed': 'refunded',
+      failed: 'failed', Failed: 'failed'
+    };
+
+    const updateFields: Record<string, any> = {};
+    if (typeof body.status === 'string' && body.status.trim()) {
+      const normalized = statusMap[body.status.trim()] || statusMap[body.status.trim().toLowerCase()];
+      if (!normalized) return res.status(400).json({ error: 'Invalid status value.' });
+      updateFields.status = normalized;
+      if (normalized === 'delivered') updateFields.payment_status = 'paid';
+      if (normalized === 'refunded') updateFields.payment_status = 'refunded';
+    }
+
+    if (typeof body.trackingNumber === 'string') updateFields.tracking_number = body.trackingNumber.trim() || null;
+
+    if (Object.prototype.hasOwnProperty.call(body, 'assignedStaffId')) {
+      const staffId = body.assignedStaffId ? String(body.assignedStaffId).trim() : '';
+      if (staffId) {
+        const { data: member, error: memberError } = await supabase
+          .from('zoal_users')
+          .select('id, first_name, last_name, email, role')
+          .eq('id', staffId)
+          .in('role', ['staff', 'admin', 'owner', 'manager'])
+          .maybeSingle();
+        if (memberError) return res.status(500).json({ error: memberError.message });
+        if (!member) return res.status(400).json({ error: 'Assigned staff member not found or not authorized.' });
+        updateFields.assigned_staff_id = member.id;
+        updateFields.assigned_staff_name = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email;
+      } else {
+        updateFields.assigned_staff_id = null;
+        updateFields.assigned_staff_name = null;
+      }
+    }
+
+    if (typeof body.assignedStaffName === 'string' && !Object.prototype.hasOwnProperty.call(body, 'assignedStaffId')) {
+      const name = body.assignedStaffName.trim();
+      if (!name) {
+        updateFields.assigned_staff_id = null;
+        updateFields.assigned_staff_name = null;
+      } else {
+        const { data: members, error: membersError } = await supabase
+          .from('zoal_users')
+          .select('id, first_name, last_name, email, role')
+          .in('role', ['staff', 'admin', 'owner', 'manager']);
+        if (membersError) return res.status(500).json({ error: membersError.message });
+        const match = (members || []).find((member: any) => {
+          const fullName = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
+          return fullName.toLowerCase() === name.toLowerCase() || String(member.email || '').toLowerCase() === name.toLowerCase();
+        });
+        if (!match) return res.status(400).json({ error: 'Assigned staff member not found.' });
+        updateFields.assigned_staff_id = match.id;
+        updateFields.assigned_staff_name = [match.first_name, match.last_name].filter(Boolean).join(' ') || match.email;
+      }
+    }
+
+    for (const [inputKey, dbKey] of [
+      ['adminNotes', 'admin_notes'],
+      ['staffNotes', 'staff_notes'],
+      ['customerNotes', 'customer_notes']
+    ] as const) {
+      if (typeof body[inputKey] === 'string') updateFields[dbKey] = body[inputKey];
+    }
+
+    if (Object.keys(updateFields).length === 0) return res.status(400).json({ error: 'No mutable order fields supplied.' });
+    updateFields.updated_at = new Date().toISOString();
+
+    const { data: updatedOrder, error: updateError } = await supabase
+      .from('zoal_orders')
+      .update(updateFields)
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    await supabase.from('zoal_activity_logs').insert({
+      id: crypto.randomUUID(),
+      user_id: req.user.id,
+      email: req.user.email,
+      action: `Updated order ${orderId}: ${Object.keys(updateFields).filter((key) => key !== 'updated_at').join(', ')}`,
+      resource_type: 'order',
+      resource_id: orderId,
+      metadata: { fields: Object.keys(updateFields).filter((key) => key !== 'updated_at') }
+    });
+
+    return res.json({ data: updatedOrder, order: updatedOrder });
+  } catch (error: any) {
+    console.error('PUT /api/staff error:', error);
+    return res.status(500).json({ error: 'Failed to persist staff order operation.' });
+  }
+});
+
 // Get Email history logs
-app.get('/api/orders/email-history', async (req, res) => {
+app.get('/api/orders/email-history', authenticateRequest, requireRole(['admin']), async (req, res) => {
   const logs = await readEmailDbAsync();
   res.json(logs);
 });
 
 // Create a new order in Supabase
-app.post('/api/orders/create', async (req, res) => {
+app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) => {
   const { order, termsAccepted: directTermsAccepted } = req.body;
   if (!order || !order.id || !order.items) {
     return res.status(400).json({ error: 'Invalid order structure.' });
@@ -1536,6 +1702,12 @@ app.post('/api/orders/create', async (req, res) => {
     console.error('❌ Active published Terms & Conditions document version not found in database.');
     return res.status(400).json({ error: 'Active published Terms & Conditions document not found. Order creation cannot proceed.' });
   }
+
+  // Server-Authoritative Customer Identity Resolution (P0 Security)
+  // Authenticated orders MUST use verified session user ID.
+  // Unauthenticated (guest) orders MUST use NULL.
+  // Never trust client-supplied order.customerId or req.body.customerId.
+  const resolvedCustomerId = req.user?.id || null;
 
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -1556,7 +1728,7 @@ app.post('/api/orders/create', async (req, res) => {
 
     const orderData = {
       id: order.id,
-      customer_id: order.customerId || null,
+      customer_id: resolvedCustomerId,
       status: (order.status || 'pending').toLowerCase(),
       subtotal: calculatedTotals.subtotal,
       discount_amount: calculatedTotals.discountAmount,
@@ -1957,7 +2129,7 @@ setInterval(async () => {
 }, 60000); // Run check every minute
 
 // 1. Create Payment Session
-app.post('/api/payments/create', async (req, res) => {
+app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any) => {
   const { 
     orderId: requestedOrderId, 
     items, 
@@ -1968,8 +2140,8 @@ app.post('/api/payments/create', async (req, res) => {
     customerEmail, 
     customerPhone, 
     address,
-    customerId,
-    termsAccepted
+    termsAccepted,
+    guestRetryToken
   } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -1988,6 +2160,20 @@ app.post('/api/payments/create', async (req, res) => {
     console.error('❌ Active published Terms & Conditions document version not found in database.');
     return res.status(400).json({ error: 'Active published Terms & Conditions document not found. Order creation cannot proceed.' });
   }
+
+  // Server-Authoritative Customer Identity Resolution (P0 Security)
+  // Authenticated sessions MUST use verified session user ID.
+  // Unauthenticated (guest) checkout MUST use NULL.
+  // Never trust client-supplied customerId from request body.
+  const resolvedCustomerId = req.user?.id || null;
+
+  // P1 Guest Order IDOR Prevention: orderId alone is never proof of guest ownership.
+  // A secure retry token is generated only for newly-created guest orders; only its hash is persisted.
+  const isGuestCheckout = !resolvedCustomerId;
+  const newGuestRetryToken = isGuestCheckout ? randomBytes(32).toString('base64url') : null;
+  const newGuestRetryTokenHash = newGuestRetryToken
+    ? createHash('sha256').update(newGuestRetryToken).digest('hex')
+    : null;
 
   const supabase = getSupabaseClient();
   const dbConfigured = !!supabase;
@@ -2031,10 +2217,48 @@ app.post('/api/payments/create', async (req, res) => {
         .maybeSingle();
 
       if (existingOrder) {
-        orderExists = true;
+        // P0 Security & IDOR Prevention: Enforce strict ownership on order reuse
+        if (existingOrder.customer_id) {
+          // 1. Order belongs to a registered customer: caller must be that exact authenticated user
+          if (!req.user || existingOrder.customer_id !== req.user.id) {
+            return res.status(403).json({
+              error: 'Forbidden',
+              message: 'You do not have permission to access or pay for this order.'
+            });
+          }
+        } else {
+          // 2. Guest order: an authenticated user cannot claim it, and an anonymous caller
+          // must prove possession of the cryptographic retry credential. orderId is not enough.
+          if (req.user) {
+            return res.status(403).json({ error: 'Forbidden', message: 'You do not have permission to access or pay for this order.' });
+          }
+
+          const storedHash = typeof existingOrder.guest_retry_token_hash === 'string'
+            ? existingOrder.guest_retry_token_hash
+            : '';
+          const submittedHash = typeof guestRetryToken === 'string' && guestRetryToken.length > 0
+            ? createHash('sha256').update(guestRetryToken).digest('hex')
+            : '';
+
+          let tokenValid = false;
+          if (storedHash && submittedHash && storedHash.length === submittedHash.length) {
+            tokenValid = timingSafeEqual(Buffer.from(storedHash, 'utf8'), Buffer.from(submittedHash, 'utf8'));
+          }
+
+          // Legacy guest orders without a stored credential fail closed.
+          if (!tokenValid) {
+            return res.status(403).json({
+              error: 'Forbidden',
+              message: 'You do not have permission to access or pay for this order.'
+            });
+          }
+        }
+
         if (existingOrder.payment_status === 'paid') {
           return res.status(400).json({ error: 'This order has already been paid successfully. Cannot duplicate payment.' });
         }
+
+        orderExists = true;
         // Reuse order for retry - update its status back to draft/pending_payment and created_at to restart 15 min expiry
         await supabase
           .from('zoal_orders')
@@ -2073,12 +2297,12 @@ app.post('/api/payments/create', async (req, res) => {
             INSERT INTO zoal_orders (
               id, customer_id, status, subtotal, discount_amount, shipping_cost, 
               tax_amount, total_amount, payment_method, payment_status, notes, 
-              terms_accepted_version_id, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+              terms_accepted_version_id, guest_retry_token_hash, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
           `;
           await pgClient.query(orderSql, [
             orderId,
-            customerId || null,
+            resolvedCustomerId,
             'pending_payment',
             totals.subtotal,
             totals.discountAmount,
@@ -2088,7 +2312,8 @@ app.post('/api/payments/create', async (req, res) => {
             paymentMethod || 'credit_card',
             'unpaid',
             `Payment initiated via ${paymentMethod || 'Card'}.\nName: ${customerName || ''}\nEmail: ${customerEmail || ''}\nPhone: ${customerPhone || ''}\nAddress: ${address || ''}`,
-            termsAcceptedVersionId
+            termsAcceptedVersionId,
+            newGuestRetryTokenHash
           ]);
 
           // 2. Insert order items
@@ -2164,7 +2389,7 @@ app.post('/api/payments/create', async (req, res) => {
         `;
         await pgClient.query(txSql, [
           orderId,
-          customerId || null,
+          resolvedCustomerId,
           totals.totalAmount,
           'SAR',
           paymentMethod || 'credit_card',
@@ -2186,7 +2411,7 @@ app.post('/api/payments/create', async (req, res) => {
       // Fallback Supabase path if connectionString is unavailable
       const orderData = {
         id: orderId,
-        customer_id: customerId || null,
+        customer_id: resolvedCustomerId,
         status: 'pending_payment',
         subtotal: totals.subtotal,
         discount_amount: totals.discountAmount,
@@ -2196,6 +2421,7 @@ app.post('/api/payments/create', async (req, res) => {
         payment_method: paymentMethod || 'credit_card',
         payment_status: 'unpaid',
         terms_accepted_version_id: termsAcceptedVersionId,
+        guest_retry_token_hash: newGuestRetryTokenHash,
         notes: `Payment initiated via ${paymentMethod || 'Card'}.\nName: ${customerName || ''}\nEmail: ${customerEmail || ''}\nPhone: ${customerPhone || ''}\nAddress: ${address || ''}`,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -2278,7 +2504,7 @@ app.post('/api/payments/create', async (req, res) => {
 
       const transactionData = {
         order_id: orderId,
-        user_id: customerId || null,
+        user_id: resolvedCustomerId,
         amount: totals.totalAmount,
         currency: 'SAR',
         payment_method: paymentMethod || 'credit_card',
@@ -2299,6 +2525,7 @@ app.post('/api/payments/create', async (req, res) => {
       success: true,
       orderId,
       paymentId,
+      ...(newGuestRetryToken ? { guestRetryToken: newGuestRetryToken } : {}),
       redirectUrl,
       amount: totals.totalAmount,
       isSimulation: !moyasarSecretKey
@@ -3391,34 +3618,55 @@ app.post('/api/supabase/sync', async (req, res) => {
 // =========================================================================
 //             AL ZOAL LUXURY BOUTIQUE - BRANDING PERSISTENCE API
 // =========================================================================
+// ENTERPRISE BRANDING & GLOBAL SETTINGS (SAFE PROJECTION & AUDIT LOGGED)
+// =========================================================================
 
-const MAP_DB_TO_SETTINGS = (row: any) => ({
-  businessName: row.business_name || 'AL ZOAL Enterprise',
-  businessLogo: row.business_logo || '/assets/branding/zoal-main-logo.jpg',
-  favicon: row.favicon || '/assets/branding/zoal-main-logo.jpg',
-  address: row.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-  email: row.email || 'alzoal3003@gmail.com',
-  phone: row.phone || '+966 56 769 9315',
-  instagram: row.social_links?.instagram || 'https://instagram.com/alzoal',
-  twitter: row.social_links?.twitter || 'https://twitter.com/alzoal',
-  language: row.language || 'en',
-  currency: row.currency || 'SAR',
-  shippingFeeDefault: row.shipping_fee_default !== null ? Number(row.shipping_fee_default) : 35,
-  shippingFreeThreshold: row.shipping_free_threshold !== null ? Number(row.shipping_free_threshold) : 500,
-  taxRate: row.tax_rate !== null ? Number(row.tax_rate) : 15,
-  taxId: row.tax_id || 'VAT-789-ZOAL-99',
-  smtpHost: row.smtp_host || 'smtp.zoal-cloud.sa',
-  smtpPort: row.smtp_port || '587',
-  smtpUser: row.smtp_user || 'relays@zoal.sa',
-  smtpPass: row.smtp_pass || '**********',
-  ipWhitelist: row.ip_whitelist || '0.0.0.0/0',
-  sessionExpirationMinutes: row.session_expiration_minutes !== null ? Number(row.session_expiration_minutes) : 120,
-  autoBackupFrequency: row.auto_backup_frequency || 'daily',
-  accentColor: row.accent_color || '#D4AF37',
-  companyDescription: row.company_description || '',
-  website: row.website || '',
-  theme: row.theme || 'dark'
-});
+/**
+ * Maps database row to a strictly safe client-facing settings projection.
+ * Under ZERO circumstances will this projection contain raw secrets,
+ * database credentials, private keys, or smtp_pass.
+ */
+const mapBrandingToSafeClientSettings = (row: any) => {
+  let socialLinks: any = {};
+  if (row.social_links) {
+    if (typeof row.social_links === 'string') {
+      try {
+        socialLinks = JSON.parse(row.social_links);
+      } catch (e) {
+        socialLinks = {};
+      }
+    } else if (typeof row.social_links === 'object') {
+      socialLinks = row.social_links;
+    }
+  }
+
+  return {
+    businessName: row.business_name || 'AL ZOAL Enterprise',
+    businessLogo: row.business_logo || '/assets/branding/zoal-main-logo.jpg',
+    favicon: row.favicon || '/assets/branding/zoal-main-logo.jpg',
+    address: row.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+    email: row.email || 'alzoal3003@gmail.com',
+    phone: row.phone || '+966 56 769 9315',
+    instagram: socialLinks?.instagram || row.instagram || 'https://instagram.com/alzoal',
+    twitter: socialLinks?.twitter || row.twitter || 'https://twitter.com/alzoal',
+    website: row.website || 'https://alzoal.sa',
+    language: row.language || 'en',
+    currency: row.currency || 'SAR',
+    shippingFeeDefault: row.shipping_fee_default !== null && row.shipping_fee_default !== undefined ? Number(row.shipping_fee_default) : 35,
+    shippingFreeThreshold: row.shipping_free_threshold !== null && row.shipping_free_threshold !== undefined ? Number(row.shipping_free_threshold) : 500,
+    taxRate: row.tax_rate !== null && row.tax_rate !== undefined ? Number(row.tax_rate) : 15,
+    taxId: row.tax_id || 'VAT-789-ZOAL-99',
+    smtpHost: row.smtp_host || 'smtp.zoal-cloud.sa',
+    smtpPort: row.smtp_port ? String(row.smtp_port) : '587',
+    smtpUser: row.smtp_user || 'relays@zoal.sa',
+    ipWhitelist: row.ip_whitelist || '0.0.0.0/0',
+    sessionExpirationMinutes: row.session_expiration_minutes !== null && row.session_expiration_minutes !== undefined ? Number(row.session_expiration_minutes) : 120,
+    autoBackupFrequency: row.auto_backup_frequency || 'daily',
+    accentColor: row.accent_color || '#D4AF37',
+    companyDescription: row.company_description || 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
+    theme: row.theme || 'dark'
+  };
+};
 
 /**
  * Checks for required branding row. 
@@ -3641,108 +3889,72 @@ async function ensureBrandingRowExists() {
 }
 
 app.get('/api/branding', async (req, res) => {
-  try {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      return res.json({
-        businessName: 'AL ZOAL Enterprise',
-        businessLogo: '/assets/branding/zoal-main-logo.jpg',
-        favicon: '/assets/branding/zoal-main-logo.jpg',
-        address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-        email: 'alzoal3003@gmail.com',
-        phone: '+966 56 769 9315',
-        instagram: 'https://instagram.com/alzoal',
-        twitter: 'https://twitter.com/alzoal',
-        language: 'en',
-        currency: 'SAR',
-        shippingFeeDefault: 35,
-        shippingFreeThreshold: 500,
-        taxRate: 15,
-        taxId: 'VAT-789-ZOAL-99',
-        smtpHost: 'smtp.zoal-cloud.sa',
-        smtpPort: '587',
-        smtpUser: 'relays@zoal.sa',
-        smtpPass: '**********',
-        ipWhitelist: '0.0.0.0/0',
-        sessionExpirationMinutes: 120,
-        autoBackupFrequency: 'daily',
-        accentColor: '#D4AF37',
-        companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-        website: 'https://alzoal.sa',
-        theme: 'dark'
-      });
+  // Prefer the configured Supabase API client. This avoids opening a raw pg DNS
+  // connection on every branding request and keeps branding available in serverless.
+  const defaults = {
+    businessName: 'AL ZOAL Enterprise',
+    businessLogo: '/assets/branding/zoal-main-logo.jpg',
+    favicon: '/assets/branding/zoal-main-logo.jpg',
+    address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+    email: 'alzoal3003@gmail.com',
+    phone: '+966 56 769 9315',
+    instagram: 'https://instagram.com/alzoal',
+    twitter: 'https://twitter.com/alzoal',
+    language: 'en',
+    currency: 'SAR',
+    shippingFeeDefault: 35,
+    shippingFreeThreshold: 500,
+    taxRate: 15,
+    taxId: 'VAT-789-ZOAL-99',
+    smtpHost: 'smtp.zoal-cloud.sa',
+    smtpPort: '587',
+    smtpUser: 'relays@zoal.sa',
+    ipWhitelist: '0.0.0.0/0',
+    sessionExpirationMinutes: 120,
+    autoBackupFrequency: 'daily',
+    accentColor: '#D4AF37',
+    companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
+    website: 'https://alzoal.sa',
+    theme: 'dark'
+  };
+
+  const connectionString = process.env.DATABASE_URL;
+  if (connectionString) {
+    let dbClient: any = null;
+    try {
+      dbClient = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+      await dbClient.connect();
+      const result = await dbClient.query('SELECT * FROM branding_settings WHERE id = 1 LIMIT 1');
+      if (result.rows.length > 0) {
+        return res.json(mapBrandingToSafeClientSettings(result.rows[0]));
+      }
+    } catch (dbErr: any) {
+      // Direct PG connection or query fallback
+    } finally {
+      if (dbClient) {
+        try { await dbClient.end(); } catch (e) {}
+      }
     }
+  }
 
-    const client = new Client({
-      connectionString,
-      ssl: { rejectUnauthorized: false }
-    });
+  try {
+    const supabase = getServiceSupabaseClient();
+    if (supabase && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { data, error } = await supabase
+        .from('branding_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
 
-    await client.connect();
-    const result = await client.query('SELECT * FROM branding_settings WHERE id = 1 LIMIT 1');
-    await client.end();
-
-    if (result.rows.length > 0) {
-      return res.json(MAP_DB_TO_SETTINGS(result.rows[0]));
-    } else {
-      return res.json({
-        businessName: 'AL ZOAL Enterprise',
-        businessLogo: '/assets/branding/zoal-main-logo.jpg',
-        favicon: '/assets/branding/zoal-main-logo.jpg',
-        address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-        email: 'alzoal3003@gmail.com',
-        phone: '+966 56 769 9315',
-        instagram: 'https://instagram.com/alzoal',
-        twitter: 'https://twitter.com/alzoal',
-        language: 'en',
-        currency: 'SAR',
-        shippingFeeDefault: 35,
-        shippingFreeThreshold: 500,
-        taxRate: 15,
-        taxId: 'VAT-789-ZOAL-99',
-        smtpHost: 'smtp.zoal-cloud.sa',
-        smtpPort: '587',
-        smtpUser: 'relays@zoal.sa',
-        smtpPass: '**********',
-        ipWhitelist: '0.0.0.0/0',
-        sessionExpirationMinutes: 120,
-        autoBackupFrequency: 'daily',
-        accentColor: '#D4AF37',
-        companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-        website: 'https://alzoal.sa',
-        theme: 'dark'
-      });
+      if (!error && data) {
+        return res.json(mapBrandingToSafeClientSettings(data));
+      }
     }
   } catch (err: any) {
-    console.error('❌ Error fetching branding settings:', err);
-    return res.json({
-      businessName: 'AL ZOAL Enterprise',
-      businessLogo: '/assets/branding/zoal-main-logo.jpg',
-      favicon: '/assets/branding/zoal-main-logo.jpg',
-      address: 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
-      email: 'alzoal3003@gmail.com',
-      phone: '+966 56 769 9315',
-      instagram: 'https://instagram.com/alzoal',
-      twitter: 'https://twitter.com/alzoal',
-      language: 'en',
-      currency: 'SAR',
-      shippingFeeDefault: 35,
-      shippingFreeThreshold: 500,
-      taxRate: 15,
-      taxId: 'VAT-789-ZOAL-99',
-      smtpHost: 'smtp.zoal-cloud.sa',
-      smtpPort: '587',
-      smtpUser: 'relays@zoal.sa',
-      smtpPass: '**********',
-      ipWhitelist: '0.0.0.0/0',
-      sessionExpirationMinutes: 120,
-      autoBackupFrequency: 'daily',
-      accentColor: '#D4AF37',
-      companyDescription: 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform',
-      website: 'https://alzoal.sa',
-      theme: 'dark'
-    });
+    // Non-blocking fallback
   }
+
+  return res.json(defaults);
 });
 
 app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (req: any, res) => {
@@ -3757,17 +3969,53 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
       return res.status(500).json({ error: 'Database is not configured.' });
     }
 
+    // Backend Validation with safe fallbacks
+    const businessName = String(config.businessName || 'AL ZOAL Enterprise').trim().slice(0, 255);
+    const businessLogo = config.businessLogo || '/assets/branding/zoal-main-logo.jpg';
+    const favicon = config.favicon || '/assets/branding/zoal-main-logo.jpg';
+    const companyDescription = config.companyDescription || 'Al Zoal Luxury Boutique - Sovereign Enterprise Class Boutique and Media Management Platform';
+    const phone = config.phone || '+966 56 769 9315';
+    const email = config.email || 'alzoal3003@gmail.com';
+    const website = config.website || 'https://alzoal.sa';
+    const address = config.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia';
+    const accentColor = config.accentColor || '#D4AF37';
+    const theme = config.theme || 'dark';
+    const language = config.language || 'en';
+    const currency = config.currency || 'SAR';
+    const taxId = config.taxId || 'VAT-789-ZOAL-99';
+    const smtpHost = config.smtpHost || 'smtp.zoal-cloud.sa';
+    const smtpPort = config.smtpPort ? String(config.smtpPort).slice(0, 10) : '587';
+    const smtpUser = config.smtpUser || 'relays@zoal.sa';
+    const ipWhitelist = config.ipWhitelist || '0.0.0.0/0';
+    const autoBackupFrequency = config.autoBackupFrequency || 'daily';
+
+    const shippingFeeDefault = Number.isFinite(Number(config.shippingFeeDefault)) && Number(config.shippingFeeDefault) >= 0
+      ? Number(config.shippingFeeDefault)
+      : 35;
+    const shippingFreeThreshold = Number.isFinite(Number(config.shippingFreeThreshold)) && Number(config.shippingFreeThreshold) >= 0
+      ? Number(config.shippingFreeThreshold)
+      : 500;
+    const taxRate = Number.isFinite(Number(config.taxRate)) && Number(config.taxRate) >= 0 && Number(config.taxRate) <= 100
+      ? Number(config.taxRate)
+      : 15;
+    const sessionExpirationMinutes = Number.isFinite(Number(config.sessionExpirationMinutes)) && Number(config.sessionExpirationMinutes) >= 5 && Number(config.sessionExpirationMinutes) <= 1440
+      ? Number(config.sessionExpirationMinutes)
+      : 120;
+
+    // SMTP credentials are server-only. Normal CMS settings updates never accept or rotate smtp_pass.
+    // Existing credentials remain untouched during every branding update.
+
+    const socialLinks = JSON.stringify({
+      instagram: config.instagram || '',
+      twitter: config.twitter || ''
+    });
+
     const client = new Client({
       connectionString,
       ssl: { rejectUnauthorized: false }
     });
 
     await client.connect();
-
-    const socialLinks = JSON.stringify({
-      instagram: config.instagram || '',
-      twitter: config.twitter || ''
-    });
 
     const query = `
       INSERT INTO branding_settings (
@@ -3795,7 +4043,7 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
         smtp_host = EXCLUDED.smtp_host,
         smtp_port = EXCLUDED.smtp_port,
         smtp_user = EXCLUDED.smtp_user,
-        smtp_pass = EXCLUDED.smtp_pass,
+        smtp_pass = branding_settings.smtp_pass,
         ip_whitelist = EXCLUDED.ip_whitelist,
         session_expiration_minutes = EXCLUDED.session_expiration_minutes,
         auto_backup_frequency = EXCLUDED.auto_backup_frequency,
@@ -3805,38 +4053,52 @@ app.post('/api/branding', authenticateRequest, requireRole(['manager']), async (
     `;
 
     const values = [
-      config.businessName || 'AL ZOAL Enterprise',
-      config.businessLogo || '/assets/branding/zoal-main-logo.jpg',
-      config.favicon || '/assets/branding/zoal-main-logo.jpg',
-      config.companyDescription || 'Al Zoal Luxury Boutique',
-      config.phone || '+966 56 769 9315',
-      config.email || 'alzoal3003@gmail.com',
-      config.website || 'https://alzoal.sa',
-      config.address || 'Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+      businessName,
+      businessLogo,
+      favicon,
+      companyDescription,
+      phone,
+      email,
+      website,
+      address,
       socialLinks,
-      config.accentColor || '#D4AF37',
-      config.theme || 'dark',
-      config.language || 'en',
-      config.currency || 'SAR',
-      config.shippingFeeDefault !== undefined ? Number(config.shippingFeeDefault) : 35,
-      config.shippingFreeThreshold !== undefined ? Number(config.shippingFreeThreshold) : 500,
-      config.taxRate !== undefined ? Number(config.taxRate) : 15,
-      config.taxId || 'VAT-789-ZOAL-99',
-      config.smtpHost || 'smtp.zoal-cloud.sa',
-      config.smtpPort || '587',
-      config.smtpUser || 'relays@zoal.sa',
-      config.smtpPass || '**********',
-      config.ipWhitelist || '0.0.0.0/0',
-      config.sessionExpirationMinutes !== undefined ? Number(config.sessionExpirationMinutes) : 120,
-      config.autoBackupFrequency || 'daily',
-      req.user.email || 'Admin'
+      accentColor,
+      theme,
+      language,
+      currency,
+      shippingFeeDefault,
+      shippingFreeThreshold,
+      taxRate,
+      taxId,
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      process.env.SMTP_PASS || null,
+      ipWhitelist,
+      sessionExpirationMinutes,
+      autoBackupFrequency,
+      req.user?.email || 'Admin'
     ];
 
     const result = await client.query(query, values);
     await client.end();
 
     const updatedRow = result.rows[0];
-    return res.json({ success: true, settings: MAP_DB_TO_SETTINGS(updatedRow) });
+
+    // Enterprise Audit Logging (without storing sensitive payload)
+    try {
+      await logActivityAsync(
+        req.user?.id || req.user?.userId || null,
+        req.user?.email || 'admin@zoal.sa',
+        'UPDATED_BRANDING_SETTINGS',
+        req.ip || req.connection?.remoteAddress || '127.0.0.1',
+        req.headers['user-agent'] || 'Admin Dashboard'
+      );
+    } catch (auditErr: any) {
+      console.warn('⚠️ Non-blocking audit log error:', auditErr.message || auditErr);
+    }
+
+    return res.json({ success: true, settings: mapBrandingToSafeClientSettings(updatedRow) });
   } catch (err: any) {
     console.error('❌ Error updating branding settings:', err);
     return res.status(500).json({ error: err.message || String(err) });
@@ -4584,7 +4846,28 @@ app.get('/api/support/teams', requirePermission('can_manage_support'), async (re
 
 // CMS Routes
 app.get('/api/cms', cmsModule.getCmsData);
-app.put('/api/cms/pages/:id', authenticateRequest, cmsModule.updateCmsPage);
+app.put('/api/cms/pages/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), cmsModule.updateCmsPage);
+
+// Global Texts & Translations Routes
+app.get('/api/texts', optionalAuthenticate, textsModule.getTexts);
+app.post('/api/texts', authenticateRequest, requireRole(['owner', 'admin']), textsModule.createText);
+app.put('/api/texts/:id', authenticateRequest, requireRole(['owner', 'admin']), textsModule.updateText);
+app.delete('/api/texts/:id', authenticateRequest, requireRole(['owner', 'admin']), textsModule.deleteText);
+
+// Regional Operations & Security Center Endpoints
+app.get('/api/operations/health', operationsModule.getHealthData);
+app.get('/api/operations/backups', operationsModule.getBackupData);
+app.get('/api/operations/alerts', operationsModule.getAlertData);
+app.get('/api/operations/certification', operationsModule.getCertificationData);
+
+app.get('/api/admin/roster', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getAdminRoster);
+app.patch('/api/admin/roster/:id', authenticateRequest, requireRole(['admin', 'owner']), adminModule.updateAdminRole);
+app.delete('/api/admin/roster/:id', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeAdminAccess);
+app.get('/api/admin/audit-logs', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getAuditLogs);
+app.get('/api/admin/active-sessions', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getActiveSessions);
+app.get('/api/admin/rbac-matrix', authenticateRequest, requireRole(['admin', 'owner']), adminModule.getRbacMatrix);
+app.delete('/api/admin/sessions/:token', authenticateRequest, requireRole(['admin', 'owner']), adminModule.revokeSession);
+app.post('/api/admin/invite', authenticateRequest, requireRole(['admin', 'owner']), adminModule.inviteAdmin);
 
 // Homepage Heroes routes
 app.get('/api/homepage-heroes', cmsModule.getHomepageHeroes);
@@ -4626,7 +4909,24 @@ app.delete('/api/legal/documents/:id', authenticateRequest, requireRole(['admin'
 
 // Tax Management Routes
 app.get('/api/taxes', taxModule.getTaxData);
-app.put('/api/taxes/rates/:id', authenticateRequest, taxModule.updateTaxRate);
+app.put('/api/taxes/rates/:id', authenticateRequest, requireRole(['admin', 'manager', 'owner']), taxModule.updateTaxRate);
+
+// AI Provider Gateway Routes
+app.post('/api/ai/gateway/generate', authenticateRequest, aiGatewayGenerate);
+app.post('/api/ai/gateway/batch', authenticateRequest, aiGatewayBatch);
+app.get('/api/ai/gateway/status', authenticateRequest, getAIProviderStatus);
+app.post(
+  '/api/ai/gateway/rotate',
+  authenticateRequest,
+  requireRole(['owner', 'admin']),
+  rotateAIProviderKey
+);
+app.post(
+  '/api/ai/gateway/disable',
+  authenticateRequest,
+  requireRole(['owner', 'admin']),
+  disableAIProvider
+);
 
 // AI Workspace Routes
 app.get('/api/ai/workspace', aiModule.getAiWorkspaceData);
@@ -4634,35 +4934,35 @@ app.post('/api/ai/workspace/logs', authenticateRequest, aiModule.logAiAction);
 
 // AI Enterprise Translation Queue Routes
 app.get('/api/ai/translations', aiTranslationsModule.getTranslations);
-app.post('/api/ai/translations/generate', authenticateRequest, aiTranslationsModule.generateAiTranslation);
-app.put('/api/ai/translations/draft', authenticateRequest, aiTranslationsModule.updateTranslationDraft);
-app.post('/api/ai/translations/submit', authenticateRequest, aiTranslationsModule.submitForReview);
-app.post('/api/ai/translations/approve', authenticateRequest, aiTranslationsModule.approveTranslation);
-app.post('/api/ai/translations/reject', authenticateRequest, aiTranslationsModule.rejectTranslation);
-app.post('/api/ai/translations/publish', authenticateRequest, aiTranslationsModule.publishTranslation);
-app.post('/api/ai/translations/rollback', authenticateRequest, aiTranslationsModule.rollbackTranslation);
+app.post('/api/ai/translations/generate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.generateAiTranslation);
+app.put('/api/ai/translations/draft', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateTranslationDraft);
+app.post('/api/ai/translations/submit', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.submitForReview);
+app.post('/api/ai/translations/approve', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.approveTranslation);
+app.post('/api/ai/translations/reject', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rejectTranslation);
+app.post('/api/ai/translations/publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.publishTranslation);
+app.post('/api/ai/translations/rollback', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.rollbackTranslation);
 app.get('/api/ai/translations/history', aiTranslationsModule.getPublishHistory);
 app.get('/api/ai/translations/compare', aiTranslationsModule.compareVersions);
-app.post('/api/ai/translations/preview-publish', authenticateRequest, aiTranslationsModule.previewPublishTranslation);
-app.delete('/api/ai/translations/:id', authenticateRequest, aiTranslationsModule.deleteTranslation);
+app.post('/api/ai/translations/preview-publish', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.previewPublishTranslation);
+app.delete('/api/ai/translations/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.deleteTranslation);
 
 // Phase 10 Enterprise Queue & Batch Routes
 app.get('/api/ai/translations/queue', aiTranslationsModule.getQueueJobs);
-app.post('/api/ai/translations/queue/action', authenticateRequest, aiTranslationsModule.handleQueueAction);
-app.post('/api/ai/translations/batch', authenticateRequest, aiTranslationsModule.createBatchTranslation);
+app.post('/api/ai/translations/queue/action', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.handleQueueAction);
+app.post('/api/ai/translations/batch', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createBatchTranslation);
 app.get('/api/ai/translations/cache', aiTranslationsModule.getCacheStats);
-app.post('/api/ai/translations/cache/invalidate', authenticateRequest, aiTranslationsModule.invalidateCache);
+app.post('/api/ai/translations/cache/invalidate', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.invalidateCache);
 app.get('/api/ai/translations/metrics', aiTranslationsModule.getTranslationMetrics);
 app.get('/api/ai/translations/export', aiTranslationsModule.exportTranslationReport);
 
 // Phase 11 Enterprise Localization Intelligence & Continuous Sync Routes
 app.get('/api/ai/translations/sync/health', aiTranslationsModule.getLocalizationHealth);
 app.get('/api/ai/translations/sync/tasks', aiTranslationsModule.getLocalizationTasks);
-app.post('/api/ai/translations/sync/tasks', authenticateRequest, aiTranslationsModule.createLocalizationTask);
-app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, aiTranslationsModule.updateLocalizationTask);
+app.post('/api/ai/translations/sync/tasks', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.createLocalizationTask);
+app.post('/api/ai/translations/sync/tasks/update', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.updateLocalizationTask);
 app.get('/api/ai/translations/sync/notifications', aiTranslationsModule.getNotifications);
-app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, aiTranslationsModule.markNotificationsRead);
-app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, aiTranslationsModule.triggerSourceContentChange);
+app.post('/api/ai/translations/sync/notifications/read', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.markNotificationsRead);
+app.post('/api/ai/translations/sync/trigger-change', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), aiTranslationsModule.triggerSourceContentChange);
 app.get('/api/ai/translations/sync/diff', aiTranslationsModule.getContentDiff);
 app.get('/api/ai/translations/sync/dependencies', aiTranslationsModule.getDependencies);
 app.get('/api/ai/translations/sync/reports', aiTranslationsModule.getLocalizationReports);
@@ -4684,6 +4984,7 @@ app.get('/api/analytics/regional', authenticateRequest, requireRole(['owner', 'a
 // KPI Engine Routes
 app.get('/api/kpi', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.getKpiData);
 app.post('/api/kpi/targets', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.setKpiTarget);
+app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.deleteKpiTarget);
 
 // Growth Analytics Routes
 app.get('/api/analytics/growth', authenticateRequest, requireRole(['owner', 'admin']), growthModule.getGrowthReports);
@@ -4698,6 +4999,10 @@ app.get('/api/ai/briefings', authenticateRequest, requireRole(['owner', 'admin']
 app.get('/api/simulation/models', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.getDecisionModels);
 app.get('/api/simulation/runs', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.getSimulationRuns);
 app.post('/api/simulation/runs', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.createSimulationRun);
+app.post('/api/simulation/models', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.createDecisionModel);
+app.put('/api/simulation/models/:id', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.updateDecisionModel);
+app.delete('/api/simulation/models/:id', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.deleteDecisionModel);
+app.delete('/api/simulation/runs/:id', authenticateRequest, requireRole(['owner', 'admin']), simulationModule.deleteSimulationRun);
 
 // Enterprise System Health Monitor Routes
 app.get('/api/admin/health', authenticateRequest, requireRole(['owner', 'admin']), healthMonitorModule.getSystemHealth);
@@ -4736,6 +5041,11 @@ app.post('/api/auth/invite/verify', crmModule.verifyInviteToken);
 app.get('/api/auth/invite/verify', crmModule.verifyInviteToken);
 
 app.get('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomers);
+app.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getDutyStatus);
+app.put('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.updateDutyStatus);
+app.get('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getStaffLogs);
+app.post('/api/staff/logs', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.createStaffLog);
+
 app.get('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.getCustomerById);
 app.post('/api/admin/customers', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.createCustomer);
 app.patch('/api/admin/customers/:id', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), crmModule.updateCustomer);

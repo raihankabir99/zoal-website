@@ -127,51 +127,6 @@ export const EnterpriseAiWorkspace: React.FC = () => {
     };
   }, []);
 
-  // Handle auto-seeding sample templates if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      
-      // Seed templates and a prompt directly via Supabase
-      const sampleTemplates = [
-        { name: 'VIP Translation Ritual', template_text: 'Translate {text} into Royal Arabic suitable for elite Saudi roaster gatherings.', category: 'Translation' },
-        { name: 'Sudanese Hospitality Storyteller', template_text: 'Write an immersive heritage blog post about the history of {topic} in Khartoum and Dammam.', category: 'Product' },
-        { name: 'ZATCA Compliance Audit Draft', template_text: 'Draft an internal compliance check report for invoice serial {invoiceId} against 15% VAT parameters.', category: 'SEO' }
-      ];
-
-      for (const t of sampleTemplates) {
-        await supabaseClient.from('zoal_ai_templates').insert(t);
-      }
-
-      // Add a default prompt as well
-      const { data: promptData } = await supabaseClient.from('zoal_ai_prompts').insert({
-        user_id: '00000000-0000-0000-0000-000000000000',
-        prompt_text: 'Describe the premium grade of single-origin Yemen peaberry micro-lots.'
-      }).select().single();
-
-      if (promptData) {
-        await supabaseClient.from('zoal_ai_usage').insert({
-          prompt_id: promptData.id,
-          tokens: 450,
-          cost: 0.002250,
-          time_ms: 1200
-        });
-
-        await supabaseClient.from('zoal_ai_history').insert({
-          user_id: '00000000-0000-0000-0000-000000000000',
-          action_type: 'ProductGen',
-          meta_data: { prompt_text: promptData.prompt_text }
-        });
-      }
-
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   // Submit new prompt
   const handleSubmitPrompt = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,21 +309,13 @@ export const EnterpriseAiWorkspace: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Empty state offering seeding */}
           {prompts.length === 0 && templates.length === 0 && (
             <div className="bg-zinc-950 border border-white/5 p-12 text-center rounded-xs space-y-4">
-              <Bot className="w-12 h-12 text-gold-pure/40 mx-auto animate-bounce" />
+              <Bot className="w-12 h-12 text-gold-pure/40 mx-auto" />
               <h3 className="text-white font-bold uppercase tracking-widest font-display text-sm">Cognitive Workspace Empty</h3>
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                The Supabase AI registers do not contain any templates or custom usage data. Seeding realistic enterprise templates enables immediate cognitive tracking.
+                The Supabase AI registers do not contain any templates or custom usage data. Register your first cognitive template to begin tracking AI utilization.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer disabled:opacity-50"
-              >
-                {actionLoading ? 'Initializing Real registers...' : 'Auto-Seed Real Supabase Records'}
-              </button>
             </div>
           )}
 

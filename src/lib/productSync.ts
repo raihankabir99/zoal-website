@@ -1,5 +1,6 @@
 import { Product } from '../types';
 import { notifyPoolListeners } from '../imageRegistry';
+import { supabaseClient } from './supabaseClient';
 
 // Boutique Caching Configuration
 const CACHE_VERSION = 'v1_enterprise_zoal';
@@ -17,14 +18,17 @@ export interface CacheMetadata {
   syncInProgress: boolean;
 }
 
-// Helper to retrieve valid auth token (falling back to dev-preview-token if not logged in)
-function getAuthToken(): string {
-  if (typeof window === 'undefined') return 'dev-preview-token';
-  return (
-    localStorage.getItem('zoal_auth_token') ||
-    sessionStorage.getItem('zoal_auth_token') ||
-    'dev-preview-token'
-  );
+// Retrieve the current Supabase Auth access token.
+// Do not trust mutable LocalStorage/sessionStorage token values for product mutations.
+async function getAuthToken(): Promise<string> {
+  if (typeof window === 'undefined') return '';
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    return session?.access_token || '';
+  } catch (e) {
+    console.warn('[Auth] Could not read Supabase session:', e);
+    return '';
+  }
 }
 
 // Queue type for offline operations
@@ -178,12 +182,9 @@ export function resolveProductConflict(local: Product, remote: Product): Product
     const localReviews = local.reviews || [];
     const remoteReviews = remote.reviews || [];
     const reviewsMap = new Map<string, any>();
-    
-    // Add remote first as base
     remoteReviews.forEach(r => {
       if (r && r.id) reviewsMap.set(r.id, r);
     });
-    // Overlay local (or add new ones)
     localReviews.forEach(r => {
       if (r && r.id) {
         const existing = reviewsMap.get(r.id);
@@ -198,7 +199,6 @@ export function resolveProductConflict(local: Product, remote: Product): Product
     const localQAs = local.questions || [];
     const remoteQAs = remote.questions || [];
     const qasMap = new Map<string, any>();
-
     remoteQAs.forEach(q => {
       if (q && q.id) qasMap.set(q.id, q);
     });
@@ -213,9 +213,6 @@ export function resolveProductConflict(local: Product, remote: Product): Product
 
   // 3. Keep newer inventory/sales count if available
   if (remote.inventory !== undefined && local.inventory !== undefined) {
-    // If remote has a different inventory count, let the remote act as server-of-truth 
-    // unless local had an explicit modification. In our application flow, inventory is updated via updateProductInventory.
-    // We default to local if local is newer, or remote if remote is newer.
     merged.inventory = local.inventory;
   }
 
@@ -262,13 +259,12 @@ export async function triggerRetryLoop() {
       if (op.type === 'save') {
         let finalData = op.productData;
         const remoteVersion = freshProductsMap.get(op.productId);
-        
-        // Resolve conflicts if there is a newer remote version
         if (remoteVersion) {
           finalData = resolveProductConflict(op.productData, remoteVersion);
         }
 
-        const token = getAuthToken();
+        const token = await getAuthToken();
+        if (!token) throw new Error('No active Supabase session token available.');
         const res = await fetch('/api/products', {
           method: 'POST',
           headers: { 
@@ -280,7 +276,8 @@ export async function triggerRetryLoop() {
         if (res.ok) success = true;
       } else if (op.type === 'delete') {
         cleanupProductOrphans(op.productId);
-        const token = getAuthToken();
+        const token = await getAuthToken();
+        if (!token) throw new Error('No active Supabase session token available.');
         const res = await fetch(`/api/products/${encodeURIComponent(op.productId)}`, {
           method: 'DELETE',
           headers: {
@@ -312,12 +309,10 @@ export async function triggerRetryLoop() {
   isRetrying = false;
   updateCacheMeta({ syncInProgress: false });
 
-  // Update local cache fully if some writes went through
   if (queue.length !== remaining.length) {
     triggerProductFetch();
   }
 
-  // If there are still pending items, automatically retry in 15 seconds
   if (remaining.length > 0) {
     setTimeout(triggerRetryLoop, 15000);
   }
@@ -329,42 +324,24 @@ function mergeProductsConflictFree(serverProducts: Product[], localProducts: Pro
   const pendingSaveIds = new Set(pendingQueue.filter(op => op.type === 'save').map(op => op.productId));
   const pendingDeleteIds = new Set(pendingQueue.filter(op => op.type === 'delete').map(op => op.productId));
 
-  // Initialize with server products
+  // Server data is authoritative. Local data may override only for a product
+  // with an explicit unsynced save operation; never use timestamps/images to
+  // silently overwrite an authoritative server record.
   for (const sp of serverProducts) {
-    if (sp && sp.id) {
-      // If there is a pending delete for this product, do not include it
-      if (pendingDeleteIds.has(sp.id)) {
-        continue;
-      }
+    if (sp && sp.id && !pendingDeleteIds.has(sp.id)) {
       mergedMap.set(sp.id, sp);
     }
   }
 
-  // Override with local products ONLY if the local product is newer or has newer image data, or is a legitimate unsynced product
   for (const lp of localProducts) {
-    if (lp && lp.id) {
-      // If there is a pending delete for this product, do not include it
-      if (pendingDeleteIds.has(lp.id)) {
-        continue;
-      }
-
+    if (lp && lp.id && !pendingDeleteIds.has(lp.id)) {
       const sp = mergedMap.get(lp.id);
       if (!sp) {
-        // Keep local product ONLY if it is a legitimate unsynced product (exists in the pending save queue)
         if (pendingSaveIds.has(lp.id)) {
           mergedMap.set(lp.id, lp);
         }
-      } else {
-        const lpTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
-        const spTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();
-        
-        const lpHasImages = (lp.images && lp.images.length > 0) || (lp.image_urls && lp.image_urls.length > 0);
-        const spHasImages = (sp.images && sp.images.length > 0) || (sp.image_urls && sp.image_urls.length > 0);
-        const localHasBetterImages = lpHasImages && !spHasImages;
-        
-        if (lpTime > spTime || localHasBetterImages) {
-          mergedMap.set(lp.id, lp);
-        }
+      } else if (pendingSaveIds.has(lp.id)) {
+        mergedMap.set(lp.id, lp);
       }
     }
   }
@@ -377,7 +354,6 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
   const meta = getCacheMeta();
   const now = Date.now();
   
-  // If not forced and cache is clean & warm, return early
   if (!forceUpdate && meta.lastFetched > 0 && (now - meta.lastFetched) < CACHE_MAX_AGE) {
     try {
       const cached = localStorage.getItem(CACHE_KEYS.PRODUCTS);
@@ -391,7 +367,6 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
     } catch (e) {}
   }
 
-  // Background/stale-while-revalidate or direct load
   try {
     console.log('[Cache] Fetching fresh product data from Supabase DB (Source of Truth)...');
     const res = await fetch('/api/products');
@@ -422,8 +397,6 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
 
       localStorage.setItem(CACHE_KEYS.PRODUCTS, JSON.stringify(finalProducts));
       updateCacheMeta({ lastFetched: Date.now() });
-      
-      // Dispatch storage event to keep other tabs/hooks perfectly in sync
       window.dispatchEvent(new Event('storage'));
       notifyPoolListeners();
       return finalProducts;
@@ -432,7 +405,6 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
     console.warn('[Cache] Failed to fetch live products, falling back to local cache:', err);
   }
 
-  // Last-resort fallback to whatever is in localStorage
   try {
     const cached = localStorage.getItem(CACHE_KEYS.PRODUCTS);
     return cached ? JSON.parse(cached) : null;
@@ -443,7 +415,6 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
 
 // Unify saving product to Supabase and cache
 export async function saveProductToSupabase(product: Product) {
-  // Ensure product has fresh timestamps to prevent race conditions during triggerProductFetch
   const nowStr = new Date().toISOString();
   const updatedProduct = {
     ...product,
@@ -451,7 +422,6 @@ export async function saveProductToSupabase(product: Product) {
     updated_at: product.updated_at || nowStr
   };
 
-  // 1. Instantly update local cache for smooth Optimistic UI response
   const customRaw = localStorage.getItem(CACHE_KEYS.PRODUCTS);
   let customProducts = customRaw ? JSON.parse(customRaw) : [];
   const exists = customProducts.some((p: any) => p.id === updatedProduct.id);
@@ -465,9 +435,9 @@ export async function saveProductToSupabase(product: Product) {
   window.dispatchEvent(new Event('storage'));
   notifyPoolListeners();
 
-  // 2. Perform direct write to database
   try {
-    const token = getAuthToken();
+    const token = await getAuthToken();
+    if (!token) throw new Error('No active Supabase session token available.');
     const res = await fetch('/api/products', {
       method: 'POST',
       headers: { 
@@ -479,7 +449,6 @@ export async function saveProductToSupabase(product: Product) {
     
     if (res.ok) {
       console.log(`[Cache] Successfully persisted product ${updatedProduct.id} to Supabase Database.`);
-      // Fetch latest from database to align everything perfectly
       triggerProductFetch(true);
       return true;
     } else {
@@ -504,7 +473,6 @@ export async function saveProductToSupabase(product: Product) {
 export function cleanupProductOrphans(productId: string): void {
   if (!productId) return;
 
-  // 1. Purge from zoal_product_inventories
   try {
     const rawInv = localStorage.getItem('zoal_product_inventories');
     if (rawInv) {
@@ -518,7 +486,6 @@ export function cleanupProductOrphans(productId: string): void {
     console.warn('[OrphanCleanup] Failed cleaning zoal_product_inventories for ID:', productId, err);
   }
 
-  // 2. Purge from zoal_product_overrides
   try {
     const rawOverrides = localStorage.getItem('zoal_product_overrides');
     if (rawOverrides) {
@@ -543,7 +510,6 @@ export async function deleteProductFromSupabase(productId: string) {
 
   console.log(`[Sync] Initiating delete for product: ${productId}`);
 
-  // 1. Instantly update local cache for smooth Optimistic UI response
   const customRaw = localStorage.getItem(CACHE_KEYS.PRODUCTS);
   if (customRaw) {
     try {
@@ -557,7 +523,6 @@ export async function deleteProductFromSupabase(productId: string) {
     }
   }
   
-  // Track deleted static products
   const deletedRaw = localStorage.getItem(CACHE_KEYS.DELETED_STATIC);
   try {
     const deletedIds = deletedRaw ? JSON.parse(deletedRaw) : [];
@@ -569,12 +534,10 @@ export async function deleteProductFromSupabase(productId: string) {
     console.warn('[Cache] Error updating deleted static IDs:', e);
   }
 
-  // 2. ENTERPRISE ORPHAN CLEANUP: Purge inventory & overrides before notifying listeners
   cleanupProductOrphans(productId);
 
   window.dispatchEvent(new Event('storage'));
   
-  // 3. Notify listeners (Safe check to prevent circular dependency crashes)
   try {
     if (typeof notifyPoolListeners === 'function') {
       console.log("7. Immediately before notifyPoolListeners()");
@@ -585,9 +548,9 @@ export async function deleteProductFromSupabase(productId: string) {
     console.warn('[Sync] Notification failed, but continuing with database sync:', e);
   }
 
-  // 4. ALWAYS Perform direct delete from database regardless of local state
   try {
-    const token = getAuthToken();
+    const token = await getAuthToken();
+    if (!token) throw new Error('No active Supabase session token available.');
     console.log("TRACE 12: Immediately before fetch()", { productId, hasToken: !!token });
     const res = await fetch(`/api/products/${encodeURIComponent(productId)}`, {
       method: 'DELETE',
@@ -616,8 +579,6 @@ export async function deleteProductFromSupabase(productId: string) {
     }
   } catch (err: any) {
     console.error(`[Cache] Database delete failed for ${productId}. Error:`, err);
-    
-    // Fallback to queueing for background sync if it's a network error
     queuePendingOp({
       type: 'delete',
       productId
@@ -626,20 +587,16 @@ export async function deleteProductFromSupabase(productId: string) {
   }
 }
 
-// Initialize cache checks
 initializeCache();
 
-// Network status recovery & periodic sync timers
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     console.log('[Sync] Network connection restored. Flushing operations queue...');
     triggerRetryLoop();
   });
   
-  // Automatically scan & refresh stale cache/queue in background periodically
   setInterval(() => {
     triggerRetryLoop();
-    // Do background fetch only if stale
     triggerProductFetch(false);
   }, 45000);
 }
