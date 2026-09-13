@@ -39,7 +39,7 @@ function mapInvoice(order: any, items: any[], transaction: any) {
       name: item.zoal_products?.name || item.product_name || String(item.product_id),
       quantity: Number(item.quantity || 0),
       unitPrice: Number(item.unit_price || 0),
-      totalPrice: Number(item.total_price ?? Number(item.unit_price || 0) * Number(item.quantity || 0)),
+      total: Number(item.total_price ?? Number(item.unit_price || 0) * Number(item.quantity || 0)),
     })),
     subtotal: Number(order.subtotal || 0),
     discount: Number(order.discount_amount || 0),
@@ -82,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       invoices.push(mapInvoice(order, items || [], transaction || null));
     }
 
-    return send(res, 200, { success: true, data: { invoices } });
+    return send(res, 200, { success: true, invoices });
   } catch (error: any) {
     console.error('Customer invoice API error:', error);
     return send(res, 500, { error: error?.message || 'Failed to load invoices.' });
