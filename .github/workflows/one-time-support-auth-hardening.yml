@@ -33,13 +33,12 @@ jobs:
               count = s.count(old)
               if old.startswith('query =') and count != 1:
                   raise SystemExit(f'Expected 1 ticket-list fallback, found {count}')
-              if old.startswith('if (ticket.customer_id') and count != 3:
-                  raise SystemExit(f'Expected 3 ticket ownership fallbacks, found {count}')
+              if old.startswith('if (ticket.customer_id') and count != 2:
+                  raise SystemExit(f'Expected 2 ticket ownership fallbacks, found {count}')
               s = s.replace(old, new)
           p.write_text(s)
           PY
 
-          # Verify no customer-email authorization fallback remains in support.ts.
           if grep -n "ticket.customer_email !== user.email\|customer_id.eq.*customer_email.eq" server/support.ts; then
             echo 'Unsafe customer-email authorization fallback remains.'
             exit 1
@@ -63,4 +62,4 @@ jobs:
           git commit -m "fix(support): enforce customer-id ticket ownership"
           git push origin audit/dashboard-sync-fix
 
-# Triggered manually on the existing audit branch; self-removes after validation.
+# Retry after correcting the exact ownership-check count; self-removes after validation.
