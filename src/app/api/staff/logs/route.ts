@@ -59,7 +59,9 @@ export async function POST(req: NextRequest) {
       id: crypto.randomUUID(),
       user_id: auth.user.id,
       email: auth.user.email,
-      action: `${action} — ${target}`
+      action: `${action} — ${target}`,
+      resource_type: 'staff',
+      resource_id: auth.user.id
     };
     const { error } = await supabase.from('zoal_activity_logs').insert(log);
     if (error) return apiError(error.message, 500);
