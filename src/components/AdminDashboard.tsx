@@ -220,12 +220,14 @@ export default function AdminDashboard({
   useEffect(() => {
     const fetchAdminBaseline = async () => {
       try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
         const [cats, brandsRes, cmsRes, staffRes] = await Promise.all([
           categoryApi.list(),
           fetch('/api/brands'),
           fetch('/api/cms'),
           fetch('/api/staff', {
-            headers: { Authorization: `Bearer ${localStorage.getItem('zoal_auth_token') || ''}` }
+            headers: { Authorization: `Bearer ${token}` }
           })
         ]);
 
@@ -278,57 +280,62 @@ export default function AdminDashboard({
   }, [activeTab]);
 
   useEffect(() => {
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
-    const authHeaders = { 'Authorization': `Bearer ${token}` };
+    const fetchMarketingAndHeroes = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const authHeaders = { 'Authorization': `Bearer ${token}` };
 
-    fetch('/api/marketing-data', { headers: authHeaders })
-      .then(res => {
-        if (!res.ok) {
-          return res.json().then(err => {
-            if (err.error === 'MARKETING_DATABASE_UNAVAILABLE') {
-              setMarketingError('Marketing data is temporarily unavailable. Please try again.');
-            }
-            throw new Error(err.error || `Server returned status ${res.status}`);
-          });
-        }
-        return res.json();
-      })
-      .then(data => {
-        setMarketingError(null);
-        if (data?.campaigns && Array.isArray(data.campaigns)) {
-          setCampaigns(data.campaigns);
-        }
-        if (data?.coupons && Array.isArray(data.coupons)) {
-          setCoupons(data.coupons);
-        }
-        if (data?.subscribers && Array.isArray(data.subscribers)) {
-          setSubscribers(data.subscribers);
-        }
-      })
-      .catch(err => {
-        console.warn('Note: Could not sync marketing data from server:', err.message || err);
-      });
+      fetch('/api/marketing-data', { headers: authHeaders })
+        .then(res => {
+          if (!res.ok) {
+            return res.json().then(err => {
+              if (err.error === 'MARKETING_DATABASE_UNAVAILABLE') {
+                setMarketingError('Marketing data is temporarily unavailable. Please try again.');
+              }
+              throw new Error(err.error || `Server returned status ${res.status}`);
+            });
+          }
+          return res.json();
+        })
+        .then(data => {
+          setMarketingError(null);
+          if (data?.campaigns && Array.isArray(data.campaigns)) {
+            setCampaigns(data.campaigns);
+          }
+          if (data?.coupons && Array.isArray(data.coupons)) {
+            setCoupons(data.coupons);
+          }
+          if (data?.subscribers && Array.isArray(data.subscribers)) {
+            setSubscribers(data.subscribers);
+          }
+        })
+        .catch(err => {
+          console.warn('Note: Could not sync marketing data from server:', err.message || err);
+        });
 
-    fetch('/api/homepage-heroes', { headers: authHeaders })
-      .then(res => {
-        if (!res.ok) throw new Error(`Server returned status ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          const mappedBanners = data.map((h: any) => ({
-            id: h.id,
-            title: h.hero_title || '',
-            image: h.hero_image_desktop || h.hero_image_mobile || '',
-            link: h.cta_link || 'store',
-            status: h.active ? 'active' : 'inactive'
-          }));
-          setBanners(mappedBanners);
-        }
-      })
-      .catch(err => {
-        console.warn('Note: Could not sync homepage heroes from server, using local fallback:', err.message || err);
-      });
+      fetch('/api/homepage-heroes', { headers: authHeaders })
+        .then(res => {
+          if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            const mappedBanners = data.map((h: any) => ({
+              id: h.id,
+              title: h.hero_title || '',
+              image: h.hero_image_desktop || h.hero_image_mobile || '',
+              link: h.cta_link || 'store',
+              status: h.active ? 'active' : 'inactive'
+            }));
+            setBanners(mappedBanners);
+          }
+        })
+        .catch(err => {
+          console.warn('Note: Could not sync homepage heroes from server:', err.message || err);
+        });
+    };
+
+    fetchMarketingAndHeroes();
   }, []);
 
   const fetchShippingRules = async () => {
@@ -963,8 +970,8 @@ export default function AdminDashboard({
     const deliveredOrders = orders.filter(o => o.status === 'Completed').length;
     const cancelledOrders = orders.filter(o => o.status === 'Cancelled').length;
 
-    const totalCustomers = new Set(orders.map(o => o.email)).size || 1;
-    const totalStaff = 5;
+    const totalCustomers = new Set(orders.filter(o => o?.email).map(o => o.email)).size;
+    const totalStaff = staffList.length;
 
     const totalProductsCount = allProducts.length;
     const lowStockCount = allProducts.filter(p => p.inventory <= 5 && p.inventory > 0).length;
@@ -986,17 +993,27 @@ export default function AdminDashboard({
       lowStockCount,
       outOfStockCount
     };
-  }, [orders, allProducts]);
+  }, [orders, allProducts, staffList]);
 
-  // Chart Data preparation
-  const revenueTrendData = [
-    { name: 'Jan', sales: metrics.totalRevenue * 0.4, orders: 12 },
-    { name: 'Feb', sales: metrics.totalRevenue * 0.55, orders: 18 },
-    { name: 'Mar', sales: metrics.totalRevenue * 0.7, orders: 24 },
-    { name: 'Apr', sales: metrics.totalRevenue * 0.65, orders: 21 },
-    { name: 'May', sales: metrics.totalRevenue * 0.9, orders: 32 },
-    { name: 'Jun', sales: metrics.totalRevenue, orders: metrics.totalOrders }
-  ];
+  // Chart Data preparation - aggregated from real orders
+  const revenueTrendData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyMap = months.map(m => ({ name: m, sales: 0, orders: 0 }));
+    
+    orders.forEach(o => {
+      if (!o.date || o.status === 'Cancelled') return;
+      const d = new Date(o.date);
+      if (isNaN(d.getTime())) return;
+      const mIdx = d.getMonth();
+      if (mIdx >= 0 && mIdx < 12) {
+        monthlyMap[mIdx].sales += (Number(o.total) || 0);
+        monthlyMap[mIdx].orders += 1;
+      }
+    });
+
+    const curMonthIdx = new Date().getMonth();
+    return monthlyMap.slice(0, Math.max(6, curMonthIdx + 1));
+  }, [orders]);
 
   const categoryPerformanceData = useMemo(() => {
     const counts = { coffee: 0, bakery: 0, market: 0, fashion: 0, thobes: 0 };
@@ -1018,20 +1035,17 @@ export default function AdminDashboard({
   const bestSellingProductsData = useMemo(() => {
     const itemMap: Record<string, number> = {};
     orders.forEach(o => {
+      if (o.status === 'Cancelled' || !Array.isArray(o.items)) return;
       o.items.forEach(itm => {
-        itemMap[itm.name] = (itemMap[itm.name] || 0) + itm.quantity;
+        if (itm?.name) {
+          itemMap[itm.name] = (itemMap[itm.name] || 0) + (Number(itm.quantity) || 1);
+        }
       });
     });
-    const sorted = Object.entries(itemMap).map(([name, qty]) => ({ name, qty }))
+    return Object.entries(itemMap)
+      .map(([name, qty]) => ({ name, qty }))
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-    return sorted.length > 0 ? sorted : [
-      { name: 'Saffron Latte', qty: 32 },
-      { name: 'Traditional Hoboz', qty: 25 },
-      { name: 'Sudanese Toob', qty: 14 },
-      { name: 'Luxury Men\'s Thobe', qty: 11 },
-      { name: 'Karkadeh Flowers', qty: 8 }
-    ];
   }, [orders]);
 
   // Start Create Product
@@ -4697,23 +4711,23 @@ export default function AdminDashboard({
                       onClick={() => {
                         const printWindow = window.open('', '_blank');
                         if (printWindow) {
-                          const mockInvoice = {
+                          const realInvoice = {
                             invoiceNumber: `INV-${selectedOrder.id}`,
                             invoiceDate: selectedOrder.date || new Date().toLocaleDateString(),
-                            merchantName: 'AL ZOAL ENTERPRISE',
-                            merchantVat: '310239485700003',
+                            merchantName: BRANDING?.companyName || 'ZOAL Enterprise',
+                            merchantVat: cmsSettings?.vat_number || (selectedOrder as any).merchantVat || 'Data unavailable',
                             orderId: selectedOrder.id,
-                            paymentId: `pay_${selectedOrder.id}`,
-                            gateway: selectedOrder.paymentMethod || 'Moyasar',
-                            transactionId: `txn_${selectedOrder.id}`,
-                            subtotal: selectedOrder.total / 1.15,
-                            vat: selectedOrder.total - (selectedOrder.total / 1.15),
-                            discount: 0,
-                            delivery: 0,
+                            paymentId: (selectedOrder as any).paymentId || (selectedOrder as any).payment_intent_id || 'Data unavailable',
+                            gateway: selectedOrder.paymentMethod || (selectedOrder as any).payment_gateway || 'Data unavailable',
+                            transactionId: (selectedOrder as any).transactionId || (selectedOrder as any).transaction_id || 'Data unavailable',
+                            subtotal: (selectedOrder as any).subtotal ?? (selectedOrder.total / 1.15),
+                            vat: (selectedOrder as any).vat ?? (selectedOrder.total - (selectedOrder.total / 1.15)),
+                            discount: (selectedOrder as any).discount ?? 0,
+                            delivery: (selectedOrder as any).shippingFee ?? (selectedOrder as any).deliveryFee ?? 0,
                             total: selectedOrder.total,
                             items: selectedOrder.items || []
                           };
-                          printWindow.document.write(generatePrintableInvoiceHtml(mockInvoice));
+                          printWindow.document.write(generatePrintableInvoiceHtml(realInvoice));
                           printWindow.document.close();
                           printWindow.print();
                           addLog(`Printed Invoice: ${selectedOrder.id}`);
@@ -4725,24 +4739,24 @@ export default function AdminDashboard({
                     </button>
                     <button 
                       onClick={() => {
-                        const mockInvoice = {
+                        const realInvoice = {
                           invoiceNumber: `INV-${selectedOrder.id}`,
                           invoiceDate: selectedOrder.date || new Date().toLocaleDateString(),
-                          merchantName: 'AL ZOAL ENTERPRISE',
-                          merchantVat: '310239485700003',
+                          merchantName: BRANDING?.companyName || 'ZOAL Enterprise',
+                          merchantVat: cmsSettings?.vat_number || (selectedOrder as any).merchantVat || 'Data unavailable',
                           orderId: selectedOrder.id,
-                          paymentId: `pay_${selectedOrder.id}`,
-                          gateway: selectedOrder.paymentMethod || 'Moyasar',
-                          transactionId: `txn_${selectedOrder.id}`,
-                          subtotal: selectedOrder.total / 1.15,
-                          vat: selectedOrder.total - (selectedOrder.total / 1.15),
-                          discount: 0,
-                          delivery: 0,
+                          paymentId: (selectedOrder as any).paymentId || (selectedOrder as any).payment_intent_id || 'Data unavailable',
+                          gateway: selectedOrder.paymentMethod || (selectedOrder as any).payment_gateway || 'Data unavailable',
+                          transactionId: (selectedOrder as any).transactionId || (selectedOrder as any).transaction_id || 'Data unavailable',
+                          subtotal: (selectedOrder as any).subtotal ?? (selectedOrder.total / 1.15),
+                          vat: (selectedOrder as any).vat ?? (selectedOrder.total - (selectedOrder.total / 1.15)),
+                          discount: (selectedOrder as any).discount ?? 0,
+                          delivery: (selectedOrder as any).shippingFee ?? (selectedOrder as any).deliveryFee ?? 0,
                           total: selectedOrder.total,
                           items: selectedOrder.items || []
                         };
-                        const html = generatePrintableInvoiceHtml(mockInvoice);
-                        downloadHtmlAsPdf(html, `ALZOAL-INVOICE-${mockInvoice.invoiceNumber}.pdf`);
+                        const html = generatePrintableInvoiceHtml(realInvoice);
+                        downloadHtmlAsPdf(html, `ALZOAL-INVOICE-${realInvoice.invoiceNumber}.pdf`);
                         addLog(`Downloaded Invoice PDF: ${selectedOrder.id}`);
                       }}
                       className="py-1.5 px-3 bg-zinc-900 border border-white/10 hover:border-gold-pure text-white text-[9.5px] font-mono font-bold tracking-wide uppercase rounded-xs flex items-center gap-1.5 cursor-pointer"

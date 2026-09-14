@@ -68,7 +68,8 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch(`/api/kpi?range=${timeRange}`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -152,7 +153,8 @@ export const EnterpriseKpiDashboard: React.FC = () => {
       }
 
       // Use backend `/api/kpi/targets` endpoint for set/upsert
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      const { data: { session: submitSession } } = await supabaseClient.auth.getSession();
+      const token = submitSession?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch('/api/kpi/targets', {
         method: 'POST',
         headers: { 
@@ -178,7 +180,8 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     if (!confirm('Are you sure you want to delete this strategic target?')) return;
     try {
       setActionLoading(true);
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      const { data: { session: delSession } } = await supabaseClient.auth.getSession();
+      const token = delSession?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch(`/api/kpi/targets/${id}`, {
         method: 'DELETE',
         headers: {
