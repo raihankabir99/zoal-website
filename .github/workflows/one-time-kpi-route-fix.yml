@@ -59,7 +59,9 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.ts .github/workflows/one-time-kpi-route-fix.yml
+          git add app.ts
+          git diff --cached --check
+          git rm .github/workflows/one-time-kpi-route-fix.yml
           git diff --cached --check
           git commit -m 'fix(kpi): align manager access FIX_KPI_MANAGER_ACCESS'
           git push origin HEAD:audit/dashboard-sync-fix
