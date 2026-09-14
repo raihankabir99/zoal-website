@@ -31,7 +31,7 @@ export async function getTickets(req: Request, res: Response) {
 
     // Secure multi-tenant scoping if not staff
     if (!isStaff) {
-      query = query.or(`customer_id.eq.${user.id},customer_email.eq.${user.email}`);
+      query = query.eq('customer_id', user.id);
     }
 
     const { data: tickets, error: ticketsError } = await query.order('created_at', { ascending: false });
@@ -252,7 +252,7 @@ export async function addMessage(req: Request, res: Response) {
       // Staff replies are permitted. They can create internal notes.
     } else {
       // Customer replies: Verify that the ticket belongs to this customer.
-      if (ticket.customer_id !== user.id && ticket.customer_email !== user.email) {
+      if (ticket.customer_id !== user.id) {
         return res.status(403).json({ error: 'Forbidden. You do not have permission to reply to this ticket.' });
       }
       // Customers cannot post internal notes!
@@ -329,7 +329,7 @@ export async function updateTicket(req: Request, res: Response) {
 
     // 2. Customer authorization check: Deny customer mutations on ticket fields in production (P0-04)
     if (!isStaff) {
-      if (ticket.customer_id !== user.id && ticket.customer_email !== user.email) {
+      if (ticket.customer_id !== user.id) {
         return res.status(403).json({ error: 'Forbidden. You do not have permission to access this ticket.' });
       }
       return res.status(403).json({ error: 'Forbidden. Customer accounts are not permitted to mutate ticket attributes.' });
@@ -831,7 +831,7 @@ export async function uploadTicketAttachment(req: Request, res: Response) {
     const isStaff = ['owner', 'admin', 'manager', 'staff'].includes(userRole);
 
     if (!isStaff) {
-      if (ticket.customer_id !== user.id && ticket.customer_email !== user.email) {
+      if (ticket.customer_id !== user.id) {
         return res.status(403).json({ error: 'Forbidden. You do not have permission to modify this ticket.' });
       }
     }
@@ -921,7 +921,7 @@ export async function downloadTicketAttachment(req: Request, res: Response) {
     const isStaff = ['owner', 'admin', 'manager', 'staff'].includes(userRole);
 
     if (!isStaff) {
-      if (ticket.customer_id !== user.id && ticket.customer_email !== user.email) {
+      if (ticket.customer_id !== user.id) {
         return res.status(403).json({ error: 'Forbidden. Access denied to this ticket.' });
       }
     }
