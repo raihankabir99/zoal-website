@@ -1,12 +1,15 @@
 name: Repair Brands CRUD
+
 on:
   pull_request:
     types: [opened, reopened, synchronize]
   workflow_dispatch:
+
 permissions:
-  contents: write
+  contents: read
+
 jobs:
-  repair:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +20,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Apply Brands CRUD patch
+      - name: Verify Brands CRUD patch
         run: python3 .github/scripts/patch-brands-crud.py
       - name: Verify diff
         run: git diff --check
@@ -25,11 +28,3 @@ jobs:
         run: npm ci
       - name: Production build verification
         run: npm run build
-      - name: Commit verified patch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/BrandManagement.tsx
-          git diff --cached --check
-          git commit -m "fix(admin): bind brands management to authoritative API"
-          git push origin audit/dashboard-sync-fix
