@@ -204,14 +204,89 @@ export default function Dashboards({
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'Pending' | 'Preparing' | 'Shipped' | 'Completed' | 'Cancelled'>('all');
   const [wishlistSearch, setWishlistSearch] = useState('');
 
-  const customerOrders = useMemo(() => {
-    if (!currentUser) return [];
-    return orders.filter((o) => {
-      if ((o as any).customerId && (o as any).customerId === currentUser.id) return true;
-      if (currentUser.email && (o.email || '').toLowerCase() === currentUser.email.toLowerCase()) return true;
-      return false;
-    });
-  }, [orders, currentUser]);
+  const [authoritativeCustomerOrders, setAuthoritativeCustomerOrders] = useState<Order[]>([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id || userRole !== 'customer') {
+      setAuthoritativeCustomerOrders([]);
+      return;
+    }
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) {
+      setAuthoritativeCustomerOrders([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCustomerOrdersLoading(true);
+
+    const loadCustomerOrders = async () => {
+      try {
+        const response = await fetch('/api/orders?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !Array.isArray(payload?.data?.orders)) {
+          throw new Error(payload?.error || 'Failed to load customer orders');
+        }
+
+        const productMap = new Map((allProducts || []).map((product: any) => [String(product.id), product]));
+        const normalized = payload.data.orders.map((row: any) => {
+          const rawStatus = String(row.status || 'pending').toLowerCase();
+          const statusMap: Record<string, Order['status']> = {
+            pending: 'Pending', confirmed: 'Confirmed', processing: 'Processing', preparing: 'Preparing',
+            packed: 'Packed', ready_for_shipping: 'Ready for Shipping', shipped: 'Shipped',
+            out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed',
+            cancelled: 'Cancelled', returned: 'Returned', refund_requested: 'Refund Requested',
+            refund_approved: 'Refund Approved', refund_completed: 'Refund Completed'
+          };
+          const shippingAddress = row.order_data?.shipping_address;
+          const items = Array.isArray(row.items) ? row.items.map((item: any) => {
+            const product = productMap.get(String(item.product_id));
+            return {
+              productId: item.product_id,
+              name: product?.name || item.product_id || 'Product',
+              price: Number(item.unit_price || 0),
+              quantity: Number(item.quantity || 0),
+              image: product?.images?.[0] || product?.image || product?.image_url
+            };
+          }) : [];
+
+          return {
+            id: row.id,
+            date: row.created_at ? new Date(row.created_at).toLocaleDateString() : '—',
+            items,
+            subtotal: Number(row.subtotal || 0),
+            shipping: Number(row.shipping_cost || 0),
+            discount: Number(row.discount_amount || 0),
+            total: Number(row.total_amount || 0),
+            status: statusMap[rawStatus] || 'Pending',
+            customerName: currentUser.name || 'Customer',
+            email: currentUser.email || '',
+            phone: currentUser.phone || '',
+            address: typeof shippingAddress === 'string' ? shippingAddress : JSON.stringify(shippingAddress || ''),
+            paymentMethod: row.payment_method || 'Not provided',
+            trackingNumber: row.order_data?.tracking_number || '',
+            paymentStatus: String(row.payment_status || 'unpaid').replace(/^./, (c: string) => c.toUpperCase())
+          } as Order;
+        });
+
+        if (!cancelled) setAuthoritativeCustomerOrders(normalized);
+      } catch (error) {
+        if (!cancelled) setAuthoritativeCustomerOrders([]);
+        console.error('Failed to load authoritative customer orders:', error);
+      } finally {
+        if (!cancelled) setCustomerOrdersLoading(false);
+      }
+    };
+
+    void loadCustomerOrders();
+    return () => { cancelled = true; };
+  }, [currentUser, userRole, allProducts]);
+
+  const customerOrders = useMemo(() => authoritativeCustomerOrders, [authoritativeCustomerOrders]);
   
 
   // --- STAFF DASHBOARD INTEGRATIONS ---

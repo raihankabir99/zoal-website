@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     if (error) return apiError(error.message, 500);
 
     let enrichedOrders = orders || [];
-    if (user.role !== 'customer' && enrichedOrders.length > 0) {
+    if (enrichedOrders.length > 0) {
       const orderIds = enrichedOrders.map((order: any) => order.id);
       const { data: items, error: itemsError } = await supabase
         .from('zoal_order_items')
