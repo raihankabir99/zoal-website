@@ -62,3 +62,5 @@ app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'a
           git add app.ts .github/workflows/kpi-manager-access-fix.yml
           git commit -m 'fix(kpi): allow manager KPI access'
           git push origin audit/dashboard-sync-fix
+
+# Guarded, exact-match remediation; no other source files are changed.
