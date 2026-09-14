@@ -1,0 +1,54 @@
+name: One-time Support Auth Hardening
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+
+      - name: Verify customer-id-only ticket ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('server/support.ts').read_text()
+          forbidden = [
+              "customer_id.eq.${user.id},customer_email.eq.${user.email}",
+              "ticket.customer_id !== user.id && ticket.customer_email !== user.email",
+          ]
+          for text in forbidden:
+              if text in s:
+                  raise SystemExit(f'Forbidden customer-email authorization fallback remains: {text}')
+          print('Support customer ownership checks are customer_id-only.')
+          PY
+
+      - name: Production build validation
+        run: |
+          npm ci
+          npm run build
+
+      - name: Remove one-time verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/one-time-support-auth-hardening.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m "chore(audit): remove one-time support verifier"
+          git push origin audit/dashboard-sync-fix
+
+# One-time verification only; self-removes after a successful production build.
