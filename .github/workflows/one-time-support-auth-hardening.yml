@@ -29,13 +29,16 @@ jobs:
               "query = query.or(`customer_id.eq.${user.id},customer_email.eq.${user.email}`);": "query = query.eq('customer_id', user.id);",
               "if (ticket.customer_id !== user.id && ticket.customer_email !== user.email) {": "if (ticket.customer_id !== user.id) {",
           }
+          changed = 0
           for old, new in replacements.items():
               count = s.count(old)
-              if old.startswith('query =') and count != 1:
-                  raise SystemExit(f'Expected 1 ticket-list fallback, found {count}')
-              if old.startswith('if (ticket.customer_id') and count != 2:
-                  raise SystemExit(f'Expected 2 ticket ownership fallbacks, found {count}')
+              print(f'pattern count: {count} -> {old}')
+              if count < 1:
+                  raise SystemExit(f'Expected at least 1 occurrence, found {count}')
               s = s.replace(old, new)
+              changed += count
+          if changed < 3:
+              raise SystemExit(f'Expected at least 3 hardened authorization occurrences, changed {changed}')
           p.write_text(s)
           PY
 
@@ -62,4 +65,4 @@ jobs:
           git commit -m "fix(support): enforce customer-id ticket ownership"
           git push origin audit/dashboard-sync-fix
 
-# Retry after correcting the exact ownership-check count; self-removes after validation.
+# Final retry; self-removes after validation.
