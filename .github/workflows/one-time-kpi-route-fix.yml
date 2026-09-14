@@ -1,0 +1,65 @@
+name: One-Time KPI Route Fix
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+  workflow_dispatch:
+
+jobs:
+  fix:
+    if: "!contains(github.event.head_commit.message, 'FIX_KPI_MANAGER_ACCESS')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Apply exact KPI authorization patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app.ts')
+          s = p.read_text(encoding='utf-8')
+          old = """// KPI Engine Routes
+          app.get('/api/kpi', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.getKpiData);
+          app.post('/api/kpi/targets', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.setKpiTarget);
+          app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.deleteKpiTarget);"""
+          new = """// KPI Engine Routes
+          // Keep KPI access aligned with the Admin Dashboard manager access policy.
+          app.get('/api/kpi', authenticateRequest, requireRole(['owner', 'admin', 'manager']), kpiModule.getKpiData);
+          app.post('/api/kpi/targets', authenticateRequest, requireRole(['owner', 'admin', 'manager']), kpiModule.setKpiTarget);
+          app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'admin', 'manager']), kpiModule.deleteKpiTarget);"""
+          if old not in s:
+              raise SystemExit('Expected KPI route block not found; refusing broad edit.')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Verify exact patch
+        run: |
+          set -euo pipefail
+          grep -F "requireRole(['owner', 'admin', 'manager']), kpiModule.getKpiData" app.ts
+          grep -F "requireRole(['owner', 'admin', 'manager']), kpiModule.setKpiTarget" app.ts
+          grep -F "requireRole(['owner', 'admin', 'manager']), kpiModule.deleteKpiTarget" app.ts
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build verification
+        run: npm run build
+
+      - name: Commit patch and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.ts .github/workflows/one-time-kpi-route-fix.yml
+          git diff --cached --check
+          git commit -m 'fix(kpi): align manager access FIX_KPI_MANAGER_ACCESS'
+          git push origin HEAD:audit/dashboard-sync-fix
