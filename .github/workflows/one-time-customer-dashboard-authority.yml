@@ -1,0 +1,81 @@
+name: One-Time Customer Dashboard Authority
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Patch customer dashboard to authoritative orders
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/Dashboards.tsx')
+          text = path.read_text()
+          old = """  const customerOrders = useMemo(() => {\n    if (!currentUser) return [];\n    return orders.filter((o) => {\n      if ((o as any).customerId && (o as any).customerId === currentUser.id) return true;\n      if (currentUser.email && (o.email || '').toLowerCase() === currentUser.email.toLowerCase()) return true;\n      return false;\n    });\n  }, [orders, currentUser]);"""
+          new = """  const [authoritativeCustomerOrders, setAuthoritativeCustomerOrders] = useState<Order[]>([]);\n  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);\n\n  useEffect(() => {\n    if (!currentUser?.id || userRole !== 'customer') {\n      setAuthoritativeCustomerOrders([]);\n      return;\n    }\n\n    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';\n    if (!token) {\n      setAuthoritativeCustomerOrders([]);\n      return;\n    }\n\n    let cancelled = false;\n    setCustomerOrdersLoading(true);\n\n    const loadCustomerOrders = async () => {\n      try {\n        const response = await fetch('/api/orders?limit=100&page=1', {\n          headers: { Authorization: `Bearer ${token}` }\n        });\n        const payload = await response.json().catch(() => null);\n        if (!response.ok || !Array.isArray(payload?.data?.orders)) {\n          throw new Error(payload?.error || 'Failed to load customer orders');\n        }\n\n        const productMap = new Map((allProducts || []).map((product: any) => [String(product.id), product]));\n        const normalized = payload.data.orders.map((row: any) => {\n          const rawStatus = String(row.status || 'pending').toLowerCase();\n          const statusMap: Record<string, Order['status']> = {\n            pending: 'Pending', confirmed: 'Confirmed', processing: 'Processing', preparing: 'Preparing',\n            packed: 'Packed', ready_for_shipping: 'Ready for Shipping', shipped: 'Shipped',\n            out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed',\n            cancelled: 'Cancelled', returned: 'Returned', refund_requested: 'Refund Requested',\n            refund_approved: 'Refund Approved', refund_completed: 'Refund Completed'\n          };\n          const shippingAddress = row.order_data?.shipping_address;\n          const items = Array.isArray(row.items) ? row.items.map((item: any) => {\n            const product = productMap.get(String(item.product_id));\n            return {\n              productId: item.product_id,\n              name: product?.name || item.product_id || 'Product',\n              price: Number(item.unit_price || 0),\n              quantity: Number(item.quantity || 0),\n              image: product?.images?.[0] || product?.image || product?.image_url\n            };\n          }) : [];\n\n          return {\n            id: row.id,\n            date: row.created_at ? new Date(row.created_at).toLocaleDateString() : '—',\n            items,\n            subtotal: Number(row.subtotal || 0),\n            shipping: Number(row.shipping_cost || 0),\n            discount: Number(row.discount_amount || 0),\n            total: Number(row.total_amount || 0),\n            status: statusMap[rawStatus] || 'Pending',\n            customerName: currentUser.name || 'Customer',\n            email: currentUser.email || '',\n            phone: currentUser.phone || '',\n            address: typeof shippingAddress === 'string' ? shippingAddress : JSON.stringify(shippingAddress || ''),\n            paymentMethod: row.payment_method || 'Not provided',\n            trackingNumber: row.order_data?.tracking_number || '',\n            paymentStatus: String(row.payment_status || 'unpaid').replace(/^./, (c: string) => c.toUpperCase())\n          } as Order;\n        });\n\n        if (!cancelled) setAuthoritativeCustomerOrders(normalized);\n      } catch (error) {\n        if (!cancelled) setAuthoritativeCustomerOrders([]);\n        console.error('Failed to load authoritative customer orders:', error);\n      } finally {\n        if (!cancelled) setCustomerOrdersLoading(false);\n      }\n    };\n\n    void loadCustomerOrders();\n    return () => { cancelled = true; };\n  }, [currentUser, userRole, allProducts]);\n\n  const customerOrders = useMemo(() => authoritativeCustomerOrders, [authoritativeCustomerOrders]);"""
+          if old not in text:
+              raise SystemExit('Customer order legacy block not found; refusing unsafe edit')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Patch customer order API to include line items
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/app/api/orders/route.ts')
+          text = path.read_text()
+          old = """    let enrichedOrders = orders || [];\n    if (user.role !== 'customer' && enrichedOrders.length > 0) {\n      const orderIds = enrichedOrders.map((order: any) => order.id);\n      const { data: items, error: itemsError } = await supabase\n        .from('zoal_order_items')\n        .select('order_id, product_id, quantity, unit_price, total_price')\n        .in('order_id', orderIds);\n      if (itemsError) return apiError(itemsError.message, 500);\n\n      const itemsByOrder = new Map<string, any[]>();\n      for (const item of items || []) {\n        const list = itemsByOrder.get(String(item.order_id)) || [];\n        list.push(item);\n        itemsByOrder.set(String(item.order_id), list);\n      }\n      enrichedOrders = enrichedOrders.map((order: any) => ({\n        ...order,\n        items: itemsByOrder.get(String(order.id)) || [],\n      }));\n    }"""
+          new = """    let enrichedOrders = orders || [];\n    if (enrichedOrders.length > 0) {\n      const orderIds = enrichedOrders.map((order: any) => order.id);\n      const { data: items, error: itemsError } = await supabase\n        .from('zoal_order_items')\n        .select('order_id, product_id, quantity, unit_price, total_price')\n        .in('order_id', orderIds);\n      if (itemsError) return apiError(itemsError.message, 500);\n\n      const itemsByOrder = new Map<string, any[]>();\n      for (const item of items || []) {\n        const list = itemsByOrder.get(String(item.order_id)) || [];\n        list.push(item);\n        itemsByOrder.set(String(item.order_id), list);\n      }\n      enrichedOrders = enrichedOrders.map((order: any) => ({\n        ...order,\n        items: itemsByOrder.get(String(order.id)) || [],\n      }));\n    }"""
+          if old not in text:
+              raise SystemExit('Order enrichment block not found; refusing unsafe edit')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Verify no customer email fallback remains
+        shell: bash
+        run: |
+          if grep -n "o.email.*currentUser.email\|currentUser.email.*o.email" src/components/Dashboards.tsx; then
+            echo "Unsafe legacy customer email-based order matching remains"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production build verification
+        run: npm run build
+
+      - name: Commit safe customer dashboard sync
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Dashboards.tsx src/app/api/orders/route.ts
+          git diff --cached --check
+          git commit -m "fix(customer): sync dashboard orders from authenticated API" || exit 0
+          git push origin HEAD:audit/dashboard-sync-fix
+
+      - name: Remove one-time workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/one-time-customer-dashboard-authority.yml
+          git commit -m "chore(audit): remove one-time customer dashboard workflow"
+          git push origin HEAD:audit/dashboard-sync-fix
