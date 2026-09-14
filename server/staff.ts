@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { getServiceSupabaseClient, getSupabaseClient } from './supabase';
 
 const getClient = () => getServiceSupabaseClient() || getSupabaseClient();
@@ -60,5 +61,123 @@ export async function createStaffLog(req: any, res: Response) {
   } catch (error) {
     console.error('createStaffLog error:', error);
     return res.status(500).json({ error: 'Failed to create staff log' });
+  }
+}
+
+/**
+ * GET /api/staff
+ * Retrieves the staff roster for the dashboard.
+ */
+export async function getStaffRoster(req: Request, res: Response) {
+  try {
+    const client = getClient();
+    if (!client) return res.status(503).json({ error: 'Database unavailable' });
+
+    const { data: staff, error } = await client
+      .from('zoal_staff_details')
+      .select(`
+        *,
+        zoal_activity_logs (
+          action,
+          timestamp
+        )
+      `)
+      .order('duty_status', { ascending: true });
+
+    if (error) throw error;
+
+    return res.json({ success: true, staff: staff || [] });
+  } catch (err: any) {
+    console.error('[getStaffRoster] Error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve staff roster.' });
+  }
+}
+
+/**
+ * PUT /api/staff
+ * Authoritatively updates order status and handles inventory lifecycle (release on cancel).
+ */
+export async function updateStaffOrder(req: Request, res: Response) {
+  try {
+    const { orderId, status } = req.body;
+    if (!orderId || !status) {
+      return res.status(400).json({ error: 'Missing orderId or status.' });
+    }
+
+    const client = getClient();
+    if (!client) return res.status(503).json({ error: 'Database unavailable' });
+
+    // 1. Fetch current order state to check for status transitions
+    const { data: order, error: fetchErr } = await client
+      .from('zoal_orders')
+      .select('status, payment_status')
+      .eq('id', orderId)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+    const oldStatus = (order.status || '').toLowerCase();
+    const newStatus = status.toLowerCase();
+
+    // 2. Perform the update
+    const updateData: any = { status: newStatus, updated_at: new Date().toISOString() };
+    
+    // Auto-update payment status for certain transitions
+    if (newStatus === 'delivered' && order.payment_status === 'unpaid') {
+      updateData.payment_status = 'paid';
+    }
+
+    const { error: updateErr } = await client
+      .from('zoal_orders')
+      .update(updateData)
+      .eq('id', orderId);
+
+    if (updateErr) throw updateErr;
+
+    // 3. INVENTORY-SAFE CANCELLATION/REFUND LIFECYCLE
+    // If transitioning TO cancelled/refunded/returned from a state that likely had reserved stock
+    const isReleasing = ['cancelled', 'refunded', 'returned'].includes(newStatus);
+    const wasActive = !['cancelled', 'refunded', 'returned', 'failed'].includes(oldStatus);
+
+    if (isReleasing && wasActive) {
+      console.log(`[Inventory] Releasing reserved stock for order ${orderId} (Status: ${oldStatus} -> ${newStatus})`);
+      
+      const { data: items } = await client
+        .from('zoal_order_items')
+        .select('product_id, quantity')
+        .eq('order_id', orderId);
+
+      if (items && items.length > 0) {
+        for (const item of items) {
+          // Atomic release using GREATEST to prevent negative reserved_quantity
+          // Note: In Supabase client we can't easily do "SET x = GREATEST(0, x - n)" 
+          // without an RPC. We'll use a fetch-and-update with a small race window, 
+          // but since this is an admin action, concurrency is lower than checkout.
+          // Ideally, we'd call an RPC.
+          
+          const { data: inv } = await client
+            .from('zoal_inventory')
+            .select('reserved_quantity')
+            .eq('product_id', item.product_id)
+            .maybeSingle();
+            
+          if (inv) {
+            const currentReserved = Number(inv.reserved_quantity || 0);
+            const newReserved = Math.max(0, currentReserved - Number(item.quantity || 0));
+            
+            await client
+              .from('zoal_inventory')
+              .update({ reserved_quantity: newReserved, updated_at: new Date().toISOString() })
+              .eq('product_id', item.product_id);
+          }
+        }
+      }
+    }
+
+    return res.json({ success: true, message: `Order ${orderId} updated to ${newStatus}.` });
+  } catch (err: any) {
+    console.error('[updateStaffOrder] Error:', err);
+    return res.status(500).json({ error: 'Failed to update order status.' });
   }
 }
