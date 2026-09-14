@@ -17,6 +17,8 @@ import {
   X
 } from 'lucide-react';
 
+import { supabaseClient } from '../lib/supabaseClient';
+
 interface StorageFile {
   name: string;
   id: string;
@@ -158,7 +160,8 @@ export default function SupabaseStoragePanel() {
     let successCount = 0;
     let failCount = 0;
 
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
 
     for (const filePath of selectedFiles) {
       try {
@@ -189,7 +192,8 @@ export default function SupabaseStoragePanel() {
   const fetchFiles = async (bucketId: string) => {
     setLoading(true);
     setError(null);
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
     try {
       const response = await fetch(`/api/storage/list?bucket=${bucketId}`, {
         headers: {
@@ -270,7 +274,8 @@ export default function SupabaseStoragePanel() {
     formData.append('file', file);
     formData.append('bucket', activeBucket);
 
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
 
     try {
       const response = await fetch('/api/storage/upload', {
@@ -303,7 +308,8 @@ export default function SupabaseStoragePanel() {
       return;
     }
 
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
 
     try {
       const response = await fetch('/api/storage/delete', {
