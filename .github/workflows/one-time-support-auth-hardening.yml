@@ -62,3 +62,5 @@ jobs:
           git diff --cached -- server/support.ts
           git commit -m "fix(support): enforce customer-id ticket ownership"
           git push origin audit/dashboard-sync-fix
+
+# Triggered manually on the existing audit branch; self-removes after validation.
