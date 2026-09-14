@@ -205,17 +205,7 @@ function AppContent() {
     return [];
   });
 
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('zoal_orders');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to restore orders list:', e);
-      }
-    }
-    return (process.env.NODE_ENV === 'production' || import.meta.env?.PROD) ? [] : SEED_MOCK_ORDERS;
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
     try {
@@ -232,10 +222,6 @@ function AppContent() {
       console.error('Failed to save wishlist:', e);
     }
   }, [wishlist]);
-
-  useEffect(() => {
-    localStorage.setItem('zoal_orders', JSON.stringify(orders));
-  }, [orders]);
 
   // Success Modal & Toast states
   const [checkoutSuccessModalOpen, setCheckoutSuccessModalOpen] = useState<boolean>(false);
@@ -260,6 +246,48 @@ function AppContent() {
     role: string;
     addresses?: any[];
   } | null>(null);
+
+  // Authoritative Order Fetching Pipeline
+  const fetchOrders = useCallback(async () => {
+    if (!currentUser) return;
+    const role = (currentUser as any).role || 'customer';
+    const isStaff = ['owner', 'admin', 'manager', 'staff'].includes(role.toLowerCase());
+    
+    // Only staff can list all orders; customers use separate logic or specific fetchers
+    if (!isStaff) return;
+
+    try {
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const res = await fetch('/api/orders', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const fetchedOrders = data.orders || data.data?.orders || [];
+        setOrders(fetchedOrders);
+        // Persist to local cache only as an optimization, never as authority
+        localStorage.setItem('zoal_orders', JSON.stringify(fetchedOrders));
+      }
+    } catch (e) {
+      console.error('[Orders] Failed to fetch authoritative records:', e);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchOrders();
+    }
+  }, [currentUser, fetchOrders]);
+
+  useEffect(() => {
+    // Sync to local cache only for session persistence/speed, not as authority
+    if (orders.length > 0) {
+      localStorage.setItem('zoal_orders', JSON.stringify(orders));
+    }
+  }, [orders]);
+
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
   const [authModalView, setAuthModalView] = useState<'login' | 'register'>('login');
   const [dashboardSubTab, setDashboardSubTab] = useState<string>('overview');
@@ -1024,24 +1052,64 @@ function AppContent() {
     }
   };
 
-  // Order workflow state modifier
-  const handleUpdateOrderStatus = (orderId: string, status: Order['status']) => {
+  // Order workflow state modifier (Authoritative Persistence)
+  const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
+    // 1. Optimistic Update
     setOrders((prevOrders) =>
       prevOrders.map((o) => (o.id === orderId ? { ...o, status } : o))
     );
 
-    // Notify Customer about status change
-    const order = orders.find(o => o.id === orderId);
-    if (order) {
-      notificationEngine.addNotification({
-        title: `Order Status Updated: ${status}`,
-        message: `Your order #${orderId} is now ${status}.`,
-        category: 'Order',
-        priority: 'medium',
-        target_role: 'customer',
-        user_id: (order as any).userId || (order as any).user_id || order.email,
-        user_email: order.email,
-        metadata: { orderId, status }
+    try {
+      // 2. Authoritative Persistence via /api/staff
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const res = await fetch('/api/staff', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          orderId,
+          status
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || error.error || 'Failed to update order status on server.');
+      }
+
+      // 3. Notify Success
+      dispatchNotification({
+        title: 'Order Updated',
+        message: `Order #${orderId} status changed to ${status}.`,
+        type: 'order'
+      });
+
+      // 4. Refresh authoritative list
+      fetchOrders();
+
+      // Notify Customer about status change (via notification engine)
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        notificationEngine.addNotification({
+          title: `Order Status Updated: ${status}`,
+          message: `Your order #${orderId} is now ${status}.`,
+          category: 'Order',
+          priority: 'medium',
+          target_role: 'customer',
+          user_id: (order as any).userId || (order as any).user_id || order.email,
+          user_email: order.email,
+          metadata: { orderId, status }
+        });
+      }
+    } catch (err: any) {
+      console.error('[Order Status Update] Error:', err);
+      // Notify Update Failure
+      dispatchNotification({
+        title: 'Update Failed',
+        message: err.message || 'Could not synchronize status with server.',
+        type: 'system'
       });
     }
   };

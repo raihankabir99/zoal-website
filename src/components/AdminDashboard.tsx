@@ -11,6 +11,7 @@ import {
   Layers, Video, MessageSquare, UploadCloud, Globe, LifeBuoy, HardDrive, Camera, Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { categoryApi } from '../lib/categoryApi';
 import { Product, Order, BusinessCategory, Question, DeliveryType, ProductVariant, Review } from '../types';
 import { useGlobalProducts, updateProductInventory, SafeImage, resolveProductImage, normalizeCategory } from '../imageRegistry';
 import { saveProductToSupabase, deleteProductFromSupabase, triggerProductFetch } from '../lib/productSync';
@@ -201,6 +202,59 @@ export default function AdminDashboard({
   const [mktProductSearch, setMktProductSearch] = useState<string>('');
   const [marketingError, setMarketingError] = useState<string | null>(null);
 
+  // Authoritative data fetching for Admin Dashboard
+  const [categories, setCategories] = useState<any[]>([]);
+  const [brands, setBrands] = useState<any[]>([]);
+  const [orderOverrides, setOrderOverrides] = useState<Record<string, any>>({});
+  const [stockHistory, setStockHistory] = useState<any[]>([]);
+  const [supplierReference, setSupplierReference] = useState<any[]>([]);
+  const [purchaseHistory, setPurchaseHistory] = useState<any[]>([]);
+  const [customerOverrides, setCustomerOverrides] = useState<Record<string, any>>({});
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [cmsSettings, setCmsSettings] = useState<any>(null);
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
+  const [subscribers, setSubscribers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchAdminBaseline = async () => {
+      try {
+        const [cats, brandsRes, cmsRes, staffRes] = await Promise.all([
+          categoryApi.list(),
+          fetch('/api/brands'),
+          fetch('/api/cms'),
+          fetch('/api/staff', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('zoal_auth_token') || ''}` }
+          })
+        ]);
+
+        setCategories(cats);
+        
+        if (brandsRes.ok) {
+          const bData = await brandsRes.json();
+          setBrands(bData.data || []);
+        }
+
+        if (cmsRes.ok) {
+          const cData = await cmsRes.json();
+          setCmsSettings(cData);
+        }
+
+        if (staffRes.ok) {
+          const sData = await staffRes.json();
+          setStaffList(sData.data || sData.staff || []);
+        }
+      } catch (e) {
+        console.error('[Admin] Baseline fetch failed:', e);
+      }
+    };
+
+    if (isAdmin) {
+      fetchAdminBaseline();
+    }
+  }, [isAdmin]);
+
   // Bulk selectors & Advanced Filters for orders
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [orderDateFilter, setOrderDateFilter] = useState<string>('');
@@ -221,292 +275,7 @@ export default function AdminDashboard({
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [activeTab, isAddProductOpen]);
-
-  // Local state for categories (loaded from localStorage or default)
-  const [categories, setCategories] = useState<any[]>(() => {
-    let list: any[] = [];
-    try {
-      const raw = localStorage.getItem('zoal_admin_categories');
-      if (raw) {
-        list = JSON.parse(raw);
-      }
-    } catch (e) {}
-
-    const defaults = [
-      { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png' },
-      { id: 'cat-2', name: 'Sudanese Bakery', slug: 'bakery', parent: null, description: 'Pillowy hearth-fired Hoboz breads, sesame crackers, and traditional Ghoriba cookies baked fresh daily.', sortOrder: 2, count: 3, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067395955_backery_snackes.jpeg' },
-      { id: 'cat-3', name: 'Traditional Organic Market', slug: 'market', parent: null, description: 'Direct-trade organic Sudanese botanical herbs, premium Gum Arabic crystals, and whole Karkadeh hibiscus blossoms.', sortOrder: 3, count: 2, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg' },
-      { id: 'cat-4', name: 'Premium Sudanese Toob', slug: 'fashion', parent: null, description: 'Hand-woven formal Toob gowns of fine organic drapes, silk threads, and geometric gold border embroidery.', sortOrder: 4, count: 1, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png' },
-      { id: 'cat-5', name: 'Luxury Men\'s Thobes', slug: 'thobes', parent: null, description: 'Master tailored premium Sudanese and Gulf thobes structured from fine imported Italian cottons.', sortOrder: 5, count: 2, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067315275_thoves.1.jpeg' },
-      { id: 'cat-6', name: 'Elite Cosmetics & Apothecary', slug: 'cosmetics', parent: null, description: 'Traditional Sudanese perfume oils, long-lasting musks, and organic botanicals.', sortOrder: 6, count: 0, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg' }
-    ];
-
-    try {
-      const existingAll = localStorage.getItem('zoal_all_collections_image');
-      if (!existingAll || existingAll.includes('/assets/') || existingAll.includes('/images/')) {
-        localStorage.setItem('zoal_all_collections_image', 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png');
-      }
-    } catch (e) {}
-
-    if (list && list.length > 0) {
-      // Normalize existing categories to reconnect Supabase Storage URLs if missing or static asset fallback
-      const normalized = list.map((c: any) => {
-        const slug = c.slug || c.id;
-        const defaultMatch = defaults.find(d => d.slug === slug || d.id === c.id);
-        if (defaultMatch) {
-          const hasValidImg = c.featuredImage && typeof c.featuredImage === 'string' && !c.featuredImage.includes('/assets/') && !c.featuredImage.includes('/images/');
-          const hasValidBanner = c.bannerImage && typeof c.bannerImage === 'string' && !c.bannerImage.includes('/assets/') && !c.bannerImage.includes('/images/');
-          
-          let resolvedImg = hasValidImg ? c.featuredImage : defaultMatch.featuredImage;
-          let resolvedBanner = hasValidBanner ? c.bannerImage : (defaultMatch.bannerImage || c.bannerImage || defaultMatch.featuredImage);
-
-          // Healing check: if images were consolidated/corrupted by previous bug, restore correct independent defaults
-          if (resolvedImg === resolvedBanner && defaultMatch.featuredImage !== defaultMatch.bannerImage) {
-            resolvedImg = defaultMatch.featuredImage;
-            resolvedBanner = defaultMatch.bannerImage;
-          }
-
-          return {
-            ...c,
-            featuredImage: resolvedImg,
-            bannerImage: resolvedBanner,
-            image: resolvedImg,
-            imageUrl: resolvedImg
-          };
-        }
-        return c;
-      });
-      try {
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(normalized));
-      } catch (e) {}
-      return normalized;
-    }
-    try {
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(defaults));
-    } catch (e) {}
-    return defaults;
-  });
-
-  // Local state for brands
-  const [brands, setBrands] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_brands');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'brand-1', name: 'ZOAL Specialty Roasters', slug: 'zoal-roasters', description: 'Elite micro-batch single-origin coffees sourced from high-altitude smallholders across Yemen and East Africa.', logoUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-2', name: 'Sudan Bakery Heritage', slug: 'bakery-heritage', description: 'Centuries-old sourdough cultures hand-kneaded by Sudanese master bakers using stone-oven wood fire hearths.', logoUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-3', name: 'Kordofan Organic Co.', slug: 'kordofan-organic', description: 'First-grade natural agricultural exports harvested directly from the rain-fed plains of Western Sudan.', logoUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-4', name: 'Artisan Sudanese Weaves', slug: 'artisan-weaves', description: 'Prestige textile workshops creating premium hand-spun organic long-staple cotton and golden thread embroidery.', logoUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=200' }
-    ];
-  });
-
-  // ENTERPRISE STATES & OVERRIDES
-  const [orderOverrides, setOrderOverrides] = useState<Record<string, {
-    timeline: { status: string; date: string; updatedBy: string }[];
-    adminNotes: string;
-    paymentStatus: 'Paid' | 'Unpaid' | 'Refunded' | 'Partially Refunded';
-    carrier: string;
-    trackingNumber: string;
-    deliveryZone: string;
-    shippingAddress: string;
-    contactName: string;
-    notes?: string;
-  }>>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_order_overrides');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_order_overrides', JSON.stringify(orderOverrides));
-  }, [orderOverrides]);
-
-  const [stockHistory, setStockHistory] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_stock_history');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'sh-1', productId: '1', productName: 'Saffron Specialty Blend Coffee', oldStock: 25, newStock: 20, adjustedBy: 'Admin', reason: 'Sales Order Fulfilled', time: new Date(Date.now() - 3600000).toLocaleString() },
-      { id: 'sh-2', productId: '2', productName: 'Artisanal Cardamom Cookies', oldStock: 12, newStock: 30, adjustedBy: 'Support Staff', reason: 'Supplier Replenishment', time: new Date(Date.now() - 14400000).toLocaleString() }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_stock_history', JSON.stringify(stockHistory));
-  }, [stockHistory]);
-
-  const [supplierReference, setSupplierReference] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_suppliers');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'sup-1', name: 'Kordofan Premium Co-Op', contactName: 'El-Hadi Ibrahim', phone: '+249 912 345678', email: 'elhadi@kordofanpremium.com', status: 'Active Partner', categories: ['Market Raw Spices', 'Organic Gum Crystals'] },
-      { id: 'sup-2', name: 'Yemeni Terraces Coffee Sourcing', contactName: 'Adnan Al-Hamdani', phone: '+967 711 234567', email: 'adnan@yemeniterraces.com', status: 'Active Partner', categories: ['Specialty Coffee Saffron'] },
-      { id: 'sup-3', name: 'Riyadh Silk & Brocade Guild', contactName: 'Fatma Al-Jasser', phone: '+966 56 769 9315', email: 'fatma.j@riyadhbrocade.com', status: 'Active Partner', categories: ['Premium Sudanese Toob', 'Luxury Men\'s Thobes'] }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_suppliers', JSON.stringify(supplierReference));
-  }, [supplierReference]);
-
-  const [purchaseHistory, setPurchaseHistory] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_purchases');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'po-501', supplierName: 'Kordofan Premium Co-Op', date: '2026-07-01', amount: 4500, status: 'Completed', items: '50kg Whole Karkadeh Flowers, 10kg Gum Arabic Tears' },
-      { id: 'po-502', supplierName: 'Yemeni Terraces Coffee Sourcing', date: '2026-07-10', amount: 12800, status: 'In Transit', items: '100kg Single-Origin Yemeni Peaberry Coffee Beans' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_purchases', JSON.stringify(purchaseHistory));
-  }, [purchaseHistory]);
-
-  const [customerOverrides, setCustomerOverrides] = useState<Record<string, {
-    status: 'active' | 'suspended';
-    notes: string;
-    addresses: string[];
-    activity: { event: string; time: string }[];
-  }>>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_customer_overrides');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_customer_overrides', JSON.stringify(customerOverrides));
-  }, [customerOverrides]);
-
-  const [staffList, setStaffList] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_staff');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'staff-1', name: 'Khalid Al-Mansoori', email: 'khalid@zoal.com', role: 'Senior Support Representative', permissions: ['Edit Catalog', 'Manage Orders'], status: 'active', lastActive: 'Active 2 mins ago' },
-      { id: 'staff-2', name: 'Sumaya Bashir', email: 'sumaya@zoal.com', role: 'Senior Artisan Supervisor', permissions: ['Edit Catalog', 'Edit Website Content'], status: 'active', lastActive: 'Active 1 hour ago' },
-      { id: 'staff-3', name: 'Amjad Suliman', email: 'amjad@zoal.com', role: 'Support Specialist', permissions: ['Manage Orders'], status: 'active', lastActive: 'Active Yesterday' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_staff', JSON.stringify(staffList));
-  }, [staffList]);
-
-  const [cmsSettings, setCmsSettings] = useState<any>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_cms');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return {
-      heroHeading: 'Sudanese Heritage & Modern Luxury Gatherings',
-      heroSubheading: 'Indulge in artisanal micro-batch single-origin Yemeni coffees, traditional wood fire breads, botanical hibiscus infusions, and premium hand-embroidered heritage gowns.',
-      heroImage: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600',
-      activeSections: {
-        hero: true,
-        featured: true,
-        categories: true,
-        brands: true,
-        slogan: true,
-        stories: true
-      },
-      flashSaleText: 'Grand Opening Privileges Code: ZOALGOLD for 15% discount site-wide.',
-      flashSalePercentage: 15,
-      flashSaleCountdown: '2026-08-31',
-      aboutContent: 'AL ZOAL is a premium boutique sanctuary celebrating Sudanese hospitality and artisanal heritage. Every coffee bean, baked crumb, herb harvest, and golden thread is curated with authentic luxury drapes.',
-      seoTitle: 'AL ZOAL | Luxury Sudanese Artisanal Roasters, Bakery & Gowns',
-      seoDesc: 'Premium Sudanese artisanal boutique. Organic market botanicals, single-origin Yemeni coffee, master-tailored Sudanese Toob & thobes with elite Saudi courier dispatch.',
-      privacyPolicy: 'We store your cryptographic session identities and personal details securely under standard GCC security laws.',
-      shippingPolicy: 'Dispatched from Dammam and Al Hofuf main warehouses using premium high-care courier express. Overnight delivery available.',
-      returnPolicy: 'Due to the custom-tailored premium nature of our Sudanese Toobs and fresh botanical market selections, items are refundable only within 7 days in pristine, unused state.'
-    };
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_cms', JSON.stringify(cmsSettings));
-  }, [cmsSettings]);
-
-  const [coupons, setCoupons] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_coupons');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'c-1', code: 'ZOALGOLD', rate: 15, type: 'percent', expiry: '2026-12-31', limit: 500, usedCount: 84 },
-      { id: 'c-2', code: 'SAUDIHERITAGE', rate: 20, type: 'percent', expiry: '2026-08-15', limit: 100, usedCount: 22 }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_coupons', JSON.stringify(coupons));
-  }, [coupons]);
-
-  const DEFAULT_CAMPAIGNS = [
-    { id: 'camp-1', name: 'Ramadan Specialty Coffee Promo', channel: 'Email & SMS', status: 'Active', target_audience: 'VIP Customers', conversion_rate: '14.2%' },
-    { id: 'camp-2', name: 'Summer Bespoke Thobe Launch', channel: 'Instagram & WhatsApp', status: 'Scheduled', target_audience: 'All Registered', conversion_rate: '8.7%' }
-  ];
-
-  const DEFAULT_SUBSCRIBERS = [
-    { id: 'sub-1', email: 'tarig@zoal.sa', name: 'Tarig Al-Sultan', status: 'Subscribed', channel: 'Email', joined_at: '2026-05-10' },
-    { id: 'sub-2', email: 'fahed@zoal.sa', name: 'Fahed M. Khartum', status: 'Subscribed', channel: 'SMS', joined_at: '2026-06-01' },
-    { id: 'sub-3', email: 'amira@zoal.sa', name: 'Amira Hassan', status: 'Subscribed', channel: 'WhatsApp', joined_at: '2026-06-15' }
-  ];
-
-  const [campaigns, setCampaigns] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_campaigns');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_CAMPAIGNS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_campaigns', JSON.stringify(campaigns));
-  }, [campaigns]);
-
-  const [banners, setBanners] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_banners');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'ban-1', title: 'Luxury Toob Collection Premiere', image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=800', link: 'fashion', status: 'active' },
-      { id: 'ban-2', title: 'Freshly Hearth-Baked Sesame Hoboz', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800', link: 'bakery', status: 'active' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_banners', JSON.stringify(banners));
-  }, [banners]);
-
-  const [subscribers, setSubscribers] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_subscribers');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_SUBSCRIBERS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_subscribers', JSON.stringify(subscribers));
-  }, [subscribers]);
+  }, [activeTab]);
 
   useEffect(() => {
     const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
@@ -2780,24 +2549,22 @@ export default function AdminDashboard({
 
   const enrichedOrders = useMemo(() => {
     return orders.map(o => {
-      const override = orderOverrides[o.id] || {};
-      const timeline = override.timeline || [
-        { status: 'Pending', date: new Date(o.date).toLocaleString(), updatedBy: 'System' },
-        ...(o.status !== 'Pending' ? [{ status: o.status, date: new Date().toLocaleString(), updatedBy: 'Admin' }] : [])
-      ];
       return {
         ...o,
-        paymentStatus: override.paymentStatus || (o.status === 'Completed' ? 'Paid' : 'Unpaid'),
-        adminNotes: override.adminNotes || '',
-        carrier: override.carrier || 'ZOAL Express',
-        trackingNumber: o.trackingNumber || override.trackingNumber || 'N/A',
-        deliveryZone: override.deliveryZone || 'Dammam Sector A',
-        shippingAddress: override.shippingAddress || 'Prince Mohammed Bin Fahd Road, Dammam, Saudi Arabia',
-        contactName: override.contactName || o.customerName,
-        timeline
+        paymentStatus: o.paymentStatus || (o.status === 'Completed' ? 'Paid' : 'Unpaid'),
+        adminNotes: o.adminNotes || '',
+        carrier: o.carrier || 'ZOAL Express',
+        trackingNumber: o.trackingNumber || 'N/A',
+        deliveryZone: (o as any).deliveryZone || 'Dammam Sector A',
+        shippingAddress: o.address || 'Prince Mohammed Bin Fahd Road, Dammam, Saudi Arabia',
+        contactName: o.customerName,
+        timeline: o.timeline || [
+          { status: 'Pending', date: new Date(o.date).toLocaleString(), updatedBy: 'System' },
+          ...(o.status !== 'Pending' ? [{ status: o.status, date: new Date().toLocaleString(), updatedBy: 'Admin' }] : [])
+        ]
       };
     });
-  }, [orders, orderOverrides]);
+  }, [orders]);
 
   const filteredOrders = useMemo(() => {
     return enrichedOrders.filter(o => {
