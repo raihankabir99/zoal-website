@@ -144,7 +144,8 @@ export async function POST(req: NextRequest) {
       total_amount: totalAmount,
       payment_status: 'unpaid',
       payment_method: body.payment_method || 'card',
-      notes: body.notes || ''
+      notes: body.notes || '',
+      order_data: { ...(body.order_data || {}), shipping_address: body.shipping_address }
     }).select().single();
 
     if (orderErr) return apiError(orderErr.message, 500);
