@@ -5108,9 +5108,10 @@ app.get('/api/ai/translations/quality/export', authenticateRequest, requireRole(
 app.get('/api/analytics/regional', authenticateRequest, requireRole(['owner', 'admin']), analyticsModule.getRegionalAnalytics);
 
 // KPI Engine Routes
-app.get('/api/kpi', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.getKpiData);
-app.post('/api/kpi/targets', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.setKpiTarget);
-app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'admin']), kpiModule.deleteKpiTarget);
+// Keep KPI access aligned with the Admin Dashboard manager access policy.
+app.get('/api/kpi', authenticateRequest, requireRole(['owner', 'admin', 'manager']), kpiModule.getKpiData);
+app.post('/api/kpi/targets', authenticateRequest, requireRole(['owner', 'admin', 'manager']), kpiModule.setKpiTarget);
+app.delete('/api/kpi/targets/:id', authenticateRequest, requireRole(['owner', 'admin', 'manager']), kpiModule.deleteKpiTarget);
 
 // Growth Analytics Routes
 app.get('/api/analytics/growth', authenticateRequest, requireRole(['owner', 'admin']), growthModule.getGrowthReports);
