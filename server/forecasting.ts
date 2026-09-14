@@ -104,8 +104,22 @@ export function getForecasts(req: Request, res: Response) {
       if (response.status === 'insufficient_history') return res.json(response);
       const generatedAt = response.generated_at;
       const snapshotRows = response.forecasts.map((f: any) => ({ metric: 'revenue', period_start: response.data_cutoff, horizon_days: f.horizon_days, actual_value: response.summary.actual_revenue, forecast_value: f.forecast_revenue, forecast_method: f.forecast_method, cutoff_at: response.data_cutoff, generated_at: generatedAt, model_version: f.model_version, data_status: 'verified', sample_size: response.history_days, accuracy_wape: response.accuracy.wape, forecast_type: 'Revenue', predicted_value: f.forecast_revenue, history_data: { actual_revenue: response.summary.actual_revenue, history_days: response.history_days, observed_days: response.observed_days, wape: response.accuracy.wape }, scenario: `Automated ${f.horizon_days}-day revenue forecast` }));
-      const { error: persistError } = await supabase.from('zoal_forecasts').insert(snapshotRows);
-      if (persistError) { console.error('Forecast snapshot persistence failed:', persistError.message); return res.status(503).json({ error: 'Forecast persistence unavailable.' }); }
+      for (const snapshot of snapshotRows) {
+        const { data: existing, error: lookupError } = await supabase
+          .from('zoal_forecasts')
+          .select('id')
+          .eq('metric', snapshot.metric)
+          .eq('period_start', snapshot.period_start)
+          .eq('horizon_days', snapshot.horizon_days)
+          .eq('model_version', snapshot.model_version)
+          .limit(1)
+          .maybeSingle();
+        if (lookupError) throw new Error(`Forecast snapshot lookup failed: ${lookupError.message}`);
+        const { error: persistError } = existing?.id
+          ? await supabase.from('zoal_forecasts').update(snapshot).eq('id', existing.id)
+          : await supabase.from('zoal_forecasts').insert(snapshot);
+        if (persistError) throw new Error(`Forecast snapshot persistence failed: ${persistError.message}`);
+      }
       return res.json(response);
     } catch (error: any) { console.error('Executive Forecast failed:', error); return res.status(503).json({ error: 'Executive Forecast unavailable.' }); }
   });
