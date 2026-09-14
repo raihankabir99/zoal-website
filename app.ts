@@ -2057,74 +2057,143 @@ async function triggerInvoiceGeneratedEmail(order: any) {
 // Global Order Expiry Checker (Phase 9: Automatically release stock if payment expires)
 setInterval(async () => {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return;
+  const dbConfigured = isSupabaseConfigured();
 
-  const client = new Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false }
-  });
+  if (connectionString) {
+    const client = new Client({
+      connectionString,
+      ssl: { rejectUnauthorized: false }
+    });
 
-  try {
-    await client.connect();
-    
-    // Find all orders in 'draft' or 'pending_payment' that have expired (older than 15 minutes) and are 'unpaid'
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    const expiredRes = await client.query(
-      `SELECT id, status FROM zoal_orders 
-       WHERE (status = 'draft' OR status = 'pending_payment') 
-       AND payment_status = 'unpaid' 
-       AND created_at < $1`,
-      [fifteenMinutesAgo]
-    );
-
-    for (const order of expiredRes.rows) {
-      // Idempotency check: Atomically mark order as failed first to prevent duplicate expiration processing
-      const statusUpdateRes = await client.query(
-        `UPDATE zoal_orders 
-         SET status = 'failed', payment_status = 'failed', updated_at = NOW(),
-             notes = COALESCE(notes, '') || ' [System: Order expired after 15 mins payment timeout. Stock released.]' 
-         WHERE id = $1 AND (status = 'draft' OR status = 'pending_payment') AND payment_status = 'unpaid'`,
-        [order.id]
+    try {
+      await client.connect();
+      
+      // Find all orders in 'draft' or 'pending_payment' that have expired (older than 15 minutes) and are 'unpaid'
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const expiredRes = await client.query(
+        `SELECT id, status FROM zoal_orders 
+         WHERE (status = 'draft' OR status = 'pending_payment') 
+         AND payment_status = 'unpaid' 
+         AND created_at < $1`,
+        [fifteenMinutesAgo]
       );
 
-      if (statusUpdateRes.rowCount === 0) {
-        continue; // Order already processed or status changed
-      }
-
-      console.log(`⏳ Auto-expiring unpaid order ${order.id} due to 15-minute payment timeout...`);
-
-      // 1. Release reserved inventory ONLY (Model A: physical quantity is unchanged)
-      const itemsRes = await client.query(
-        'SELECT product_id, quantity FROM zoal_order_items WHERE order_id = $1',
-        [order.id]
-      );
-      for (const item of itemsRes.rows) {
-        const whRes = await client.query(
-          'SELECT warehouse_id FROM zoal_inventory WHERE product_id = $1 LIMIT 1',
-          [item.product_id]
+      for (const order of expiredRes.rows) {
+        // Idempotency check: Atomically mark order as failed first to prevent duplicate expiration processing
+        const statusUpdateRes = await client.query(
+          `UPDATE zoal_orders 
+           SET status = 'failed', payment_status = 'failed', updated_at = NOW(),
+               notes = COALESCE(notes, '') || ' [System: Order expired after 15 mins payment timeout. Stock released.]' 
+           WHERE id = $1 AND (status = 'draft' OR status = 'pending_payment') AND payment_status = 'unpaid'`,
+          [order.id]
         );
-        const warehouseId = whRes.rows[0]?.warehouse_id;
-        if (warehouseId) {
-          await client.query(
-            `UPDATE zoal_inventory 
-             SET reserved_quantity = GREATEST(0, reserved_quantity - $1), 
-                 updated_at = NOW() 
-             WHERE product_id = $2 AND warehouse_id = $3`,
-            [item.quantity, item.product_id, warehouseId]
+
+        if (statusUpdateRes.rowCount === 0) {
+          continue; // Order already processed or status changed
+        }
+
+        console.log(`⏳ Auto-expiring unpaid order ${order.id} due to 15-minute payment timeout (Postgres)...`);
+
+        // 1. Release reserved inventory ONLY (Model A: physical quantity is unchanged)
+        const itemsRes = await client.query(
+          'SELECT product_id, quantity FROM zoal_order_items WHERE order_id = $1',
+          [order.id]
+        );
+        for (const item of itemsRes.rows) {
+          const whRes = await client.query(
+            'SELECT warehouse_id FROM zoal_inventory WHERE product_id = $1 LIMIT 1',
+            [item.product_id]
           );
+          const warehouseId = whRes.rows[0]?.warehouse_id;
+          if (warehouseId) {
+            await client.query(
+              `UPDATE zoal_inventory 
+               SET reserved_quantity = GREATEST(0, reserved_quantity - $1), 
+                   updated_at = NOW() 
+               WHERE product_id = $2 AND warehouse_id = $3`,
+              [item.quantity, item.product_id, warehouseId]
+            );
+          }
+        }
+
+        // 2. Mark payment transactions as failed
+        await client.query(
+          "UPDATE zoal_payment_transactions SET payment_status = 'failed', metadata = COALESCE(metadata, '{}'::jsonb) || '{\"expired\": true}'::jsonb WHERE order_id = $1 AND payment_status = 'initiated'",
+          [order.id]
+        );
+      }
+    } catch (err) {
+      console.error('Error in background order expiration task (Postgres):', err);
+    } finally {
+      await client.end().catch(() => {});
+    }
+  } else if (dbConfigured) {
+    // Fallback Supabase-based expiration checker
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
+
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { data: expiredOrders } = await supabase
+        .from('zoal_orders')
+        .select('id, status')
+        .or('status.eq.draft,status.eq.pending_payment')
+        .eq('payment_status', 'unpaid')
+        .lt('created_at', fifteenMinutesAgo);
+
+      if (expiredOrders && expiredOrders.length > 0) {
+        for (const order of expiredOrders) {
+          // Idempotency: try updating status
+          const { data: updatedOrder, error: updateErr } = await supabase
+            .from('zoal_orders')
+            .update({
+              status: 'failed',
+              payment_status: 'failed',
+              updated_at: new Date().toISOString(),
+              notes: ' [System: Order expired after 15 mins payment timeout. Stock released.]'
+            })
+            .eq('id', order.id)
+            .or('status.eq.draft,status.eq.pending_payment')
+            .eq('payment_status', 'unpaid')
+            .select();
+
+          if (updateErr || !updatedOrder || updatedOrder.length === 0) continue;
+
+          console.log(`⏳ Auto-expiring unpaid order ${order.id} due to 15-minute payment timeout (Supabase)...`);
+
+          const { data: items } = await supabase
+            .from('zoal_order_items')
+            .select('product_id, quantity')
+            .eq('order_id', order.id);
+
+          if (items) {
+            for (const item of items) {
+              const { data: inv } = await supabase
+                .from('zoal_inventory')
+                .select('reserved_quantity')
+                .eq('product_id', item.product_id)
+                .maybeSingle();
+
+              if (inv) {
+                const newReserved = Math.max(0, Number(inv.reserved_quantity || 0) - Number(item.quantity || 0));
+                await supabase
+                  .from('zoal_inventory')
+                  .update({ reserved_quantity: newReserved, updated_at: new Date().toISOString() })
+                  .eq('product_id', item.product_id);
+              }
+            }
+          }
+          
+          await supabase
+            .from('zoal_payment_transactions')
+            .update({ payment_status: 'failed' })
+            .eq('order_id', order.id)
+            .eq('payment_status', 'initiated');
         }
       }
-
-      // 2. Mark payment transactions as failed
-      await client.query(
-        "UPDATE zoal_payment_transactions SET payment_status = 'failed', metadata = COALESCE(metadata, '{}'::jsonb) || '{\"expired\": true}'::jsonb WHERE order_id = $1 AND payment_status = 'initiated'",
-        [order.id]
-      );
+    } catch (err) {
+      console.error('Error in background order expiration task (Supabase):', err);
     }
-  } catch (err) {
-    console.error('Error in background order expiration task:', err);
-  } finally {
-    await client.end();
   }
 }, 60000); // Run check every minute
 
@@ -2514,14 +2583,47 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
           });
         }
 
-        await supabase
+        // Atomic-style update with Optimistic Concurrency Check
+        const { data: updatedInv, error: updateErr } = await supabase
           .from('zoal_inventory')
           .update({
             reserved_quantity: currentReserved + qty,
             updated_at: new Date().toISOString()
           })
           .eq('product_id', uuid)
-          .eq('warehouse_id', warehouseId);
+          .eq('warehouse_id', warehouseId)
+          .eq('reserved_quantity', currentReserved) // Concurrency guard
+          .select();
+
+        if (updateErr || !updatedInv || updatedInv.length === 0) {
+          // Retry logic could be implemented here, but for now we'll fail to be safe
+          // Rollback prior items in this request
+          for (const reservedItem of reservedTracker) {
+            const { data: rollbackInv } = await supabase
+              .from('zoal_inventory')
+              .select('reserved_quantity')
+              .eq('product_id', reservedItem.uuid)
+              .eq('warehouse_id', reservedItem.warehouseId)
+              .maybeSingle();
+            if (rollbackInv) {
+              await supabase
+                .from('zoal_inventory')
+                .update({
+                  reserved_quantity: Math.max(0, Number(rollbackInv.reserved_quantity || 0) - reservedItem.quantity),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('product_id', reservedItem.uuid)
+                .eq('warehouse_id', reservedItem.warehouseId);
+            }
+          }
+
+          await supabase.from('zoal_order_items').delete().eq('order_id', orderId);
+          await supabase.from('zoal_orders').delete().eq('id', orderId);
+
+          return res.status(409).json({
+            error: `Inventory contention detected for product ${item.name || item.productId}. Please try again.`
+          });
+        }
 
         reservedTracker.push({ uuid, warehouseId, quantity: qty });
       }

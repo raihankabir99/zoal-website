@@ -98,6 +98,50 @@ export async function createProduct(req: Request, res: Response) {
       console.error('[Create Product] Supabase error:', error.message || error);
       return res.status(500).json({ error: 'Transaction failed', message: error.message || String(error) });
     }
+
+    // --- AUTHORITATIVE SYNCHRONIZATION ---
+    // Ensure zoal_products (relational) is in sync with zoal_supabase_products (jsonb)
+    try {
+      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const sku = body.sku || `ZL-${Date.now().toString().slice(-6)}`;
+
+      // Sync zoal_products
+      await supabase.from('zoal_products').upsert({
+        id: uuid,
+        category_id: body.category_id || null,
+        brand_id: body.brand_id || null,
+        name: body.name,
+        slug: slug,
+        description: body.description || '',
+        price: price,
+        sale_price: salePrice,
+        image_urls: imagesList,
+        sku: sku,
+        is_active: isActive,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+      // Sync zoal_inventory
+      await supabase.from('zoal_inventory').upsert({
+        product_id: uuid,
+        quantity: body.inventory || 0,
+        warehouse_location: body.warehouseLocation || 'Main Hub',
+        low_stock_threshold: body.lowStockThreshold || 5,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'product_id' });
+
+      // Sync zoal_product_seo
+      await supabase.from('zoal_product_seo').upsert({
+        product_id: uuid,
+        seo_title: body.seoMetaTitle || body.name,
+        meta_description: body.seoMetaDesc || body.description || '',
+        slug: slug,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'product_id' });
+    } catch (syncErr) {
+      console.warn('[Create Product] Sync warning (non-fatal):', syncErr);
+    }
+    // -------------------------------------
     logAuditEvent({ req, action: 'CREATE_PRODUCT', resourceType: 'product', resourceId: productId, afterState: completeProductJson, severity: 'INFO', metadata: { name: body.name, price, category: body.category } });
     return res.status(201).json({ success: true, message: 'Product created successfully with complete synchronization.', product: completeProductJson });
   } catch (err: any) {
@@ -141,6 +185,52 @@ export async function updateProduct(req: Request, res: Response) {
       console.error('[Update Product] Supabase error:', error.message || error);
       return res.status(500).json({ error: 'Transaction failed', message: error.message || String(error) });
     }
+
+    // --- AUTHORITATIVE SYNCHRONIZATION ---
+    // Ensure zoal_products (relational) is in sync with zoal_supabase_products (jsonb)
+    try {
+      const slug = body.slug || body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const sku = body.sku || `ZL-${Date.now().toString().slice(-6)}`;
+
+      // Sync zoal_products
+      await supabase.from('zoal_products').upsert({
+        id: uuid,
+        category_id: body.category_id || null,
+        brand_id: body.brand_id || null,
+        name: body.name,
+        slug: slug,
+        description: body.description || '',
+        price: price,
+        sale_price: salePrice,
+        image_urls: imagesList,
+        sku: sku,
+        is_active: isActive,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+      // Sync zoal_inventory
+      if (body.inventory !== undefined) {
+        await supabase.from('zoal_inventory').upsert({
+          product_id: uuid,
+          quantity: body.inventory,
+          warehouse_location: body.warehouseLocation || 'Main Hub',
+          low_stock_threshold: body.lowStockThreshold || 5,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'product_id' });
+      }
+
+      // Sync zoal_product_seo
+      await supabase.from('zoal_product_seo').upsert({
+        product_id: uuid,
+        seo_title: body.seoMetaTitle || body.name,
+        meta_description: body.seoMetaDesc || body.description || '',
+        slug: slug,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'product_id' });
+    } catch (syncErr) {
+      console.warn('[Update Product] Sync warning (non-fatal):', syncErr);
+    }
+    // -------------------------------------
     logAuditEvent({ req, action: 'UPDATE_PRODUCT', resourceType: 'product', resourceId: id, beforeState: existingRecord?.data || null, afterState: completeProductJson, severity: 'INFO', metadata: { name: body.name, price, category: body.category } });
     return res.status(200).json({ success: true, message: 'Product updated successfully with complete synchronization.', product: completeProductJson });
   } catch (err: any) {
