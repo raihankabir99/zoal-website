@@ -21,18 +21,22 @@ async function getUser(req: VercelRequest) {
 }
 
 function mapInvoice(order: any, items: any[], transaction: any) {
+  const orderId = String(order.id);
+  const configuredVat = String(process.env.ZOAL_VAT_NUMBER || process.env.VAT_NUMBER || '').trim() || null;
+
   return {
-    invoiceReference: String(order.id),
-    invoiceNumber: null,
+    // Stable internal invoice reference. This is not a claim of ZATCA issuance/compliance.
+    invoiceReference: orderId,
+    invoiceNumber: `INV-${orderId}`,
     invoiceDate: order.created_at || order.date || null,
-    orderId: String(order.id),
+    orderId,
     currency: String(order.currency || 'SAR').toUpperCase(),
     status: order.status || null,
     paymentStatus: order.payment_status || null,
     paymentMethod: order.payment_method || transaction?.payment_method || null,
     gatewayPaymentId: transaction?.gateway_payment_id || null,
     transactionId: transaction?.id || null,
-    merchantVat: null,
+    merchantVat: configuredVat,
     items: items.map((item: any) => ({
       id: item.id,
       productId: item.product_id,
