@@ -1,4 +1,4 @@
-name: Repair Brands CRUD
+name: Verify Brands CRUD
 
 on:
   pull_request:
