@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
-import { PRODUCTS, ARTICLES } from '../src/data';
+import { ARTICLES } from '../src/data';
 import { friendlyToUUID } from '../src/lib/uuidMapper';
 
 // Cache to prevent calling Gemini API or Database repeatedly for same static requests
@@ -68,11 +68,11 @@ async function getBrandingSettings(): Promise<any> {
   return defaultSettings;
 }
 
-// Helper to query products (DB + fallbacks)
+// Helper to query the authoritative product catalog
 async function getProducts(): Promise<any[]> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    return PRODUCTS;
+    return [];
   }
 
   const client = new Client({
@@ -82,25 +82,19 @@ async function getProducts(): Promise<any[]> {
 
   try {
     await client.connect();
-    const result = await client.query('SELECT data FROM zoal_supabase_products');
+    const result = await client.query('SELECT * FROM zoal_products WHERE is_active = true ORDER BY created_at DESC');
     if (result.rows.length > 0) {
-      return result.rows.map(row => {
-        try {
-          return typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-        } catch (e) {
-          return row.data;
-        }
-      });
+      return result.rows;
     }
   } catch (err: any) {
-    console.warn('⚠️ Server SEO: Error fetching products from DB, using fallback PRODUCTS:', err.message || err);
+    console.warn('⚠️ Server SEO: Error fetching authoritative products from DB; product metadata will be omitted:', err.message || err);
   } finally {
     try {
       await client.end();
     } catch (e) {}
   }
 
-  return PRODUCTS;
+  return [];
 }
 
 // Structured category info map for rich automatic meta tags
