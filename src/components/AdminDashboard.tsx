@@ -230,46 +230,9 @@ export default function AdminDashboard({
   const [gtmFeedback, setGtmFeedback] = useState<string | null>(null);
 
   // 3rd-Party Integration states
-  const [integrationsList, setIntegrationsList] = useState<any[]>([
-    {
-      id: 'int-1',
-      name: 'Stripe Global Payments',
-      provider: 'Stripe Inc.',
-      category: 'Payments',
-      status: 'Not Configured',
-      environment: 'Staging',
-      lastTested: 'Never',
-      lastUpdated: '2026-09-15',
-      baseUrl: 'https://api.stripe.com',
-      apiVersion: '2023-10-16',
-      authType: 'Bearer Token',
-      description: 'Enables global credit card, Apple Pay, and local checkout payments.',
-      webhookUrl: 'https://api.zoalgroup.com/v1/webhooks/stripe',
-      webhookEvent: 'payment.completed',
-      webhookMethod: 'POST',
-      webhookStatus: 'Inactive',
-      webhookSecret: ''
-    },
-    {
-      id: 'int-2',
-      name: 'FedEx Shipping Node',
-      provider: 'FedEx Corp',
-      category: 'Shipping',
-      status: 'Draft',
-      environment: 'Staging',
-      lastTested: 'Never',
-      lastUpdated: '2026-09-14',
-      baseUrl: 'https://apis-sandbox.fedex.com',
-      apiVersion: 'v1',
-      authType: 'OAuth',
-      description: 'Calculates real-time shipping carrier rates and generates airway bills.',
-      webhookUrl: 'https://api.zoalgroup.com/v1/webhooks/fedex',
-      webhookEvent: 'order.updated',
-      webhookMethod: 'POST',
-      webhookStatus: 'Inactive',
-      webhookSecret: ''
-    }
-  ]);
+  // UI-only registry: production integrations must come from a server-backed registry.
+  // Keep this empty until the backend/database integration phase is implemented.
+  const [integrationsList, setIntegrationsList] = useState<any[]>([]);
   const [searchIntegration, setSearchIntegration] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState<boolean>(false);
@@ -8428,7 +8391,7 @@ export default function AdminDashboard({
                                 return;
                               }
                               setGtmStatus('Draft');
-                              const actionMsg = 'Saved GTM Configuration Draft';
+                              const actionMsg = 'Saved GTM UI Draft';
                               addLog(actionMsg);
                               const auditEvent = {
                                 action: actionMsg,
@@ -8438,7 +8401,7 @@ export default function AdminDashboard({
                                 result: 'Success'
                               };
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback('Draft configuration successfully saved locally.');
+                              setGtmFeedback('Draft configuration stored in this UI session only. Backend persistence is not yet connected.');
                             }}
                             className="py-2 px-3 bg-zinc-900 border border-white/10 text-white hover:bg-zinc-800 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center"
                           >
@@ -8486,7 +8449,7 @@ export default function AdminDashboard({
                                 result: 'Success'
                               };
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback('GTM Container enabled locally. Tagging tracking scripts will load once backend service is active.');
+                              setGtmFeedback('GTM UI state enabled locally only. No GTM script or tracking has been activated.');
                             }}
                             className="py-2 px-3 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center"
                           >
@@ -8505,7 +8468,7 @@ export default function AdminDashboard({
                                 result: 'Success'
                               };
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback('GTM Container deactivated.');
+                              setGtmFeedback('GTM UI state disabled locally. No external tracking was changed.');
                             }}
                             className="py-2 px-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center col-span-2"
                           >
@@ -8537,7 +8500,7 @@ export default function AdminDashboard({
                                 result: 'Published'
                               };
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback(`Successfully published GTM tag configuration Version v${newVerNum}.`);
+                              setGtmFeedback(`GTM configuration snapshot created locally as UI preview Version v${newVerNum}. It is not published to GTM.`);
                             }}
                             className="py-2.5 px-3 bg-gold-pure text-black hover:bg-gold-light text-[10px] font-mono font-bold uppercase tracking-wider rounded-xs cursor-pointer text-center col-span-2 mt-1"
                           >
@@ -8839,7 +8802,7 @@ export default function AdminDashboard({
                   <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
                     <div className="border-b border-white/5 pb-2">
                       <h3 className="text-white text-xs font-display uppercase tracking-widest font-bold">Audit History</h3>
-                      <p className="text-zinc-500 text-[10px] uppercase font-mono mt-1">Immutable change tracing and operation telemetry</p>
+                      <p className="text-zinc-500 text-[10px] uppercase font-mono mt-1">UI-only local activity preview — server audit ledger not yet connected</p>
                     </div>
 
                     <div className="overflow-y-auto max-h-[250px]">
