@@ -3,22 +3,22 @@ import { initializeMetaPixel } from './MetaPixel';
 import { initializeGoogleAnalytics } from './GoogleAnalytics';
 import { initializeTikTokPixel } from './TikTokPixel';
 import { initializeClarity } from './Clarity';
+import { initializeGoogleTagManager } from './GoogleTagManager';
 
 export {
   initializeMetricool,
   initializeMetaPixel,
   initializeGoogleAnalytics,
   initializeTikTokPixel,
-  initializeClarity
+  initializeClarity,
+  initializeGoogleTagManager
 };
 
 export function initializeAnalytics(): void {
-  // Initialize Metricool
   initializeMetricool();
-
-  // Future-ready platforms (initialized dynamically if configuration IDs are provided)
   initializeMetaPixel();
   initializeGoogleAnalytics();
   initializeTikTokPixel();
   initializeClarity();
+  void initializeGoogleTagManager();
 }
