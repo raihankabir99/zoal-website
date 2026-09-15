@@ -60,33 +60,19 @@ jobs:
               };
             }, []);
 
-            return useMemo(() => {
-              return customProducts.filter(p => p && p.id);
-            }, [customProducts]);
+            return customProducts.filter(p => p && p.id);
           }
 '''
 
           text = text[:start] + replacement + text[end:]
+          text = text.replace("import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';", "import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';")
           registry.write_text(text, encoding='utf-8')
 
           sync = Path('src/lib/productSync.ts')
           text = sync.read_text(encoding='utf-8')
 
-          # On public catalog fetch failure, never return a stale local product cache.
-          text, count = re.subn(
-              r"return localStorage\\.getItem\\(CACHE_KEYS\\.PRODUCTS\\)\\s*\\?\\s*JSON\\.parse\\(localStorage\\.getItem\\(CACHE_KEYS\\.PRODUCTS\\)!\\)\\s*:\\s*\\[\\];",
-              "return [];",
-              text,
-              count=1,
-          )
-          if count == 0:
-              text, count = re.subn(
-                  r"return localStorage\\.getItem\\(CACHE_KEYS\\.PRODUCTS\\)[^;]*;",
-                  "return [];",
-                  text,
-                  count=1,
-              )
-
+          # Public catalog failures must not resurrect stale product cache.
+          text, count = re.subn(r"(?m)^\s*return localStorage\.getItem\(CACHE_KEYS\.PRODUCTS\).*;$", "  return [];", text, count=1)
           sync.write_text(text, encoding='utf-8')
 
           print('Patched imageRegistry.tsx and productSync.ts')
@@ -95,7 +81,7 @@ jobs:
       - name: Validate patch shape
         shell: bash
         run: |
-          grep -n "useGlobalProducts" src/imageRegistry.tsx
+          grep -n "export function useGlobalProducts" src/imageRegistry.tsx
           if grep -n "localStorage.getItem('zoal_custom_products')" src/imageRegistry.tsx; then
             echo 'ERROR: public catalog still seeds from zoal_custom_products'
             exit 1
@@ -118,3 +104,5 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "fix(store): enforce server-authoritative public product catalog"
           git push origin HEAD:audit/dashboard-sync-fix
+
+# One-time remediation trigger refresh.
