@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,47 +30,43 @@ jobs:
           start = text.index("  const categories = useMemo(() => {")
           end = text.index("  const brandsList = useMemo(() => {", start)
           new_categories = '''  const categories = useMemo(() => {
-    // Store category imagery is CMS-authoritative. Never resurrect legacy localStorage/static assets.
-    if (serverCategories === null) {
-      console.warn('[Audit] Store category API unavailable; showing authoritative empty category image state.');
-      return [{ id: 'all', name: t('store.category.all'), featuredImage: '' }];
-    }
+            // CMS/API authoritative. Never resurrect legacy localStorage/static imagery.
+            if (serverCategories === null) {
+              console.warn('[Audit] Store category API unavailable; showing empty authoritative image state.');
+              return [{ id: 'all', name: t('store.category.all'), featuredImage: '' }];
+            }
 
-    const published = serverCategories.filter((c: any) => c.status === 'Published' || c.status === undefined);
-    const list = [
-      { id: 'all', name: t('store.category.all'), featuredImage: '' },
-      ...published.map((c: any) => {
-        const catId = c.slug || c.id;
-        const key = `store.category.${catId}`;
-        const hasKey = i18n.exists(key);
-        let localizedName = hasKey ? t(key) : '';
-        if (!localizedName) {
-          localizedName = isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name);
-        }
+            const published = serverCategories.filter((c: any) => c.status === 'Published' || c.status === undefined);
+            const list = [
+              { id: 'all', name: t('store.category.all'), featuredImage: '' },
+              ...published.map((c: any) => {
+                const catId = c.slug || c.id;
+                const key = `store.category.${catId}`;
+                const hasKey = i18n.exists(key);
+                const localizedName = hasKey
+                  ? t(key)
+                  : (isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name));
+                const featuredImage = [c.featuredImage, c.image, c.imageUrl]
+                  .find((value: any) => isImgValid(value) && !value.includes('/assets/categories/')) || '';
+                return {
+                  id: catId,
+                  slug: c.slug,
+                  name: localizedName,
+                  featuredImage,
+                  bannerImage: c.bannerImage || '',
+                  image: c.image || '',
+                  imageUrl: c.imageUrl || ''
+                };
+              })
+            ];
 
-        const hasValidFeatured = c.featuredImage && isImgValid(c.featuredImage) && !c.featuredImage.includes('/assets/categories/');
-        const hasValidImage = c.image && isImgValid(c.image) && !c.image.includes('/assets/categories/');
-        const hasValidImageUrl = c.imageUrl && isImgValid(c.imageUrl) && !c.imageUrl.includes('/assets/categories/');
-
-        return {
-          id: catId,
-          slug: c.slug,
-          name: localizedName,
-          featuredImage: hasValidFeatured ? c.featuredImage : (hasValidImage ? c.image : (hasValidImageUrl ? c.imageUrl : '')),
-          bannerImage: c.bannerImage || '',
-          image: c.image || '',
-          imageUrl: c.imageUrl || ''
-        };
-      })
-    ];
-
-    const seen = new Set();
-    return list.filter((item: any) => {
-      if (!item.id || seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-  }, [serverCategories, t, isAr, i18n]);
+            const seen = new Set();
+            return list.filter((item: any) => {
+              if (!item.id || seen.has(item.id)) return false;
+              seen.add(item.id);
+              return true;
+            });
+          }, [serverCategories, t, isAr, i18n]);
 
 '''
           text = text[:start] + new_categories + text[end:]
@@ -79,71 +74,50 @@ jobs:
           start = text.index("  const brandsList = useMemo(() => {")
           end = text.index("  // Sync category filter if received as a prop", start)
           new_brands = '''  const brandsList = useMemo(() => {
-    if (serverBrands === null) {
-      console.warn('[Audit] Store brand API unavailable; showing authoritative empty brand state.');
-      return [{ id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) }];
-    }
+            if (serverBrands === null) {
+              console.warn('[Audit] Store brand API unavailable; showing empty authoritative brand state.');
+              return [{ id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) }];
+            }
 
-    const published = serverBrands.filter((b: any) => b.status === 'Published' || b.status === undefined || b.featuredToggle);
-    const list = [
-      { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) },
-      ...published.map((b: any) => ({ id: b.name || b.id, name: b.name || b.nameEn || b.nameAr || String(b.id) }))
-    ];
-    const seen = new Set();
-    return list.filter((item: any) => {
-      if (!item.id || seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-  }, [serverBrands, t]);
+            const published = serverBrands.filter((b: any) => b.status === 'Published' || b.status === undefined || b.featuredToggle);
+            const list = [
+              { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) },
+              ...published.map((b: any) => ({ id: b.name || b.id, name: b.name || b.nameEn || b.nameAr || String(b.id) }))
+            ];
+            const seen = new Set();
+            return list.filter((item: any) => {
+              if (!item.id || seen.has(item.id)) return false;
+              seen.add(item.id);
+              return true;
+            });
+          }, [serverBrands, t]);
 
 '''
           text = text[:start] + new_brands + text[end:]
 
           preset_start = text.find("  const PRESET_ASSETS = [")
           if preset_start != -1:
-            preset_end = text.index("\n\n  // Sync category filter if received as a prop", preset_start)
-            text = text[:preset_start] + text[preset_end+2:]
+              preset_end = text.find("\n\n  // Sync category filter if received as a prop", preset_start)
+              if preset_end != -1:
+                  text = text[:preset_start] + text[preset_end+2:]
 
           store.write_text(text)
 
           portfolio = Path('src/components/Portfolio.tsx')
           p = portfolio.read_text()
           p = p.replace("import { SafeImage, useGlobalProducts, resolveProductImage, normalizeCategory } from '../imageRegistry';", "import { useGlobalProducts, resolveProductImage, normalizeCategory } from '../imageRegistry';")
-          p = p.replace("import { Product } from '../types';", "import { Product } from '../types';\nimport { categoryApi } from '../lib/categoryApi';")
+          if "import { categoryApi } from '../lib/categoryApi';" not in p:
+              p = p.replace("import { Product } from '../types';", "import { Product } from '../types';\nimport { categoryApi } from '../lib/categoryApi';")
 
-          # Remove static editorial image defaults from the section configuration.
-          for value in [
-            "    defaultImg: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=1200'\n",
-            "    defaultImg: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=1200'\n",
-            "    defaultImg: '/images/collections/premium.jpeg'\n",
-            "    defaultImg: '/images/collections/market.jpeg'\n",
-            "    defaultImg: '/images/collections/thobes.jpeg'\n",
-          ]:
-            p = p.replace(value, '')
+          p = p.replace("  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const firstSectionRef", "  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const [cmsCategories, setCmsCategories] = useState<any[]>([]);\n  const firstSectionRef", 1)
 
-          old_state = "  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const firstSectionRef"
-          new_state = "  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const [cmsCategories, setCmsCategories] = useState<any[]>([]);\n  const firstSectionRef"
-          if old_state not in p:
-            raise SystemExit('Portfolio state anchor not found')
-          p = p.replace(old_state, new_state, 1)
-
-          old_effect = '''  useEffect(() => {
-    fetch('/api/homepage-editorial')
-      .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Offline or missing endpoint');
-      })
-      .then(data => {
-        if (Array.isArray(data)) {
-          setCmsBlocks(data.filter(b => b && b.status === 'published'));
-        }
-      })
-      .catch(err => {
-        console.warn('[Collection] Offline CMS fallback active:', err);
-      });
-  }, []);
-'''
+          effect_start = p.find("  useEffect(() => {\n    fetch('/api/homepage-editorial')")
+          if effect_start == -1:
+              raise SystemExit('Portfolio editorial effect anchor not found')
+          effect_end = p.find("\n  }, []);", effect_start)
+          if effect_end == -1:
+              raise SystemExit('Portfolio editorial effect end not found')
+          effect_end += len("\n  }, []);")
           new_effect = '''  useEffect(() => {
     let active = true;
 
@@ -153,120 +127,43 @@ jobs:
         throw new Error(`Editorial request failed (${res.status})`);
       })
       .then(data => {
-        if (active && Array.isArray(data)) {
-          setCmsBlocks(data.filter(b => b && b.status === 'published'));
-        }
+        if (active && Array.isArray(data)) setCmsBlocks(data.filter(b => b && b.status === 'published'));
       })
-      .catch(err => {
-        console.warn('[Collection] Editorial CMS unavailable; no static editorial image fallback will be used.', err);
-      });
+      .catch(err => console.warn('[Collection] Editorial CMS unavailable; static image fallback disabled.', err));
 
     categoryApi.list()
       .then(rows => {
         if (active) setCmsCategories(Array.isArray(rows) ? rows : []);
       })
-      .catch(err => {
-        console.warn('[Collection] Category CMS unavailable; no static category image fallback will be used.', err);
-      });
+      .catch(err => console.warn('[Collection] Category CMS unavailable; static image fallback disabled.', err));
 
     return () => {
       active = false;
     };
-  }, []);
-'''
-          if old_effect not in p:
-            raise SystemExit('Portfolio effect anchor not found')
-          p = p.replace(old_effect, new_effect, 1)
+  }, []);'''
+          p = p[:effect_start] + new_effect + p[effect_end:]
 
-          old_cms = '''    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);
-    
-    const tKey = target === 'fashion' ? 'fashion' : target;
-    
-    const defaultTitle = t(`home.scroll.${tKey}_title`, { defaultValue: '' });
-    const defaultDesc = t(`home.scroll.${tKey}_desc`, { defaultValue: '' });
-    const defaultTag = t(`home.scroll.${tKey}_tag`, { defaultValue: category.toUpperCase() });
-    
-    if (block) {
-      const title = i18n.language === 'ar' ? (block.title_ar || block.title) : block.title;
-      const description = i18n.language === 'ar' ? (block.description_ar || block.description) : block.description;
-      const tag = i18n.language === 'ar' ? (block.subtitle_ar || block.subtitle || defaultTag) : (block.subtitle || defaultTag);
-      const image = block.desktop_image || block.mobile_image;
-      return { title, description, tag, image };
-    }
-    
-    const defaultImages: Record<string, string> = {
-      coffee: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=1200',
-      bakery: '/images/collections/bakery.jpeg',
-      market: '/images/collections/market.jpeg',
-      fashion: '/images/collections/premium.jpeg',
-      thobes: '/images/collections/thobes.jpeg',
-    };
+          # Strip local/static default image maps and hardcoded collection image URLs.
+          import re
+          p = re.sub(r"\n\s*const defaultImages: Record<string, string> = \{.*?\n\s*\};\n", "\n", p, flags=re.S)
+          p = re.sub(r"\n\s*defaultImg:\s*['\"][^'\"]+['\"],?", "", p)
+          p = p.replace("src=\"https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600\"", "src={cmsBlocks.find((b: any) => b.desktop_image || b.mobile_image)?.desktop_image || cmsBlocks.find((b: any) => b.desktop_image || b.mobile_image)?.mobile_image || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.bannerImage || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.featuredImage || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.image || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.imageUrl || ''}")
 
-    return {
-      title: defaultTitle,
-      description: defaultDesc,
-      tag: defaultTag,
-      image: defaultImages[target] || '/images/collections/collection.png'
-    };
-'''
-          new_cms = '''    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);
-    const categoryCms = cmsCategories.find((c: any) => normalizeCategory(c.slug || c.name) === target);
-
-    const tKey = target === 'fashion' ? 'fashion' : target;
-    const defaultTitle = t(`home.scroll.${tKey}_title`, { defaultValue: '' });
-    const defaultDesc = t(`home.scroll.${tKey}_desc`, { defaultValue: '' });
-    const defaultTag = t(`home.scroll.${tKey}_tag`, { defaultValue: category.toUpperCase() });
-
-    const categoryImage = categoryCms?.bannerImage || categoryCms?.featuredImage || categoryCms?.image || categoryCms?.imageUrl || '';
-
-    if (block) {
-      const title = i18n.language === 'ar' ? (block.title_ar || block.title) : block.title;
-      const description = i18n.language === 'ar' ? (block.description_ar || block.description) : block.description;
-      const tag = i18n.language === 'ar' ? (block.subtitle_ar || block.subtitle || defaultTag) : (block.subtitle || defaultTag);
-      const image = block.desktop_image || block.mobile_image || categoryImage;
-      return { title, description, tag, image };
-    }
-
-    return {
-      title: defaultTitle,
-      description: defaultDesc,
-      tag: defaultTag,
-      image: categoryImage
-    };
-'''
-          if old_cms not in p:
-            raise SystemExit('Portfolio CMS content anchor not found')
-          p = p.replace(old_cms, new_cms, 1)
-
-          old_hero = '''          <ScrollZoomImage
-            src="https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600"
-            alt="The Zoal Collections Background"
-            className="w-full h-full object-cover scale-105 filter blur-[1px]"
-            priority={true}
-          />'''
-          new_hero = '''          <ScrollZoomImage
-            src={cmsBlocks.find((b: any) => b.desktop_image || b.mobile_image)?.desktop_image || cmsBlocks.find((b: any) => b.desktop_image || b.mobile_image)?.mobile_image || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.bannerImage || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.featuredImage || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.image || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.imageUrl || ''}
-            alt="The Zoal Collections Background"
-            className="w-full h-full object-cover scale-105 filter blur-[1px]"
-            priority={true}
-          />'''
-          if old_hero not in p:
-            raise SystemExit('Portfolio hero anchor not found')
-          p = p.replace(old_hero, new_hero, 1)
+          p = p.replace("    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);", "    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);\n    const categoryCms = cmsCategories.find((c: any) => normalizeCategory(c.slug || c.name) === target);")
+          p = p.replace("      image: defaultImages[target] || '/images/collections/collection.png'", "      image: categoryCms?.bannerImage || categoryCms?.featuredImage || categoryCms?.image || categoryCms?.imageUrl || ''")
+          p = p.replace("      image: block.desktop_image || block.mobile_image", "      image: block.desktop_image || block.mobile_image || categoryCms?.bannerImage || categoryCms?.featuredImage || categoryCms?.image || categoryCms?.imageUrl || ''")
 
           portfolio.write_text(p)
           print('Patched Store.tsx and Portfolio.tsx')
           PY
 
-      - name: Typecheck/build validation
+      - name: Build validation
         run: |
           test -f package.json
           npm ci --ignore-scripts
           npm run build
 
       - name: Commit patch and remove one-time workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
@@ -274,4 +171,6 @@ jobs:
           git add src/components/Store.tsx src/components/Portfolio.tsx .github/workflows/one-time-store-collection-image-authority.yml
           git diff --cached --quiet && exit 0
           git commit -m 'fix(store): remove legacy image fallbacks from storefront collections'
+          git rm .github/workflows/one-time-store-collection-image-authority.yml
+          git commit -m 'chore(audit): remove one-time storefront remediation workflow'
           git push origin HEAD:audit/dashboard-sync-fix
