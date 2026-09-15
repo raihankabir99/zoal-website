@@ -1,5 +1,42 @@
 import { NextRequest } from 'next/server';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { supabase, checkRateLimit, apiResponse, apiError, validateFields } from '../helpers';
+
+const PASSWORD_SALT_BYTES = 16;
+const PASSWORD_KEY_BYTES = 64;
+const SESSION_TOKEN_BYTES = 32;
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(PASSWORD_SALT_BYTES).toString('hex');
+  const derivedKey = scryptSync(password, salt, PASSWORD_KEY_BYTES);
+  return `scrypt$${salt}$${derivedKey.toString('hex')}`;
+}
+
+function verifyPassword(password: string, storedHash: string): { valid: boolean; needsUpgrade: boolean } {
+  if (storedHash.startsWith('scrypt$')) {
+    const [, salt, keyHex] = storedHash.split('$');
+    if (!salt || !keyHex) return { valid: false, needsUpgrade: false };
+    try {
+      const expected = Buffer.from(keyHex, 'hex');
+      const actual = scryptSync(password, salt, expected.length);
+      return {
+        valid: expected.length === actual.length && timingSafeEqual(expected, actual),
+        needsUpgrade: false
+      };
+    } catch {
+      return { valid: false, needsUpgrade: false };
+    }
+  }
+
+  // Backward-compatible verification for existing accounts. Successful legacy
+  // authentication is upgraded to scrypt immediately without changing the schema.
+  const legacyHash = Buffer.from(password).toString('base64');
+  return { valid: storedHash === legacyHash, needsUpgrade: storedHash === legacyHash };
+}
+
+function createSessionToken(): string {
+  return `TOK-${randomBytes(SESSION_TOKEN_BYTES).toString('hex')}`;
+}
 
 /**
  * POST /api/auth
@@ -17,9 +54,8 @@ export async function POST(req: NextRequest) {
       const validationErr = validateFields(body, ['firstName', 'lastName', 'email', 'phone', 'password']);
       if (validationErr) return apiError(validationErr, 400);
 
-      // Simple password hashing mockup (in production, use bcrypt/scrypt or Supabase native Auth.signUp)
-      const mockHash = Buffer.from(body.password).toString('base64');
-      const userId = 'USR-' + Math.floor(100000 + Math.random() * 900000);
+      const passwordHash = hashPassword(body.password);
+      const userId = `USR-${randomBytes(8).toString('hex')}`;
 
       const { data: newUser, error } = await supabase
         .from('zoal_users')
@@ -29,7 +65,7 @@ export async function POST(req: NextRequest) {
           last_name: body.lastName,
           email: body.email,
           phone: body.phone,
-          password_hash: mockHash,
+          password_hash: passwordHash,
           role: 'customer',
           is_verified: true
         })
@@ -38,22 +74,21 @@ export async function POST(req: NextRequest) {
 
       if (error) return apiError(error.message, 400);
 
-      // Create Session
-      const sessionToken = 'TOK-' + Math.floor(100000000 + Math.random() * 900000000);
-      await supabase.from('zoal_sessions').insert({
+      const sessionToken = createSessionToken();
+      const { error: sessionError } = await supabase.from('zoal_sessions').insert({
         token: sessionToken,
         user_id: userId,
-        expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString() // 30 days
+        expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
       });
 
+      if (sessionError) return apiError(sessionError.message, 500);
+
       return apiResponse({ user: newUser, token: sessionToken }, 201);
-    } 
-    
+    }
+
     if (action === 'login') {
       const validationErr = validateFields(body, ['email', 'password']);
       if (validationErr) return apiError(validationErr, 400);
-
-      const mockHash = Buffer.from(body.password).toString('base64');
 
       const { data: user, error } = await supabase
         .from('zoal_users')
@@ -65,12 +100,21 @@ export async function POST(req: NextRequest) {
         return apiError('Invalid email or password credentials', 401);
       }
 
-      if (user.password_hash !== mockHash) {
+      const passwordCheck = verifyPassword(body.password, user.password_hash || '');
+      if (!passwordCheck.valid) {
         return apiError('Invalid email or password credentials', 401);
       }
 
-      // Create Session Token
-      const sessionToken = 'TOK-' + Math.floor(100000000 + Math.random() * 900000000);
+      if (passwordCheck.needsUpgrade) {
+        const upgradedHash = hashPassword(body.password);
+        const { error: upgradeError } = await supabase
+          .from('zoal_users')
+          .update({ password_hash: upgradedHash })
+          .eq('id', user.id);
+        if (upgradeError) return apiError('Unable to secure account credentials', 500);
+      }
+
+      const sessionToken = createSessionToken();
       const { error: sessErr } = await supabase.from('zoal_sessions').insert({
         token: sessionToken,
         user_id: user.id,
@@ -101,7 +145,6 @@ export async function POST(req: NextRequest) {
     }
 
     return apiError('Unsupported action', 400);
-
   } catch (err: any) {
     return apiError(err.message || 'Server error', 500);
   }
