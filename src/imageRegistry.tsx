@@ -64,7 +64,7 @@ export const IMAGE_FALLBACKS: Record<string, string> = {
   '/src/assets/images/gallery-market.jpg': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
 };
 
-export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q0QUYzNyIgbGV0dGVyLXNwYWNpbmc9IjIiPlpPQUwgQVJUSVNBTkFMPC90ZXh0Pjwvc3ZnPg==';
+export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q0QUYzNyIgbGV0dGVyLXNwYWNpbmc9IjIiPlpPQUwgQVJUSVNBTEFMPC90ZXh0Pjwvc3ZnPg==';
 
 export function cleanUrlString(raw?: string | null): string {
   if (!raw || typeof raw !== 'string') return '';
@@ -1225,23 +1225,18 @@ export function useGlobalProducts(): Product[] {
       }
     })();
 
-    // DEPRECATED old merge logic:
-    // const baseProducts = [...PRODUCTS];
-    // const staticIds = new Set(PRODUCTS.map(p => p.id));
-    // const customOnly = customProducts.filter(p => p && p.id && !staticIds.has(p.id));
-    // const combined = [...baseProducts, ...customOnly].filter(p => p && p.id && !deletedStaticIds.includes(p.id));
-    
-    if (hasCache && customProducts !== PRODUCTS && customProducts.length > 0) {
+    // DEPRECATED old merge logic retained only as documentation; authoritative source is API/cache.
+    if (hasCache && customProducts !== PRODUCTS) {
       // If the API/cache contains fetched products, use ONLY the API products.
       // Never merge the static PRODUCTS array back in. This prevents deleted products from reappearing.
       sourceProducts = customProducts;
     } else {
-      // Fallback to static PRODUCTS only as the initial seed / database empty fallback
+      // Fallback to static PRODUCTS only as the initial seed before the authoritative API response exists.
       sourceProducts = [...PRODUCTS];
     }
     
-    // Combine them, filtering out any deleted static products
-    const combined = sourceProducts.filter(p => p && p.id && !deletedStaticIds.includes(p.id));
+    // Authoritative API/cache product list: do not let stale local deleted-ID state hide server products.
+    const combined = sourceProducts.filter(p => p && p.id);
     
     const seenIds = new Set<string>();
     const uniqueList: Product[] = [];
