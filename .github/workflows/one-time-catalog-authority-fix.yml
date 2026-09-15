@@ -1,0 +1,62 @@
+name: one-time catalog authority fix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Patch customer-facing catalog authority
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/imageRegistry.tsx')
+          s = p.read_text()
+
+          old = '''export function useGlobalProducts(): Product[] {\n  const [customProducts, setCustomProducts] = useState<Product[]>(() => {\n    try {\n      const raw = localStorage.getItem('zoal_custom_products');\n      if (raw) {\n        const parsed = JSON.parse(raw);\n        if (Array.isArray(parsed)) return parsed;\n      }\n    } catch {}\n    return [];\n  });'''
+          new = '''export function useGlobalProducts(): Product[] {\n  // Customer-facing catalog starts empty and is populated only by the live Product API.\n  // Never hydrate storefront products from legacy localStorage snapshots.\n  const [customProducts, setCustomProducts] = useState<Product[]>([]);'''
+          if old not in s:
+            raise SystemExit('Initial customProducts initializer pattern not found')
+          s = s.replace(old, new, 1)
+
+          old2 = '''      try {\n        const raw = localStorage.getItem('zoal_custom_products');\n        if (raw) {\n          const parsed = JSON.parse(raw);\n          setCustomProducts(Array.isArray(parsed) ? parsed : []);\n        } else {\n          setCustomProducts([]);\n        }\n      } catch (e) {\n        setCustomProducts([]);\n      }'''
+          new2 = '''      // Product catalog is refreshed exclusively by productSync.triggerProductFetch().\n      // This listener only reacts to the authoritative cache after that fetch completes.\n      setCustomProducts([]);'''
+          if old2 not in s:
+            raise SystemExit('Effect customProducts localStorage reader pattern not found')
+          s = s.replace(old2, new2, 1)
+
+          old3 = '''      let resolved = normalizeProductImages(normalizedProduct);\n      if (p.id in productOverrides) {\n        resolved = { ...resolved, ...productOverrides[p.id] };\n      }\n      if (p.id in inventoryOverrides) {'''
+          new3 = '''      // Product image fields remain authoritative from the server catalog.\n      // Local overrides may not replace customer-facing image/image_url/images/image_urls.\n      let resolved = normalizeProductImages(normalizedProduct);\n      if (p.id in productOverrides) {\n        const { images, image_urls, image, image_url, imageUrl, thumbnail, ...safeOverrides } = productOverrides[p.id] || {};\n        void images; void image_urls; void image; void image_url; void imageUrl; void thumbnail;\n        resolved = { ...resolved, ...safeOverrides };\n      }\n      if (p.id in inventoryOverrides) {'''
+          if old3 not in s:
+            raise SystemExit('Product override merge pattern not found')
+          s = s.replace(old3, new3, 1)
+
+          p.write_text(s)
+
+      - name: Verify patch
+        shell: bash
+        run: |
+          grep -n "Customer-facing catalog starts empty" src/imageRegistry.tsx
+          grep -n "Local overrides may not replace customer-facing image" src/imageRegistry.tsx
+          ! grep -n "localStorage.getItem('zoal_custom_products')" src/imageRegistry.tsx
+
+      - name: Commit patch and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/imageRegistry.tsx .github/workflows/one-time-catalog-authority-fix.yml
+          git commit -m "fix(store): enforce live catalog authority over local product cache" || exit 0
+          git rm .github/workflows/one-time-catalog-authority-fix.yml
+          git commit -m "chore(audit): remove one-time catalog authority fix"
+          git push origin audit/dashboard-sync-fix
