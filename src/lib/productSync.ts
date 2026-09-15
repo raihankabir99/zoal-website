@@ -2,11 +2,10 @@ import { Product } from '../types';
 import { notifyPoolListeners } from '../imageRegistry';
 import { supabaseClient } from './supabaseClient';
 
-// Boutique Caching Configuration
-// Store/Collection uses Supabase/API as the authoritative product source.
-// LocalStorage is only a short-lived fast-path cache / offline queue.
-const CACHE_VERSION = 'v2_db_authoritative';
-const CACHE_MAX_AGE = 0; // Always revalidate storefront products against the API.
+// Store/Collection use Supabase/API as the only catalog authority.
+// LocalStorage may retain pending write operations, but it must never seed or
+// override the customer-facing catalog with stale/unsynced product records.
+const CACHE_VERSION = 'v3_server_only_catalog';
 const CACHE_KEYS = {
   PRODUCTS: 'zoal_custom_products',
   META: 'zoal_products_cache_meta',
@@ -40,20 +39,26 @@ export interface PendingOp {
   retryCount?: number;
 }
 
+function clearCatalogCache() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(CACHE_KEYS.PRODUCTS);
+  } catch (e) {
+    console.warn('[Cache] Failed to clear product cache:', e);
+  }
+}
+
 function initializeCache() {
   if (typeof window === 'undefined') return;
   try {
-    const metaRaw = localStorage.getItem(CACHE_KEYS.META);
-    const meta: CacheMetadata | null = metaRaw ? JSON.parse(metaRaw) : null;
-    if (!meta || meta.version !== CACHE_VERSION) {
-      console.log(`[Cache] Cache version reset (${meta?.version || 'none'} -> ${CACHE_VERSION}).`);
-      localStorage.removeItem(CACHE_KEYS.PRODUCTS);
-      localStorage.setItem(CACHE_KEYS.META, JSON.stringify({
-        version: CACHE_VERSION,
-        lastFetched: 0,
-        syncInProgress: false
-      }));
-    }
+    // The legacy cache is never a storefront authority. Remove it on module
+    // initialization so useGlobalProducts cannot render stale records first.
+    clearCatalogCache();
+    localStorage.setItem(CACHE_KEYS.META, JSON.stringify({
+      version: CACHE_VERSION,
+      lastFetched: 0,
+      syncInProgress: false
+    }));
   } catch (e) {
     console.error('[Cache] Failed to initialize cache:', e);
   }
@@ -182,7 +187,7 @@ export async function triggerRetryLoop() {
 
   let freshProductsMap = new Map<string, Product>();
   try {
-    const baseRes = await fetch('/api/products');
+    const baseRes = await fetch('/api/products', { cache: 'no-store' });
     if (baseRes.ok) {
       const contentType = baseRes.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
@@ -237,41 +242,15 @@ export async function triggerRetryLoop() {
   if (remaining.length > 0) setTimeout(triggerRetryLoop, 15000);
 }
 
-function mergeProductsConflictFree(serverProducts: Product[], localProducts: Product[]): Product[] {
-  const mergedMap = new Map<string, Product>();
-  const pendingQueue = getPendingQueue();
-  const pendingSaveIds = new Set(pendingQueue.filter(op => op.type === 'save').map(op => op.productId));
-  const pendingDeleteIds = new Set(pendingQueue.filter(op => op.type === 'delete').map(op => op.productId));
-
-  // Server data is authoritative. Local data may override only for explicit unsynced writes.
-  for (const sp of serverProducts) {
-    if (sp && sp.id && !pendingDeleteIds.has(sp.id)) mergedMap.set(sp.id, sp);
-  }
-  for (const lp of localProducts) {
-    if (lp && lp.id && !pendingDeleteIds.has(lp.id)) {
-      if (!mergedMap.has(lp.id) && pendingSaveIds.has(lp.id)) mergedMap.set(lp.id, lp);
-      else if (mergedMap.has(lp.id) && pendingSaveIds.has(lp.id)) mergedMap.set(lp.id, lp);
-    }
-  }
-  return Array.from(mergedMap.values());
+// Server data is authoritative. Unsynced local product records are never merged
+// into the customer-facing catalog.
+function mergeProductsConflictFree(serverProducts: Product[], _localProducts: Product[]): Product[] {
+  return serverProducts.filter(p => p && p.id);
 }
 
-// Fetch products from the database/API. LocalStorage is only a cache/offline fallback.
+// Fetch products from the database/API. LocalStorage is not a storefront fallback.
 export async function triggerProductFetch(forceUpdate = false): Promise<Product[] | null> {
-  const meta = getCacheMeta();
-  const now = Date.now();
-
-  // CACHE_MAX_AGE is intentionally 0 for storefront authority, so this branch is
-  // retained only as a future configurable fast path.
-  if (!forceUpdate && CACHE_MAX_AGE > 0 && meta.lastFetched > 0 && (now - meta.lastFetched) < CACHE_MAX_AGE) {
-    try {
-      const cached = localStorage.getItem(CACHE_KEYS.PRODUCTS);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-  }
+  void forceUpdate;
 
   try {
     if (typeof window === 'undefined') return null;
@@ -288,35 +267,25 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
     const data = await res.json();
     const productsList = Array.isArray(data) ? data : (data && Array.isArray(data.products) ? data.products : null);
 
-    // A successful empty response is authoritative too: do not silently resurrect
-    // old/static products when the database currently has zero products.
+    // A successful response, including an empty array, completely replaces the
+    // local cache. No static or stale records can be resurrected.
     if (Array.isArray(productsList)) {
-      let finalProducts = productsList;
-      try {
-        const cachedRaw = localStorage.getItem(CACHE_KEYS.PRODUCTS);
-        if (cachedRaw) {
-          const cachedProducts = JSON.parse(cachedRaw);
-          if (Array.isArray(cachedProducts)) finalProducts = mergeProductsConflictFree(productsList, cachedProducts);
-        }
-      } catch (e) {
-        console.warn('[Cache] Error merging server and local products:', e);
-      }
-
+      const finalProducts = mergeProductsConflictFree(productsList, []);
       localStorage.setItem(CACHE_KEYS.PRODUCTS, JSON.stringify(finalProducts));
       updateCacheMeta({ lastFetched: Date.now() });
       window.dispatchEvent(new Event('storage'));
       notifyPoolListeners();
       return finalProducts;
     }
-  } catch (err) {
-    console.warn('[Cache] Failed to fetch live products, falling back to local cache:', err);
-  }
 
-  try {
-    const cached = localStorage.getItem(CACHE_KEYS.PRODUCTS);
-    return cached ? JSON.parse(cached) : null;
-  } catch (e) {
-    return null;
+    throw new Error('Product API returned an invalid payload.');
+  } catch (err) {
+    console.warn('[Cache] Failed to fetch live products; clearing catalog cache to preserve server authority:', err);
+    clearCatalogCache();
+    updateCacheMeta({ lastFetched: 0 });
+    window.dispatchEvent(new Event('storage'));
+    notifyPoolListeners();
+    return [];
   }
 }
 
@@ -324,15 +293,7 @@ export async function saveProductToSupabase(product: Product) {
   const nowStr = new Date().toISOString();
   const updatedProduct = { ...product, updatedAt: product.updatedAt || nowStr, updated_at: product.updated_at || nowStr };
 
-  const customRaw = localStorage.getItem(CACHE_KEYS.PRODUCTS);
-  let customProducts = customRaw ? JSON.parse(customRaw) : [];
-  const exists = customProducts.some((p: any) => p.id === updatedProduct.id);
-  if (exists) customProducts = customProducts.map((p: any) => p.id === updatedProduct.id ? updatedProduct : p);
-  else customProducts.unshift(updatedProduct);
-  localStorage.setItem(CACHE_KEYS.PRODUCTS, JSON.stringify(customProducts));
-  window.dispatchEvent(new Event('storage'));
-  notifyPoolListeners();
-
+  // Never publish optimistic/unsynced products into the storefront cache.
   try {
     const token = await getAuthToken();
     if (!token) throw new Error('No active Supabase session token available.');
@@ -386,14 +347,7 @@ export async function deleteProductFromSupabase(productId: string) {
   if (!productId) return false;
   console.log(`[Sync] Initiating delete for product: ${productId}`);
 
-  const customRaw = localStorage.getItem(CACHE_KEYS.PRODUCTS);
-  if (customRaw) {
-    try {
-      const customProducts = JSON.parse(customRaw);
-      if (Array.isArray(customProducts)) localStorage.setItem(CACHE_KEYS.PRODUCTS, JSON.stringify(customProducts.filter((p: any) => p && p.id !== productId)));
-    } catch (e) {}
-  }
-
+  clearCatalogCache();
   const deletedRaw = localStorage.getItem(CACHE_KEYS.DELETED_STATIC);
   try {
     const deletedIds = deletedRaw ? JSON.parse(deletedRaw) : [];
