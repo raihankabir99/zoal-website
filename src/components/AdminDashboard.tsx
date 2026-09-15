@@ -8268,25 +8268,26 @@ export default function AdminDashboard({
 
           {activeTab === 'third_party' && (
             <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="border-b border-white/10 pb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">INTEGRATIONS PLATFORM</span>
-                  <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">3RD PARTY SYSTEM WORKSPACE</h2>
+                  <span className="text-xs tracking-[0.3em] text-gold-pure uppercase font-mono block mb-1 font-semibold">INTEGRATIONS PLATFORM</span>
+                  <h2 className="text-xl md:text-2xl font-bold tracking-widest font-display uppercase text-white">3RD PARTY SYSTEM WORKSPACE</h2>
+                  <p className="text-xs text-zinc-400 font-mono mt-1">UI Preview Mode • Server persistence & production backend API integrations are not yet connected.</p>
                 </div>
                 {/* Sub Tabs Selector */}
-                <div className="flex bg-zinc-950 p-1 border border-white/5 rounded-xs">
+                <div className="flex bg-zinc-950 p-1 border border-white/10 rounded-xs self-start md:self-auto">
                   <button
                     onClick={() => setThirdPartySubTab('gtm')}
-                    className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-mono font-bold transition-all rounded-xs cursor-pointer ${
-                      thirdPartySubTab === 'gtm' ? 'bg-gold-pure text-black' : 'text-zinc-400 hover:text-white'
+                    className={`px-4 py-2 text-xs uppercase tracking-widest font-mono font-bold transition-all rounded-xs cursor-pointer ${
+                      thirdPartySubTab === 'gtm' ? 'bg-gold-pure text-black shadow-md' : 'text-zinc-400 hover:text-white'
                     }`}
                   >
                     Google Tag Manager
                   </button>
                   <button
                     onClick={() => setThirdPartySubTab('integrations')}
-                    className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-mono font-bold transition-all rounded-xs cursor-pointer ${
-                      thirdPartySubTab === 'integrations' ? 'bg-gold-pure text-black' : 'text-zinc-400 hover:text-white'
+                    className={`px-4 py-2 text-xs uppercase tracking-widest font-mono font-bold transition-all rounded-xs cursor-pointer ${
+                      thirdPartySubTab === 'integrations' ? 'bg-gold-pure text-black shadow-md' : 'text-zinc-400 hover:text-white'
                     }`}
                   >
                     3rd-Party Integrations
@@ -8297,19 +8298,27 @@ export default function AdminDashboard({
               {/* Sub-tab 1: Google Tag Manager */}
               {thirdPartySubTab === 'gtm' && (
                 <div className="space-y-6">
+                  {/* Notice Banner */}
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xs flex items-center gap-3 text-left">
+                    <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                    <p className="text-amber-300 text-xs font-mono leading-relaxed">
+                      Local UI State • Production GTM script injection & server persistence not connected
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left Area: GTM configuration Form */}
-                    <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
-                      <div className="border-b border-white/5 pb-2">
-                        <h3 className="text-white text-xs font-display uppercase tracking-widest">GTM Container Setup</h3>
-                        <p className="text-zinc-500 text-[10px] uppercase font-mono mt-1">Configure global tagging container properties</p>
+                    <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-5">
+                      <div className="border-b border-white/10 pb-3">
+                        <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">GTM Container Setup</h3>
+                        <p className="text-zinc-400 text-xs font-mono mt-1">Configure global tagging container properties (UI Draft)</p>
                       </div>
 
                       {gtmFeedback && (
-                        <div className={`p-3 text-xs font-mono border rounded-xs ${
+                        <div className={`p-3.5 text-xs font-mono border rounded-xs ${
                           gtmFeedback.includes('error') || gtmFeedback.includes('Invalid') || gtmFeedback.includes('Error')
-                            ? 'bg-red-500/5 border-red-500/20 text-red-400'
-                            : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
+                            ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                         }`}>
                           {gtmFeedback}
                         </div>
@@ -8317,7 +8326,7 @@ export default function AdminDashboard({
 
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <label className="text-zinc-400 text-[10px] block uppercase font-mono">GTM Container ID</label>
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">GTM Container ID</label>
                           <input
                             type="text"
                             value={gtmContainerId}
@@ -8326,16 +8335,16 @@ export default function AdminDashboard({
                               setGtmFeedback(null);
                             }}
                             placeholder="e.g. GTM-XXXXXX"
-                            className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono"
+                            className="w-full bg-black border border-white/15 text-gold-pure p-3 text-sm outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono font-semibold tracking-wider rounded-xs placeholder:text-zinc-600"
                           />
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Environment</label>
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Environment</label>
                           <select
                             value={gtmEnvironment}
                             onChange={(e: any) => setGtmEnvironment(e.target.value)}
-                            className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure"
+                            className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                           >
                             <option value="Production">Production</option>
                             <option value="Staging">Staging</option>
@@ -8344,11 +8353,11 @@ export default function AdminDashboard({
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Consent Mode</label>
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Consent Mode</label>
                           <select
                             value={gtmConsentMode}
                             onChange={(e: any) => setGtmConsentMode(e.target.value)}
-                            className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure"
+                            className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                           >
                             <option value="Not Configured">Not Configured</option>
                             <option value="Consent Required">Consent Required</option>
@@ -8357,15 +8366,15 @@ export default function AdminDashboard({
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Status</label>
-                          <div className="p-2.5 bg-black border border-white/5 text-xs font-mono rounded-xs flex items-center justify-between">
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Status</label>
+                          <div className="p-3 bg-black border border-white/10 text-xs font-mono rounded-xs flex items-center justify-between">
                             <span className="text-zinc-400">Current State:</span>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-bold ${
-                              gtmStatus === 'Enabled' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                              gtmStatus === 'Disabled' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                              gtmStatus === 'Draft' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                              gtmStatus === 'Ready to Test' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                              'bg-zinc-800 text-zinc-400'
+                            <span className={`px-2.5 py-1 rounded-full text-xs uppercase font-semibold font-mono border ${
+                              gtmStatus === 'Enabled' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                              gtmStatus === 'Disabled' ? 'bg-red-500/15 text-red-300 border-red-500/30' :
+                              gtmStatus === 'Draft' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' :
+                              gtmStatus === 'Ready to Test' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                              'bg-zinc-800 text-zinc-400 border-white/10'
                             }`}>
                               {gtmStatus}
                             </span>
@@ -8373,17 +8382,18 @@ export default function AdminDashboard({
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Description / Notes</label>
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Description / Notes</label>
                           <textarea
                             value={gtmDescription}
                             onChange={(e) => setGtmDescription(e.target.value)}
                             placeholder="Enter notes about tagging triggers or custom configuration variables..."
-                            className="w-full bg-black border border-white/10 text-white p-2.5 text-xs h-24 resize-none outline-none focus:border-gold-pure"
+                            className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono h-24 resize-none outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                           />
                         </div>
 
-                        {/* Actions */}
+                        {/* Action Hierarchy */}
                         <div className="grid grid-cols-2 gap-2 pt-2">
+                          {/* Primary Workflow Action */}
                           <button
                             onClick={() => {
                               if (!gtmContainerId) {
@@ -8403,10 +8413,12 @@ export default function AdminDashboard({
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
                               setGtmFeedback('Draft configuration stored in this UI session only. Backend persistence is not yet connected.');
                             }}
-                            className="py-2 px-3 bg-zinc-900 border border-white/10 text-white hover:bg-zinc-800 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center"
+                            className="py-2.5 px-3 bg-gold-pure text-black font-bold hover:bg-gold-light text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all shadow-md col-span-2 md:col-span-1"
                           >
                             Save Draft
                           </button>
+
+                          {/* Secondary Action: Validate */}
                           <button
                             onClick={() => {
                               if (!gtmContainerId) {
@@ -8420,18 +8432,22 @@ export default function AdminDashboard({
                                 setGtmFeedback('Validation Success: GTM Container ID format is perfectly valid (GTM-XXXXXX).');
                               }
                             }}
-                            className="py-2 px-3 bg-zinc-900 border border-white/10 text-white hover:bg-zinc-800 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center"
+                            className="py-2.5 px-3 bg-zinc-900 border border-white/20 text-zinc-200 hover:bg-zinc-800 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
                           >
                             Validate
                           </button>
+
+                          {/* Secondary Action: Test */}
                           <button
                             onClick={() => {
                               setGtmFeedback('Connection testing will be available after backend integration is implemented.');
                             }}
-                            className="py-2 px-3 bg-zinc-900 border border-white/10 text-white hover:bg-zinc-800 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center"
+                            className="py-2.5 px-3 bg-zinc-900 border border-white/20 text-zinc-200 hover:bg-zinc-800 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
                           >
                             Test
                           </button>
+
+                          {/* State Control: Enable */}
                           <button
                             onClick={() => {
                               if (!gtmContainerId) {
@@ -8439,7 +8455,7 @@ export default function AdminDashboard({
                                 return;
                               }
                               setGtmStatus('Enabled');
-                              const actionMsg = 'Enabled GTM Tag Container';
+                              const actionMsg = 'Enabled GTM Tag Container (UI Local)';
                               addLog(actionMsg);
                               const auditEvent = {
                                 action: actionMsg,
@@ -8451,14 +8467,16 @@ export default function AdminDashboard({
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
                               setGtmFeedback('GTM UI state enabled locally only. No GTM script or tracking has been activated.');
                             }}
-                            className="py-2 px-3 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center"
+                            className="py-2.5 px-3 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
                           >
                             Enable
                           </button>
+
+                          {/* State Control: Disable */}
                           <button
                             onClick={() => {
                               setGtmStatus('Disabled');
-                              const actionMsg = 'Disabled GTM Tag Container';
+                              const actionMsg = 'Disabled GTM Tag Container (UI Local)';
                               addLog(actionMsg);
                               const auditEvent = {
                                 action: actionMsg,
@@ -8470,10 +8488,12 @@ export default function AdminDashboard({
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
                               setGtmFeedback('GTM UI state disabled locally. No external tracking was changed.');
                             }}
-                            className="py-2 px-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center col-span-2"
+                            className="py-2.5 px-3 bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2"
                           >
                             Disable
                           </button>
+
+                          {/* Advanced/Publishing Milestone */}
                           <button
                             onClick={() => {
                               if (!gtmContainerId) {
@@ -8484,55 +8504,58 @@ export default function AdminDashboard({
                               const newVerNum = gtmVersions.length + 1;
                               const newVer = {
                                 version: `v${newVerNum}`,
-                                status: 'Published',
+                                status: 'Draft Snapshot',
                                 createdBy: currentUser?.name || 'Admin',
                                 createdAt: new Date().toLocaleString(),
                                 publishedAt: new Date().toLocaleString()
                               };
                               setGtmVersions(prev => [newVer, ...prev]);
-                              const actionMsg = `Published GTM Configuration v${newVerNum}`;
+                              const actionMsg = `Created GTM Configuration Snapshot v${newVerNum}`;
                               addLog(actionMsg);
                               const auditEvent = {
                                 action: actionMsg,
                                 user: currentUser?.name || 'Admin',
                                 timestamp: new Date().toLocaleString(),
                                 environment: gtmEnvironment,
-                                result: 'Published'
+                                result: 'Snapshot Created'
                               };
                               setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback(`GTM configuration snapshot created locally as UI preview Version v${newVerNum}. It is not published to GTM.`);
+                              setGtmFeedback(`GTM configuration snapshot created locally as UI preview Version v${newVerNum}. It is not published to production GTM.`);
                             }}
-                            className="py-2.5 px-3 bg-gold-pure text-black hover:bg-gold-light text-[10px] font-mono font-bold uppercase tracking-wider rounded-xs cursor-pointer text-center col-span-2 mt-1"
+                            className="py-3 px-3 bg-gradient-to-r from-amber-400 via-gold-pure to-amber-500 text-black font-extrabold text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 mt-1 shadow-lg hover:brightness-110"
                           >
-                            Publish Version
+                            Publish Version (Local Snapshot)
                           </button>
                         </div>
                       </div>
                     </div>
 
                     {/* Right Area: GTM Versions history Table */}
-                    <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs col-span-2 space-y-4 flex flex-col">
-                      <div className="border-b border-white/5 pb-2">
-                        <h3 className="text-white text-xs font-display uppercase tracking-widest font-bold">GTM Version History</h3>
-                        <p className="text-zinc-500 text-[10px] uppercase font-mono mt-1">Audited version snapshots and publish milestones</p>
+                    <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs col-span-2 space-y-4 flex flex-col">
+                      <div className="border-b border-white/10 pb-3">
+                        <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">GTM Version History</h3>
+                        <p className="text-zinc-400 text-xs font-mono mt-1">Audited version snapshots (UI Drafts)</p>
                       </div>
 
                       <div className="flex-grow overflow-auto min-h-[300px]">
                         {gtmVersions.length === 0 ? (
-                          <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2 border border-dashed border-white/5 rounded-xs">
-                            <span className="text-zinc-600 text-2xl">⚡</span>
-                            <span className="text-zinc-500 text-xs font-mono">No GTM configuration versions yet.</span>
+                          <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 border border-dashed border-white/10 rounded-xs">
+                            <Clock className="w-8 h-8 text-zinc-600 mb-1" />
+                            <h4 className="text-white text-xs font-mono font-bold uppercase tracking-wider">No GTM Draft Versions Recorded</h4>
+                            <p className="text-zinc-400 text-xs font-mono max-w-md">
+                              Click &quot;Publish Version (Local Snapshot)&quot; in the GTM Container Setup panel to create a local configuration snapshot.
+                            </p>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto border border-white/5 rounded-xs">
-                            <table className="w-full text-left text-[10px] font-mono">
-                              <thead className="bg-white/5 text-zinc-500 uppercase tracking-widest">
+                          <div className="overflow-x-auto border border-white/10 rounded-xs">
+                            <table className="w-full text-left text-xs font-mono">
+                              <thead className="bg-white/5 text-zinc-400 uppercase tracking-wider border-b border-white/10">
                                 <tr>
                                   <th className="p-3">Version</th>
                                   <th className="p-3">Status</th>
                                   <th className="p-3">Created By</th>
                                   <th className="p-3">Created At</th>
-                                  <th className="p-3">Published At</th>
+                                  <th className="p-3">Snapshot Date</th>
                                   <th className="p-3 text-right">Action</th>
                                 </tr>
                               </thead>
@@ -8541,28 +8564,28 @@ export default function AdminDashboard({
                                   <tr key={idx} className="hover:bg-white/5 transition-colors">
                                     <td className="p-3 font-bold text-gold-pure">{v.version}</td>
                                     <td className="p-3">
-                                      <span className="px-2 py-0.5 rounded-full text-[8px] uppercase font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/10">
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs uppercase font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
                                         {v.status}
                                       </span>
                                     </td>
                                     <td className="p-3">{v.createdBy}</td>
-                                    <td className="p-3 text-zinc-500">{v.createdAt}</td>
+                                    <td className="p-3 text-zinc-400">{v.createdAt}</td>
                                     <td className="p-3 text-zinc-400">{v.publishedAt}</td>
                                     <td className="p-3 text-right space-x-2">
                                       <button
                                         onClick={() => {
-                                          setGtmFeedback(`Viewing snapshot properties of published release ${v.version}. (UI Read-only)`);
+                                          setGtmFeedback(`Viewing UI snapshot properties of release ${v.version}. (UI Read-only)`);
                                         }}
-                                        className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                                        className="text-zinc-400 hover:text-white transition-colors cursor-pointer px-2 py-1"
                                       >
                                         View
                                       </button>
                                       <button
                                         onClick={() => {
                                           setGtmContainerId('GTM-ZOALHQ');
-                                          setGtmFeedback(`Rollback requested: Restored configuration workspace to snapshot ${v.version}.`);
+                                          setGtmFeedback(`UI Draft Rollback: Restored local workspace form state to snapshot ${v.version}.`);
                                         }}
-                                        className="text-gold-pure hover:underline transition-all cursor-pointer"
+                                        className="text-gold-pure border border-gold-pure/30 hover:bg-gold-pure/10 px-2.5 py-1 rounded-xs font-semibold transition-all cursor-pointer"
                                       >
                                         Restore
                                       </button>
@@ -8582,8 +8605,16 @@ export default function AdminDashboard({
               {/* Sub-tab 2: 3rd-Party Integrations */}
               {thirdPartySubTab === 'integrations' && (
                 <div className="space-y-6">
+                  {/* Notice Banner */}
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xs flex items-center gap-3 text-left">
+                    <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                    <p className="text-amber-300 text-xs font-mono leading-relaxed">
+                      UI Preview • Server Integration API Not Connected. Integrations configured here exist in local session state only.
+                    </p>
+                  </div>
+
                   {/* Controls Bar */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-zinc-950 p-4 border border-white/5 rounded-xs">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-zinc-950 p-4 border border-white/10 rounded-xs">
                     <div className="flex-1 flex flex-col sm:flex-row gap-2">
                       {/* Search */}
                       <div className="relative flex-1">
@@ -8593,7 +8624,7 @@ export default function AdminDashboard({
                           value={searchIntegration}
                           onChange={(e) => setSearchIntegration(e.target.value)}
                           placeholder="Search integrations by name or provider..."
-                          className="w-full bg-black border border-white/10 text-white pl-9 pr-4 py-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                          className="w-full bg-black border border-white/15 text-white pl-9 pr-4 py-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                         />
                       </div>
                       {/* Filter Category */}
@@ -8601,7 +8632,7 @@ export default function AdminDashboard({
                         <select
                           value={filterCategory}
                           onChange={(e) => setFilterCategory(e.target.value)}
-                          className="bg-black border border-white/10 text-white px-3 py-2.5 text-xs outline-none focus:border-gold-pure rounded-xs appearance-none min-w-[140px] pr-8"
+                          className="bg-black border border-white/15 text-white px-3 py-2.5 text-xs font-mono outline-none focus:border-gold-pure rounded-xs appearance-none min-w-[150px] pr-8"
                         >
                           <option value="All">All Categories</option>
                           <option value="Payments">Payments</option>
@@ -8640,200 +8671,245 @@ export default function AdminDashboard({
                         setIntegrationFeedback(null);
                         setIsAddIntegrationOpen(true);
                       }}
-                      className="py-2.5 px-4 bg-gold-pure text-black font-bold text-[10px] uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2.5 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                     >
-                      <Plus className="w-3.5 h-3.5" /> Add Integration
+                      <Plus className="w-4 h-4" /> Add Integration
                     </button>
                   </div>
 
                   {integrationFeedback && (
-                    <div className="p-3 text-xs font-mono border rounded-xs bg-emerald-500/5 border-emerald-500/20 text-emerald-400">
+                    <div className="p-3.5 text-xs font-mono border rounded-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-300">
                       {integrationFeedback}
                     </div>
                   )}
 
                   {/* Integrations Table Grid */}
-                  <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
-                    <div className="border-b border-white/5 pb-2">
-                      <h3 className="text-white text-xs font-display uppercase tracking-widest font-bold">Integration Registry</h3>
-                      <p className="text-zinc-500 text-[10px] uppercase font-mono mt-1">Federated ecosystem configurations & API mappings</p>
+                  <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-4">
+                    <div className="border-b border-white/10 pb-3">
+                      <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">Integration Registry</h3>
+                      <p className="text-zinc-400 text-xs font-mono mt-1">Federated ecosystem configurations & API mappings (UI Preview)</p>
                     </div>
 
-                    <div className="overflow-x-auto border border-white/5 rounded-xs">
-                      <table className="w-full text-left text-[10px] font-mono">
-                        <thead className="bg-white/5 text-zinc-500 uppercase tracking-widest">
-                          <tr>
-                            <th className="p-3">Integration</th>
-                            <th className="p-3">Provider</th>
-                            <th className="p-3">Category</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3">Environment</th>
-                            <th className="p-3">Last Tested</th>
-                            <th className="p-3">Last Updated</th>
-                            <th className="p-3 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5 text-zinc-300">
-                          {integrationsList
-                            .filter(item => {
-                              const matchesSearch = item.name.toLowerCase().includes(searchIntegration.toLowerCase()) || 
-                                                    item.provider.toLowerCase().includes(searchIntegration.toLowerCase());
-                              const matchesCat = filterCategory === 'All' || item.category === filterCategory;
-                              return matchesSearch && matchesCat;
-                            })
-                            .map((item) => (
-                              <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                                <td className="p-3">
-                                  <div>
-                                    <span className="font-bold text-white block text-[11px]">{item.name}</span>
-                                    <span className="text-zinc-500 text-[9px] block max-w-[240px] truncate mt-0.5">{item.description}</span>
-                                  </div>
-                                </td>
-                                <td className="p-3 text-zinc-400 font-bold">{item.provider}</td>
-                                <td className="p-3 text-zinc-500 uppercase">{item.category}</td>
-                                <td className="p-3">
-                                  <span className={`px-2 py-0.5 rounded-full text-[8px] uppercase font-bold ${
-                                    item.status === 'Connected' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' :
-                                    item.status === 'Draft' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                                    item.status === 'Testing' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                                    item.status === 'Error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                                    item.status === 'Disabled' ? 'bg-zinc-800 text-zinc-500 border border-white/5' :
-                                    'bg-zinc-900 text-zinc-400 border border-white/5'
-                                  }`}>
-                                    {item.status}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-zinc-400">{item.environment}</td>
-                                <td className="p-3 text-zinc-500">{item.lastTested}</td>
-                                <td className="p-3 text-zinc-500">{item.lastUpdated}</td>
-                                <td className="p-3 text-right space-x-2">
-                                  <button
-                                    onClick={() => {
-                                      setIntegrationFeedback(`View: ${item.name} is configured via provider ${item.provider}. (UI Preview Mode)`);
-                                    }}
-                                    className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                                  >
-                                    View
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingIntegration(item);
-                                      setIntegrationForm({ ...item });
-                                      setIntegrationFeedback(null);
-                                      setIsAddIntegrationOpen(true);
-                                    }}
-                                    className="text-gold-pure hover:underline cursor-pointer"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setIntegrationFeedback("Connection testing will be available after backend integration is implemented.");
-                                    }}
-                                    className="text-zinc-400 hover:text-white cursor-pointer"
-                                  >
-                                    Test
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const updated = integrationsList.map(i => i.id === item.id ? { ...i, status: i.status === 'Disabled' ? 'Connected' : 'Disabled' } : i);
-                                      setIntegrationsList(updated);
-                                      const newStatus = item.status === 'Disabled' ? 'Connected' : 'Disabled';
-                                      addLog(`${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`);
-                                      const auditEvent = {
-                                        action: `${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`,
-                                        user: currentUser?.name || 'Admin',
-                                        timestamp: new Date().toLocaleString(),
-                                        environment: item.environment,
-                                        result: 'Success'
-                                      };
-                                      setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                                    }}
-                                    className="text-zinc-400 hover:text-white cursor-pointer"
-                                  >
-                                    {item.status === 'Disabled' ? 'Enable' : 'Disable'}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setConfirmConfig({
-                                        title: 'DELETE INTEGRATION CONFIG?',
-                                        message: `This removes the integration configuration only. It does not delete products, customers, orders, inventory, or other ZOAL data. Are you sure you want to delete "${item.name}"?`,
-                                        confirmLabel: 'DELETE CONFIG',
-                                        onConfirm: () => {
-                                          setIntegrationsList(prev => prev.filter(i => i.id !== item.id));
-                                          addLog(`Deleted integration ${item.name}`);
-                                          const auditEvent = {
-                                            action: `Deleted integration ${item.name}`,
-                                            user: currentUser?.name || 'Admin',
-                                            timestamp: new Date().toLocaleString(),
-                                            environment: item.environment,
-                                            result: 'Deleted'
-                                          };
-                                          setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                                          setConfirmConfig(null);
-                                          setIntegrationFeedback(`Successfully removed integration configuration: ${item.name}`);
-                                        }
-                                      });
-                                    }}
-                                    className="text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                                  >
-                                    Delete
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {integrationsList.filter(item => {
+                      const matchesSearch = item.name.toLowerCase().includes(searchIntegration.toLowerCase()) || 
+                                            item.provider.toLowerCase().includes(searchIntegration.toLowerCase());
+                      const matchesCat = filterCategory === 'All' || item.category === filterCategory;
+                      return matchesSearch && matchesCat;
+                    }).length === 0 ? (
+                      <div className="py-12 px-6 border border-dashed border-white/10 rounded-xs flex flex-col items-center justify-center text-center space-y-3">
+                        <Plug className="w-10 h-10 text-zinc-600" />
+                        <h4 className="text-white text-sm font-mono font-bold uppercase tracking-wider">No Integrations Configured</h4>
+                        <p className="text-zinc-400 text-xs font-mono max-w-md">
+                          No third-party integration nodes are currently configured in this session. Configure local integration drafts using the button below.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setIntegrationForm({
+                              name: '',
+                              provider: '',
+                              category: 'Payments',
+                              description: '',
+                              environment: 'Staging',
+                              baseUrl: '',
+                              apiVersion: '',
+                              authType: 'None',
+                              apiKey: '',
+                              clientId: '',
+                              clientSecret: '',
+                              accessToken: '',
+                              refreshToken: '',
+                              webhookUrl: '',
+                              webhookEvent: 'order.created',
+                              webhookMethod: 'POST',
+                              webhookStatus: 'Inactive',
+                              webhookSecret: ''
+                            });
+                            setEditingIntegration(null);
+                            setIntegrationFeedback(null);
+                            setIsAddIntegrationOpen(true);
+                          }}
+                          className="mt-2 py-2 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Integration Node
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border border-white/10 rounded-xs">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead className="bg-white/5 text-zinc-400 uppercase tracking-wider border-b border-white/10">
+                            <tr>
+                              <th className="p-3">Integration</th>
+                              <th className="p-3">Provider</th>
+                              <th className="p-3">Category</th>
+                              <th className="p-3">Status</th>
+                              <th className="p-3">Environment</th>
+                              <th className="p-3">Last Tested</th>
+                              <th className="p-3">Last Updated</th>
+                              <th className="p-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 text-zinc-300">
+                            {integrationsList
+                              .filter(item => {
+                                const matchesSearch = item.name.toLowerCase().includes(searchIntegration.toLowerCase()) || 
+                                                      item.provider.toLowerCase().includes(searchIntegration.toLowerCase());
+                                const matchesCat = filterCategory === 'All' || item.category === filterCategory;
+                                return matchesSearch && matchesCat;
+                              })
+                              .map((item) => (
+                                <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                  <td className="p-3">
+                                    <div>
+                                      <span className="font-bold text-white block text-xs">{item.name}</span>
+                                      <span className="text-zinc-400 text-xs block max-w-[240px] truncate mt-0.5">{item.description}</span>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-zinc-300 font-bold">{item.provider}</td>
+                                  <td className="p-3 text-zinc-400 uppercase">{item.category}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2.5 py-1 rounded-full text-xs uppercase font-semibold border ${
+                                      item.status === 'Connected' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                                      item.status === 'Draft' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' :
+                                      item.status === 'Testing' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                                      item.status === 'Error' ? 'bg-red-500/15 text-red-300 border-red-500/30' :
+                                      'bg-zinc-800 text-zinc-400 border-white/10'
+                                    }`}>
+                                      {item.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-zinc-400">{item.environment}</td>
+                                  <td className="p-3 text-zinc-400">{item.lastTested}</td>
+                                  <td className="p-3 text-zinc-400">{item.lastUpdated}</td>
+                                  <td className="p-3 text-right space-x-2">
+                                    <button
+                                      onClick={() => {
+                                        setIntegrationFeedback(`View: ${item.name} is configured via provider ${item.provider}. (UI Preview Mode)`);
+                                      }}
+                                      className="text-zinc-400 hover:text-white transition-colors cursor-pointer px-1.5 py-1"
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingIntegration(item);
+                                        setIntegrationForm({ ...item });
+                                        setIntegrationFeedback(null);
+                                        setIsAddIntegrationOpen(true);
+                                      }}
+                                      className="text-gold-pure hover:underline cursor-pointer px-1.5 py-1 font-semibold"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setIntegrationFeedback("Connection testing will be available after backend integration is implemented.");
+                                      }}
+                                      className="text-zinc-400 hover:text-white cursor-pointer px-1.5 py-1"
+                                    >
+                                      Test
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const updated = integrationsList.map(i => i.id === item.id ? { ...i, status: i.status === 'Disabled' ? 'Connected' : 'Disabled' } : i);
+                                        setIntegrationsList(updated);
+                                        const newStatus = item.status === 'Disabled' ? 'Connected' : 'Disabled';
+                                        addLog(`${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`);
+                                        const auditEvent = {
+                                          action: `${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`,
+                                          user: currentUser?.name || 'Admin',
+                                          timestamp: new Date().toLocaleString(),
+                                          environment: item.environment,
+                                          result: 'Success'
+                                        };
+                                        setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                                      }}
+                                      className="text-zinc-400 hover:text-white cursor-pointer px-1.5 py-1"
+                                    >
+                                      {item.status === 'Disabled' ? 'Enable' : 'Disable'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setConfirmConfig({
+                                          title: 'DELETE INTEGRATION CONFIG?',
+                                          message: `This removes the integration configuration only. It does not delete products, customers, orders, inventory, or other ZOAL data. Are you sure you want to delete "${item.name}"?`,
+                                          confirmLabel: 'DELETE CONFIG',
+                                          onConfirm: () => {
+                                            setIntegrationsList(prev => prev.filter(i => i.id !== item.id));
+                                            addLog(`Deleted integration ${item.name}`);
+                                            const auditEvent = {
+                                              action: `Deleted integration ${item.name}`,
+                                              user: currentUser?.name || 'Admin',
+                                              timestamp: new Date().toLocaleString(),
+                                              environment: item.environment,
+                                              result: 'Deleted'
+                                            };
+                                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                                            setConfirmConfig(null);
+                                            setIntegrationFeedback(`Successfully removed integration configuration: ${item.name}`);
+                                          }
+                                        });
+                                      }}
+                                      className="text-red-400 hover:text-red-300 transition-colors cursor-pointer px-1.5 py-1 font-semibold"
+                                    >
+                                      Delete
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
 
                   {/* Failure Isolation Warning Callout Card */}
-                  <div className="bg-red-950/15 border border-red-500/20 p-5 rounded-xs flex gap-3.5 items-start text-left">
-                    <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30 text-red-400 text-xs font-mono font-bold shrink-0">!</div>
+                  <div className="bg-red-950/20 border border-red-500/30 p-5 rounded-xs flex gap-3.5 items-start text-left">
+                    <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/40 text-red-300 text-xs font-mono font-bold shrink-0">!</div>
                     <div>
-                      <h4 className="text-red-400 text-xs font-display uppercase tracking-widest font-bold">Failure Isolation Protocol</h4>
-                      <p className="text-zinc-400 text-[11px] leading-relaxed mt-1">
+                      <h4 className="text-red-300 text-xs font-display uppercase tracking-widest font-bold">Failure Isolation Protocol</h4>
+                      <p className="text-zinc-300 text-xs leading-relaxed mt-1">
                         Third-party integrations must remain isolated from core ZOAL operations. An integration failure must not interrupt storefront, checkout, orders, inventory, or customer services.
                       </p>
                     </div>
                   </div>
 
                   {/* Audit History Panel */}
-                  <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
-                    <div className="border-b border-white/5 pb-2">
-                      <h3 className="text-white text-xs font-display uppercase tracking-widest font-bold">Audit History</h3>
-                      <p className="text-zinc-500 text-[10px] uppercase font-mono mt-1">UI-only local activity preview — server audit ledger not yet connected</p>
+                  <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-4">
+                    <div className="border-b border-white/10 pb-3">
+                      <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">Audit & Activity Log</h3>
+                      <p className="text-zinc-400 text-xs font-mono mt-1">UI-only local activity preview — server audit ledger not yet connected</p>
                     </div>
 
                     <div className="overflow-y-auto max-h-[250px]">
                       {integrationAuditLogs.length === 0 ? (
-                        <div className="py-8 flex flex-col items-center justify-center text-center space-y-1.5 border border-dashed border-white/5 rounded-xs">
-                          <span className="text-zinc-600 text-xl">📜</span>
-                          <span className="text-zinc-500 text-xs font-mono">No integration audit events yet.</span>
+                        <div className="py-8 flex flex-col items-center justify-center text-center space-y-2 border border-dashed border-white/10 rounded-xs">
+                          <FileText className="w-6 h-6 text-zinc-600 mb-1" />
+                          <span className="text-zinc-400 text-xs font-mono">No local activity logged yet in this session.</span>
                         </div>
                       ) : (
-                        <div className="border border-white/5 rounded-xs">
-                          <table className="w-full text-left text-[9px] font-mono">
-                            <thead className="bg-white/5 text-zinc-500 uppercase tracking-widest">
+                        <div className="border border-white/10 rounded-xs">
+                          <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-white/5 text-zinc-400 uppercase tracking-wider border-b border-white/10">
                               <tr>
-                                <th className="p-2.5">Action</th>
-                                <th className="p-2.5">User</th>
-                                <th className="p-2.5">Timestamp</th>
-                                <th className="p-2.5">Environment</th>
-                                <th className="p-2.5">Result</th>
+                                <th className="p-3">Action</th>
+                                <th className="p-3">User</th>
+                                <th className="p-3">Timestamp</th>
+                                <th className="p-3">Environment</th>
+                                <th className="p-3">Result</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5 text-zinc-400">
+                            <tbody className="divide-y divide-white/5 text-zinc-300">
                               {integrationAuditLogs.map((log, index) => (
-                                <tr key={index} className="hover:bg-white/5">
-                                  <td className="p-2.5 font-bold text-white">{log.action}</td>
-                                  <td className="p-2.5">{log.user}</td>
-                                  <td className="p-2.5 text-zinc-500">{log.timestamp}</td>
-                                  <td className="p-2.5 text-zinc-400">{log.environment}</td>
-                                  <td className="p-2.5">
-                                    <span className={`px-1.5 py-0.5 rounded-sm text-[8px] uppercase font-bold ${
-                                      log.result === 'Success' || log.result === 'Published' ? 'bg-emerald-500/10 text-emerald-400' :
-                                      'bg-zinc-800 text-zinc-400'
+                                <tr key={index} className="hover:bg-white/5 transition-colors">
+                                  <td className="p-3 font-semibold text-white">{log.action}</td>
+                                  <td className="p-3">{log.user}</td>
+                                  <td className="p-3 text-zinc-400">{log.timestamp}</td>
+                                  <td className="p-3 text-zinc-400">{log.environment}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded-sm text-xs uppercase font-semibold border ${
+                                      log.result === 'Success' || log.result === 'Published' || log.result === 'Snapshot Created'
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                        : 'bg-zinc-800 text-zinc-400 border-white/10'
                                     }`}>
                                       {log.result}
                                     </span>
@@ -8858,53 +8934,53 @@ export default function AdminDashboard({
                         <h3 className="text-white text-base font-display uppercase tracking-widest font-bold">
                           {editingIntegration ? 'Edit Integration Workspace' : 'Add Integration Workspace'}
                         </h3>
-                        <p className="text-zinc-500 text-[10px] uppercase font-mono mt-0.5">Configure federated API nodes and transport credentials</p>
+                        <p className="text-zinc-400 text-xs font-mono mt-0.5">Configure federated API nodes and transport credentials (UI Preview)</p>
                       </div>
-                      <button onClick={() => setIsAddIntegrationOpen(false)} className="text-zinc-500 hover:text-white transition-colors cursor-pointer">
+                      <button onClick={() => setIsAddIntegrationOpen(false)} className="text-zinc-400 hover:text-white transition-colors cursor-pointer p-1">
                         <X className="w-5 h-5" />
                       </button>
                     </div>
 
                     <div className="flex-1 overflow-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                       {/* Informational Warning message */}
-                      <div className="bg-gold-pure/5 border border-gold-pure/10 p-3.5 rounded-xs">
-                        <p className="text-gold-pure text-[11px] leading-relaxed">
-                          Production credentials will be stored securely on the server in the backend implementation phase. Entering an API key is a configurations snap and does NOT automatically activate live services. Activation must be a deliberate lifecycle step.
+                      <div className="bg-gold-pure/10 border border-gold-pure/20 p-3.5 rounded-xs">
+                        <p className="text-gold-pure text-xs leading-relaxed font-mono">
+                          Production credentials will be stored securely on the server in the backend implementation phase. Entering an API key is a configuration draft and does NOT automatically activate live services. Activation must be a deliberate lifecycle step.
                         </p>
                       </div>
 
                       {/* Section A: Basic Information */}
                       <div className="space-y-4">
-                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-2 font-bold">Basic Information</h4>
+                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/10 pb-2 font-bold">Basic Information</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Integration Name</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Integration Name *</label>
                             <input
                               type="text"
                               value={integrationForm.name}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, name: e.target.value })}
                               placeholder="e.g. PayPal Checkout Node"
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                               required
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Provider</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Provider *</label>
                             <input
                               type="text"
                               value={integrationForm.provider}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, provider: e.target.value })}
                               placeholder="e.g. PayPal Inc."
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                               required
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Category</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Category</label>
                             <select
                               value={integrationForm.category}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, category: e.target.value })}
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             >
                               <option value="Payments">Payments</option>
                               <option value="Shipping">Shipping</option>
@@ -8914,25 +8990,25 @@ export default function AdminDashboard({
                               <option value="Other">Other</option>
                             </select>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Target Environment</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Target Environment</label>
                             <select
                               value={integrationForm.environment}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, environment: e.target.value })}
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             >
                               <option value="Production">Production</option>
                               <option value="Staging">Staging</option>
                               <option value="Development">Development</option>
                             </select>
                           </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Description</label>
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Description</label>
                             <textarea
                               value={integrationForm.description}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, description: e.target.value })}
                               placeholder="Describe the operational purpose of this systems integration node..."
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs h-16 resize-none outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono h-16 resize-none outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             />
                           </div>
                         </div>
@@ -8940,34 +9016,34 @@ export default function AdminDashboard({
 
                       {/* Section B: API Configuration & Masked Credentials */}
                       <div className="space-y-4">
-                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-2 font-bold">API & Transport Configuration</h4>
+                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/10 pb-2 font-bold">API & Transport Configuration</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Base URL</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Base URL</label>
                             <input
                               type="url"
                               value={integrationForm.baseUrl}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, baseUrl: e.target.value })}
                               placeholder="https://api.example.com"
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">API Version</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">API Version</label>
                             <input
                               type="text"
                               value={integrationForm.apiVersion}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, apiVersion: e.target.value })}
                               placeholder="e.g. v2 / 2026-01-01"
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Authentication Type</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Authentication Type</label>
                             <select
                               value={integrationForm.authType}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, authType: e.target.value })}
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             >
                               <option value="None">None</option>
                               <option value="API Key">API Key</option>
@@ -8981,57 +9057,57 @@ export default function AdminDashboard({
 
                         {/* Credential input fields - MUST BE MASKED PASSWORD style fields */}
                         {integrationForm.authType !== 'None' && (
-                          <div className="bg-black/40 p-4 border border-white/5 rounded-xs space-y-4">
-                            <div className="text-[9px] uppercase tracking-widest font-mono text-gold-pure font-bold flex items-center gap-1">
-                              🔒 Secure Transport Credentials Setup
+                          <div className="bg-black/60 p-4 border border-white/10 rounded-xs space-y-4">
+                            <div className="text-xs tracking-wider font-mono text-gold-pure font-bold flex items-center gap-1.5">
+                              <Lock className="w-3.5 h-3.5" /> Secure Transport Credentials Setup
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {integrationForm.authType === 'API Key' && (
-                                <div className="space-y-1 md:col-span-2">
-                                  <label className="text-zinc-400 text-[10px] block uppercase font-mono">API Key</label>
+                                <div className="space-y-1.5 md:col-span-2">
+                                  <label className="text-zinc-300 text-xs block font-mono font-semibold">API Key</label>
                                   <input
                                     type="password"
                                     value={integrationForm.apiKey}
                                     onChange={(e) => setIntegrationForm({ ...integrationForm, apiKey: e.target.value })}
                                     placeholder="••••••••••••••••••••••••••••••••"
-                                    className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                                    className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                                   />
                                 </div>
                               )}
 
                               {integrationForm.authType === 'Bearer Token' && (
-                                <div className="space-y-1 md:col-span-2">
-                                  <label className="text-zinc-400 text-[10px] block uppercase font-mono">Access Bearer Token</label>
+                                <div className="space-y-1.5 md:col-span-2">
+                                  <label className="text-zinc-300 text-xs block font-mono font-semibold">Access Bearer Token</label>
                                   <input
                                     type="password"
                                     value={integrationForm.accessToken}
                                     onChange={(e) => setIntegrationForm({ ...integrationForm, accessToken: e.target.value })}
                                     placeholder="••••••••••••••••••••••••••••••••"
-                                    className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                                    className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                                   />
                                 </div>
                               )}
 
                               {integrationForm.authType === 'OAuth' && (
                                 <>
-                                  <div className="space-y-1">
-                                    <label className="text-zinc-400 text-[10px] block uppercase font-mono">Client ID</label>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Client ID</label>
                                     <input
                                       type="password"
                                       value={integrationForm.clientId}
                                       onChange={(e) => setIntegrationForm({ ...integrationForm, clientId: e.target.value })}
                                       placeholder="••••••••••••••••••••••••"
-                                      className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-zinc-400 text-[10px] block uppercase font-mono">Client Secret</label>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Client Secret</label>
                                     <input
                                       type="password"
                                       value={integrationForm.clientSecret}
                                       onChange={(e) => setIntegrationForm({ ...integrationForm, clientSecret: e.target.value })}
                                       placeholder="••••••••••••••••••••••••"
-                                      className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                                     />
                                   </div>
                                 </>
@@ -9039,24 +9115,24 @@ export default function AdminDashboard({
 
                               {integrationForm.authType === 'Basic Authentication' && (
                                 <>
-                                  <div className="space-y-1">
-                                    <label className="text-zinc-400 text-[10px] block uppercase font-mono">Username</label>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Username</label>
                                     <input
                                       type="text"
                                       value={integrationForm.clientId}
                                       onChange={(e) => setIntegrationForm({ ...integrationForm, clientId: e.target.value })}
                                       placeholder="Username"
-                                      className="w-full bg-black border border-white/10 text-zinc-300 p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Password</label>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Password</label>
                                     <input
                                       type="password"
                                       value={integrationForm.clientSecret}
                                       onChange={(e) => setIntegrationForm({ ...integrationForm, clientSecret: e.target.value })}
                                       placeholder="Password"
-                                      className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                                     />
                                   </div>
                                 </>
@@ -9068,24 +9144,24 @@ export default function AdminDashboard({
 
                       {/* Section C: Webhooks UI SubSection */}
                       <div className="space-y-4">
-                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-2 font-bold">Webhooks Subscription</h4>
+                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/10 pb-2 font-bold">Webhooks Subscription</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1 md:col-span-2">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Webhook URL</label>
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Webhook URL</label>
                             <input
                               type="url"
                               value={integrationForm.webhookUrl}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, webhookUrl: e.target.value })}
                               placeholder="https://api.zoalgroup.com/v1/webhooks/listener"
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                             />
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">Event Trigger</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Event Trigger</label>
                             <select
                               value={integrationForm.webhookEvent}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, webhookEvent: e.target.value })}
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             >
                               <option value="order.created">order.created</option>
                               <option value="order.updated">order.updated</option>
@@ -9094,46 +9170,46 @@ export default function AdminDashboard({
                               <option value="product.updated">product.updated</option>
                             </select>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono font-bold">HTTP Method</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">HTTP Method</label>
                             <select
                               value={integrationForm.webhookMethod}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, webhookMethod: e.target.value })}
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             >
                               <option value="POST">POST</option>
                               <option value="GET">GET</option>
                               <option value="PUT">PUT</option>
                             </select>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Status</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Status</label>
                             <select
                               value={integrationForm.webhookStatus}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, webhookStatus: e.target.value })}
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
                             >
                               <option value="Active">Active</option>
                               <option value="Inactive">Inactive</option>
                             </select>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-zinc-400 text-[10px] block uppercase font-mono">Secret Token</label>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Secret Token</label>
                             <input
                               type="password"
                               value={integrationForm.webhookSecret}
                               onChange={(e) => setIntegrationForm({ ...integrationForm, webhookSecret: e.target.value })}
                               placeholder="••••••••••••"
-                              className="w-full bg-black border border-white/10 text-white p-2.5 text-xs outline-none focus:border-gold-pure font-mono rounded-xs"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
                             />
                           </div>
                         </div>
                       </div>
 
                       {/* Section D: Integration Lifecycle Display */}
-                      <div className="bg-zinc-900 border border-white/5 p-4 rounded-xs">
-                        <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider mb-2 font-bold">Lifecycle State Roadmap</div>
-                        <div className="flex flex-wrap items-center gap-1 md:gap-3 text-[10px] font-mono text-zinc-400">
+                      <div className="bg-zinc-900 border border-white/10 p-4 rounded-xs">
+                        <div className="text-xs font-mono uppercase text-zinc-400 tracking-wider mb-2 font-bold">Lifecycle State Roadmap</div>
+                        <div className="flex flex-wrap items-center gap-1.5 md:gap-3 text-xs font-mono text-zinc-400">
                           <span className="text-gold-pure font-bold">Configure</span>
                           <span>→</span>
                           <span className="text-white">Save Draft</span>
@@ -9150,12 +9226,12 @@ export default function AdminDashboard({
                     </div>
 
                     {/* Actions Footer */}
-                    <div className="p-4 border-t border-white/10 flex flex-wrap gap-2">
+                    <div className="p-4 border-t border-white/10 flex flex-wrap gap-2.5">
                       <button
                         onClick={() => {
                           setIntegrationFeedback('Connection testing will be available after backend integration is implemented.');
                         }}
-                        className="py-2.5 px-4 border border-white/10 text-zinc-300 hover:text-white hover:bg-white/5 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1"
+                        className="py-2.5 px-4 border border-white/15 text-zinc-300 hover:text-white hover:bg-white/5 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1 transition-all"
                       >
                         Test Connection
                       </button>
@@ -9167,7 +9243,7 @@ export default function AdminDashboard({
                           }
                           setIntegrationFeedback('Validation Success: API Configuration and fields are correctly structured.');
                         }}
-                        className="py-2.5 px-4 border border-white/10 text-zinc-300 hover:text-white hover:bg-white/5 text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1"
+                        className="py-2.5 px-4 border border-white/15 text-zinc-300 hover:text-white hover:bg-white/5 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1 transition-all"
                       >
                         Validate API
                       </button>
@@ -9212,7 +9288,7 @@ export default function AdminDashboard({
                           setIsAddIntegrationOpen(false);
                           setIntegrationFeedback(`Successfully saved "${integrationForm.name}" as draft configuration locally.`);
                         }}
-                        className="py-2.5 px-4 bg-zinc-900 border border-white/10 text-white hover:bg-zinc-800 font-mono text-[10px] uppercase tracking-wider rounded-xs cursor-pointer flex-1 text-center"
+                        className="py-2.5 px-4 bg-zinc-900 border border-white/15 text-white hover:bg-zinc-800 font-mono text-xs uppercase tracking-wider rounded-xs cursor-pointer flex-1 text-center transition-all"
                       >
                         Save Draft
                       </button>
@@ -9245,7 +9321,7 @@ export default function AdminDashboard({
                               lastUpdated: new Date().toISOString().split('T')[0]
                             };
                             setIntegrationsList(prev => [item, ...prev]);
-                            addLog(`Published integration: ${integrationForm.name}`);
+                            addLog(`Published integration configuration: ${integrationForm.name}`);
                             const auditEvent = {
                               action: `Published integration ${integrationForm.name}`,
                               user: currentUser?.name || 'Admin',
@@ -9256,11 +9332,11 @@ export default function AdminDashboard({
                             setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
                           }
                           setIsAddIntegrationOpen(false);
-                          setIntegrationFeedback(`Successfully published integration: ${integrationForm.name}`);
+                          setIntegrationFeedback(`Successfully published "${integrationForm.name}" configuration locally.`);
                         }}
-                        className="py-2.5 px-4 bg-gold-pure text-black font-bold hover:bg-gold-light text-[10px] font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1 text-center"
+                        className="py-2.5 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex-1 text-center cursor-pointer shadow-md"
                       >
-                        Publish
+                        Publish Config
                       </button>
                     </div>
                   </div>
