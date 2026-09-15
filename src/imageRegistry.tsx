@@ -1077,35 +1077,9 @@ export function uploadImageToStore(url: string, category: BusinessCategory, titl
   stored.unshift(newAsset);
   localStorage.setItem('zoal_global_image_pool', JSON.stringify(stored));
 
-  // 2. Automatically generate corresponding custom Product inside Store section to maintain absolute reusability
-  let customProducts: Product[] = [];
-  try {
-    const raw = localStorage.getItem('zoal_custom_products');
-    if (raw) customProducts = JSON.parse(raw);
-  } catch (e) {}
-
-  const newCustomProduct: Product = {
-    id: `custom-prod-${cleanId}`,
-    name: titleText,
-    description: `An exclusive addition to our ${category} menu. Premium handcrafted collection.`,
-    subDescription: 'Premium Merchant Asset Curation',
-    price: 150 + Math.floor(Math.random() * 200), // realistic premium pricing
-    category,
-    images: [url],
-    specifications: {
-      'Sourcing': 'Hand-selected boutique import',
-      'Integrity Assurance': 'Verified by ZOAL',
-      'Format': 'Premium custom order'
-    },
-    story: `This exclusive asset was added directly to our unified digital collection. Available dynamically as a premium order option across both our digital interfaces and flagship hospitality lounges.`,
-    rating: 5.0,
-    reviews: [],
-    inventory: 25,
-    popular: true
-  };
-
-  customProducts.unshift(newCustomProduct);
-  localStorage.setItem('zoal_custom_products', JSON.stringify(customProducts));
+  // Image uploads remain media assets only.
+  // Customer-facing products must be created through the authoritative
+  // Product API -> Supabase flow; never fabricate products in localStorage.
 
   notifyPoolListeners();
   return newAsset;
