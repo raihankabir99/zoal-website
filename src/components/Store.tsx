@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, SlidersHorizontal, Heart, ShoppingBag, Eye, X, SearchX 
 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { SafeImage, useGlobalProducts, useGlobalImages, resolveProductImage, normalizeCategory } from '../imageRegistry';
 import { formatCurrency } from '../utils';
+import { categoryApi } from '../lib/categoryApi';
 
 interface StoreProps {
   onProductSelect: (product: Product) => void;
@@ -54,6 +55,43 @@ export default React.memo(function Store({
 
   console.log(`[Audit] Store hook products: ${allProducts.length}, time: ${performance.now().toFixed(2)}ms`);
 
+  // Authoritative CMS lists. null means the request has not completed or failed; an empty array is valid server state.
+  const [serverCategories, setServerCategories] = useState<any[] | null>(null);
+  const [serverBrands, setServerBrands] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    categoryApi.list()
+      .then((rows) => {
+        if (active) setServerCategories(Array.isArray(rows) ? rows : []);
+      })
+      .catch((error) => {
+        console.warn('[Audit] Store category API unavailable; using compatibility fallback.', error);
+        if (active) setServerCategories(null);
+      });
+
+    (async () => {
+      try {
+        const { data: { session } } = await (await import('../lib/supabaseClient')).supabaseClient.auth.getSession();
+        const headers: HeadersInit = { Accept: 'application/json' };
+        if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+        const response = await fetch('/api/brands', { headers, cache: 'no-store' });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.error || payload?.message || `Brand request failed (${response.status})`);
+        const rows = Array.isArray(payload) ? payload : payload?.data || payload?.brands || [];
+        if (active) setServerBrands(Array.isArray(rows) ? rows : []);
+      } catch (error) {
+        console.warn('[Audit] Store brand API unavailable; using compatibility fallback.', error);
+        if (active) setServerBrands(null);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const categories = useMemo(() => {
     const imgMap: Record<string, string> = {
@@ -65,6 +103,42 @@ export default React.memo(function Store({
       thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png',
       cosmetics: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg'
     };
+
+    // Prefer authoritative API data. Only use local compatibility data when the API request failed.
+    if (serverCategories !== null) {
+      const published = serverCategories.filter((c: any) => c.status === 'Published' || c.status === undefined);
+      const list = [
+        { id: 'all', name: t('store.category.all'), featuredImage: imgMap.all },
+        ...published.map((c: any) => {
+          const catId = c.slug || c.id;
+          const key = `store.category.${catId}`;
+          const hasKey = i18n.exists(key);
+          let localizedName = hasKey ? t(key) : '';
+          if (!localizedName) {
+            localizedName = isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name);
+          }
+          const defaultImg = imgMap[catId] || imgMap.all;
+          const hasValidFeatured = c.featuredImage && isImgValid(c.featuredImage) && !c.featuredImage.includes('/assets/categories/');
+          const hasValidImage = c.image && isImgValid(c.image) && !c.image.includes('/assets/categories/');
+          const hasValidImageUrl = c.imageUrl && isImgValid(c.imageUrl) && !c.imageUrl.includes('/assets/categories/');
+          return {
+            id: catId,
+            slug: c.slug,
+            name: localizedName,
+            featuredImage: hasValidFeatured ? c.featuredImage : (hasValidImage ? c.image : (hasValidImageUrl ? c.imageUrl : defaultImg)),
+            bannerImage: c.bannerImage || '',
+            image: c.image || '',
+            imageUrl: c.imageUrl || ''
+          };
+        })
+      ];
+      const seen = new Set();
+      return list.filter((item: any) => {
+        if (!item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+    }
 
     try {
       const raw = localStorage.getItem('zoal_admin_categories');
@@ -86,9 +160,8 @@ export default React.memo(function Store({
               const hasValidFeatured = c.featuredImage && isImgValid(c.featuredImage) && !c.featuredImage.includes('/assets/categories/');
               const hasValidImage = c.image && isImgValid(c.image) && !c.image.includes('/assets/categories/');
               const hasValidImageUrl = c.imageUrl && isImgValid(c.imageUrl) && !c.imageUrl.includes('/assets/categories/');
-
-              return { 
-                id: catId, 
+              return {
+                id: catId,
                 slug: c.slug,
                 name: localizedName,
                 featuredImage: hasValidFeatured ? c.featuredImage : (hasValidImage ? c.image : (hasValidImageUrl ? c.imageUrl : defaultImg)),
@@ -116,9 +189,23 @@ export default React.memo(function Store({
       { id: 'thobes', name: t('store.category.thobes'), featuredImage: imgMap.thobes },
       { id: 'cosmetics', name: t('store.category.cosmetics', { defaultValue: 'Cosmetics' }), featuredImage: imgMap.cosmetics },
     ];
-  }, [t, isAr, i18n]);
+  }, [serverCategories, t, isAr, i18n]);
 
   const brandsList = useMemo(() => {
+    if (serverBrands !== null) {
+      const published = serverBrands.filter((b: any) => b.status === 'Published' || b.status === undefined || b.featuredToggle);
+      const list = [
+        { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) },
+        ...published.map((b: any) => ({ id: b.name || b.id, name: b.name || b.nameEn || b.nameAr || String(b.id) }))
+      ];
+      const seen = new Set();
+      return list.filter((item: any) => {
+        if (!item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+    }
+
     try {
       const raw = localStorage.getItem('zoal_admin_brands');
       if (raw) {
@@ -143,7 +230,7 @@ export default React.memo(function Store({
       { id: 'Kordofan Organic Co.', name: 'Kordofan Organic Co.' },
       { id: 'Artisan Sudanese Weaves', name: 'Artisan Sudanese Weaves' }
     ];
-  }, [t]);
+  }, [serverBrands, t]);
 
   const PRESET_ASSETS = [
     {
@@ -270,22 +357,39 @@ export default React.memo(function Store({
 
     let imgUrl = '';
 
-    try {
-      const raw = localStorage.getItem('zoal_admin_categories');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const matched = parsed.find((c: any) => (c.slug || c.id) === activeCategory);
-        if (matched) {
-          const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
-          for (const val of candidates) {
-            if (isImgValid(val) && !val.includes('/assets/categories/')) {
-              imgUrl = val.trim();
-              break;
-            }
+    // Prefer the same authoritative category record used by the filter cards.
+    if (serverCategories !== null) {
+      const matched = serverCategories.find((c: any) => (c.slug || c.id) === activeCategory);
+      if (matched) {
+        const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
+        for (const val of candidates) {
+          if (isImgValid(val) && !val.includes('/assets/categories/')) {
+            imgUrl = val.trim();
+            break;
           }
         }
       }
-    } catch (e) {}
+    }
+
+    // Compatibility fallback only when the category API failed.
+    if (!imgUrl && serverCategories === null) {
+      try {
+        const raw = localStorage.getItem('zoal_admin_categories');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const matched = parsed.find((c: any) => (c.slug || c.id) === activeCategory);
+          if (matched) {
+            const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
+            for (const val of candidates) {
+              if (isImgValid(val) && !val.includes('/assets/categories/')) {
+                imgUrl = val.trim();
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
 
     // Fallback to customUpload from global images if still empty
     if (!imgUrl) {
@@ -332,7 +436,7 @@ export default React.memo(function Store({
       ...(detailsMap[activeCategory] || { title: activeCategory.toUpperCase(), subtitle: activeCategory.toUpperCase(), desc: '' }),
       img: imgUrl
     };
-  }, [activeCategory, globalImages, isAr, t]);
+  }, [activeCategory, globalImages, serverCategories, isAr, t]);
 
   return (
     <div className="bg-black text-white min-h-screen pt-[48px] sm:pt-[60px] md:pt-[80px] pb-10 md:pb-16">
