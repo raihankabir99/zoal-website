@@ -6,17 +6,17 @@ import { deleteProductFromSupabase, cleanupProductOrphans } from './lib/productS
 // Centralised registry mapping all local asset paths to their high-quality default fallbacks
 export const IMAGE_FALLBACKS: Record<string, string> = {
   // Hero and pillars
-  '/src/assets/images/pillar-coffee.jpg': 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=400',
+  '/src/assets/images/pillar-coffee.jpg': '/images/collections/coffee.jpeg',
   '/src/assets/images/pillar-bakery.jpg': '/images/collections/bakery.jpeg',
   '/src/assets/images/pillar-market.jpg': '/images/collections/market.jpeg',
   '/src/assets/images/pillar-fashion.jpg': '/images/collections/premium.jpeg',
   '/src/assets/images/pillar-thobes.jpg': '/images/collections/thobes.jpeg',
 
   // Products
-  '/src/assets/images/coffee-saffron-latte.jpg': 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/coffee-saffron-latte-detail.jpg': 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/coffee-cold-brew.jpg': 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/coffee-rose-tea.jpg': 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/coffee-saffron-latte.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/coffee-saffron-latte-detail.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/coffee-cold-brew.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/coffee-rose-tea.jpg': '/images/collections/coffee.jpeg',
   '/src/assets/images/bakery-hoboz.jpg': '/images/collections/bakery.jpeg',
   '/src/assets/images/bakery-ghoriba.jpg': '/images/collections/bakery.jpeg',
   '/src/assets/images/bakery-sambuxa.jpg': '/images/collections/bakery.jpeg',
@@ -38,30 +38,30 @@ export const IMAGE_FALLBACKS: Record<string, string> = {
   'thobes.jpg': '/images/collections/thobes.jpeg',
 
   // Branches
-  '/src/assets/images/branch-al-hofuf.jpg': 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/branch-al-hofuf.jpg': '/images/branding/zoal-logo-4.jpg',
 
   // Blog / Articles
-  '/src/assets/images/blog-saffron-ritual.jpg': 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/blog-baking-physics.jpg': 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/blog-woven-legacies.jpg': 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/blog-saffron-ritual.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/blog-baking-physics.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/blog-woven-legacies.jpg': '/images/collections/premium.jpeg',
 
   // Scrolltelling / Stages
-  '/src/assets/images/scroll-coffee-stage-0.jpg': 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-coffee-stage-1.jpg': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-coffee-stage-2.jpg': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-coffee-stage-3.jpg': 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-bakery.jpg': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-market.jpg': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200',
-  '/src/assets/images/scroll-fashion.jpg': 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=1200',
+  '/src/assets/images/scroll-coffee-stage-0.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-coffee-stage-1.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-coffee-stage-2.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-coffee-stage-3.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-bakery.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/scroll-market.jpg': '/images/collections/market.jpeg',
+  '/src/assets/images/scroll-fashion.jpg': '/images/collections/premium.jpeg',
 
   // Portfolio items
-  '/src/assets/images/gallery-coffee.jpg': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-bakery.jpg': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-fashion.jpg': 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-croissant.jpg': 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-canning.jpg': 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-beans-bag.jpg': 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-market.jpg': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/gallery-coffee.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/gallery-bakery.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/gallery-fashion.jpg': '/images/collections/premium.jpeg',
+  '/src/assets/images/gallery-croissant.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/gallery-canning.jpg': '/images/collections/market.jpeg',
+  '/src/assets/images/gallery-beans-bag.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/gallery-market.jpg': '/images/collections/market.jpeg',
 };
 
 export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q0QUYzNyIgbGV0dGVyLXNwYWNpbmc9IjIiPlpPQUwgQVJUSVNBTEFMPC90ZXh0Pjwvc3ZnPg==';

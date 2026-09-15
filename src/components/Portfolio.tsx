@@ -25,7 +25,7 @@ const SECTIONS_CONFIG = [
     descKey: 'coffee_desc',
     ctaLabel: 'Explore Coffee',
     ctaLabelAr: 'استكشف دار القهوة',
-    defaultImg: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=1200'
+    defaultImg: '/images/collections/coffee.jpeg'
   },
   {
     id: 'bakery',
@@ -35,7 +35,7 @@ const SECTIONS_CONFIG = [
     descKey: 'bakery_desc',
     ctaLabel: 'Explore Bakery',
     ctaLabelAr: 'استكشف المخبز والمأكولات الخفيفة',
-    defaultImg: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=1200'
+    defaultImg: '/images/collections/bakery.jpeg'
   },
   {
     id: 'premium',
@@ -219,7 +219,7 @@ export default function Portfolio({
     }
     
     const defaultImages: Record<string, string> = {
-      coffee: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=1200',
+      coffee: '/images/collections/coffee.jpeg',
       bakery: '/images/collections/bakery.jpeg',
       market: '/images/collections/market.jpeg',
       fashion: '/images/collections/premium.jpeg',
@@ -254,7 +254,7 @@ export default function Portfolio({
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black z-10" />
         <div className="absolute inset-0 z-0 opacity-40">
           <ScrollZoomImage
-            src="https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600"
+            src="/images/collections/collection.png"
             alt="The Zoal Collections Background"
             className="w-full h-full object-cover scale-105 filter blur-[1px]"
             priority={true}

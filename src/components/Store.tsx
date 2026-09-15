@@ -94,21 +94,10 @@ export default React.memo(function Store({
 
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const categories = useMemo(() => {
-    const imgMap: Record<string, string> = {
-      all: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png',
-      coffee: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png',
-      bakery: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png',
-      market: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg',
-      fashion: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png',
-      thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png',
-      cosmetics: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg'
-    };
-
-    // Prefer authoritative API data. Only use local compatibility data when the API request failed.
     if (serverCategories !== null) {
       const published = serverCategories.filter((c: any) => c.status === 'Published' || c.status === undefined);
       const list = [
-        { id: 'all', name: t('store.category.all'), featuredImage: imgMap.all },
+        { id: 'all', name: t('store.category.all'), featuredImage: '' },
         ...published.map((c: any) => {
           const catId = c.slug || c.id;
           const key = `store.category.${catId}`;
@@ -117,15 +106,14 @@ export default React.memo(function Store({
           if (!localizedName) {
             localizedName = isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name);
           }
-          const defaultImg = imgMap[catId] || imgMap.all;
-          const hasValidFeatured = c.featuredImage && isImgValid(c.featuredImage) && !c.featuredImage.includes('/assets/categories/');
-          const hasValidImage = c.image && isImgValid(c.image) && !c.image.includes('/assets/categories/');
-          const hasValidImageUrl = c.imageUrl && isImgValid(c.imageUrl) && !c.imageUrl.includes('/assets/categories/');
+          const featuredImg = (c.featuredImage && isImgValid(c.featuredImage)) ? c.featuredImage :
+                              (c.image && isImgValid(c.image)) ? c.image :
+                              (c.imageUrl && isImgValid(c.imageUrl)) ? c.imageUrl : '';
           return {
             id: catId,
             slug: c.slug,
             name: localizedName,
-            featuredImage: hasValidFeatured ? c.featuredImage : (hasValidImage ? c.image : (hasValidImageUrl ? c.imageUrl : defaultImg)),
+            featuredImage: featuredImg,
             bannerImage: c.bannerImage || '',
             image: c.image || '',
             imageUrl: c.imageUrl || ''
@@ -140,54 +128,8 @@ export default React.memo(function Store({
       });
     }
 
-    try {
-      const raw = localStorage.getItem('zoal_admin_categories');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const published = parsed.filter((c: any) => c.status === 'Published' || c.status === undefined);
-        if (published.length > 0) {
-          const list = [
-            { id: 'all', name: t('store.category.all'), featuredImage: imgMap.all },
-            ...published.map((c: any) => {
-              const catId = c.slug || c.id;
-              const key = `store.category.${catId}`;
-              const hasKey = i18n.exists(key);
-              let localizedName = hasKey ? t(key) : '';
-              if (!localizedName) {
-                localizedName = isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name);
-              }
-              const defaultImg = imgMap[catId] || imgMap.all;
-              const hasValidFeatured = c.featuredImage && isImgValid(c.featuredImage) && !c.featuredImage.includes('/assets/categories/');
-              const hasValidImage = c.image && isImgValid(c.image) && !c.image.includes('/assets/categories/');
-              const hasValidImageUrl = c.imageUrl && isImgValid(c.imageUrl) && !c.imageUrl.includes('/assets/categories/');
-              return {
-                id: catId,
-                slug: c.slug,
-                name: localizedName,
-                featuredImage: hasValidFeatured ? c.featuredImage : (hasValidImage ? c.image : (hasValidImageUrl ? c.imageUrl : defaultImg)),
-                bannerImage: c.bannerImage || '',
-                image: c.image || '',
-                imageUrl: c.imageUrl || ''
-              };
-            })
-          ];
-          const seen = new Set();
-          return list.filter((item: any) => {
-            if (!item.id || seen.has(item.id)) return false;
-            seen.add(item.id);
-            return true;
-          });
-        }
-      }
-    } catch (e) {}
     return [
-      { id: 'all', name: t('store.category.all'), featuredImage: imgMap.all },
-      { id: 'coffee', name: t('store.category.coffee'), featuredImage: imgMap.coffee },
-      { id: 'bakery', name: t('store.category.bakery'), featuredImage: imgMap.bakery },
-      { id: 'market', name: t('store.category.market'), featuredImage: imgMap.market },
-      { id: 'fashion', name: t('store.category.fashion'), featuredImage: imgMap.fashion },
-      { id: 'thobes', name: t('store.category.thobes'), featuredImage: imgMap.thobes },
-      { id: 'cosmetics', name: t('store.category.cosmetics', { defaultValue: 'Cosmetics' }), featuredImage: imgMap.cosmetics },
+      { id: 'all', name: t('store.category.all'), featuredImage: '' }
     ];
   }, [serverCategories, t, isAr, i18n]);
 
@@ -206,59 +148,10 @@ export default React.memo(function Store({
       });
     }
 
-    try {
-      const raw = localStorage.getItem('zoal_admin_brands');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const published = parsed.filter((b: any) => b.status === 'Published' || b.status === undefined || b.featuredToggle);
-        const list = [
-          { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) },
-          ...published.map((b: any) => ({ id: b.name, name: b.name }))
-        ];
-        const seen = new Set();
-        return list.filter((item: any) => {
-          if (!item.id || seen.has(item.id)) return false;
-          seen.add(item.id);
-          return true;
-        });
-      }
-    } catch (e) {}
     return [
-      { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) },
-      { id: 'ZOAL Specialty Roasters', name: 'ZOAL Specialty Roasters' },
-      { id: 'Sudan Bakery Heritage', name: 'Sudan Bakery Heritage' },
-      { id: 'Kordofan Organic Co.', name: 'Kordofan Organic Co.' },
-      { id: 'Artisan Sudanese Weaves', name: 'Artisan Sudanese Weaves' }
+      { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) }
     ];
   }, [serverBrands, t]);
-
-  const PRESET_ASSETS = [
-    {
-      category: 'coffee' as BusinessCategory,
-      title: 'Premium Shaken Obsidian Espresso',
-      url: 'https://images.unsplash.com/photo-1507133750040-4a8f57021571?auto=format&fit=crop&q=80&w=800'
-    },
-    {
-      category: 'bakery' as BusinessCategory,
-      title: 'Freshly-Fired Saj-Oven Flatbread',
-      url: 'https://images.unsplash.com/photo-1549488344-1f9b8d2bd1f3?auto=format&fit=crop&q=80&w=800'
-    },
-    {
-      category: 'market' as BusinessCategory,
-      title: 'Finely-Sifted Kordofan Hibiscus Buds',
-      url: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=800'
-    },
-    {
-      category: 'fashion' as BusinessCategory,
-      title: 'Atelier Royal Silk Emerald Abaya',
-      url: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&q=80&w=800'
-    },
-    {
-      category: 'thobes' as BusinessCategory,
-      title: 'Premium White Silk Thobe',
-      url: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&q=80&w=800'
-    }
-  ];
 
   // Sync category filter if received as a prop
   React.useEffect(() => {
@@ -346,15 +239,6 @@ export default React.memo(function Store({
   const categoryHeaderDetails = useMemo(() => {
     if (activeCategory === 'all') return null;
 
-    const imgMap: Record<string, string> = {
-      all: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png',
-      coffee: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png',
-      bakery: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067395955_backery_snackes.jpeg',
-      market: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg',
-      fashion: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png',
-      thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067315275_thoves.1.jpeg'
-    };
-
     let imgUrl = '';
 
     // Prefer the same authoritative category record used by the filter cards.
@@ -363,45 +247,12 @@ export default React.memo(function Store({
       if (matched) {
         const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
         for (const val of candidates) {
-          if (isImgValid(val) && !val.includes('/assets/categories/')) {
+          if (isImgValid(val)) {
             imgUrl = val.trim();
             break;
           }
         }
       }
-    }
-
-    // Compatibility fallback only when the category API failed.
-    if (!imgUrl && serverCategories === null) {
-      try {
-        const raw = localStorage.getItem('zoal_admin_categories');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const matched = parsed.find((c: any) => (c.slug || c.id) === activeCategory);
-          if (matched) {
-            const candidates = [matched.bannerImage, matched.featuredImage, matched.image, matched.imageUrl];
-            for (const val of candidates) {
-              if (isImgValid(val) && !val.includes('/assets/categories/')) {
-                imgUrl = val.trim();
-                break;
-              }
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
-    // Fallback to customUpload from global images if still empty
-    if (!imgUrl) {
-      const catImages = globalImages.filter((img) => img.category === activeCategory);
-      const customUpload = catImages.find((img) => img.source === 'store upload');
-      if (customUpload && isImgValid(customUpload.url) && !customUpload.url.includes('/assets/categories/')) {
-        imgUrl = customUpload.url.trim();
-      }
-    }
-
-    if (!imgUrl) {
-      imgUrl = imgMap[activeCategory] || imgMap.all;
     }
 
     const detailsMap: Record<string, { title: string; subtitle: string; desc: string }> = {
@@ -436,7 +287,7 @@ export default React.memo(function Store({
       ...(detailsMap[activeCategory] || { title: activeCategory.toUpperCase(), subtitle: activeCategory.toUpperCase(), desc: '' }),
       img: imgUrl
     };
-  }, [activeCategory, globalImages, serverCategories, isAr, t]);
+  }, [activeCategory, serverCategories, isAr, t]);
 
   return (
     <div className="bg-black text-white min-h-screen pt-[48px] sm:pt-[60px] md:pt-[80px] pb-10 md:pb-16">
@@ -516,54 +367,17 @@ export default React.memo(function Store({
           {/* Category Cards */}
           <div className="flex flex-nowrap md:grid md:grid-cols-6 gap-1.5 md:gap-2.5 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 category-scroll-indicator snap-x snap-mandatory touch-pan-x pt-0 md:pt-1">
             {categories.map((cat, index) => {
-              const imgMap: Record<string, string> = {
-                all: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png',
-                coffee: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png',
-                bakery: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png',
-                market: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg',
-                fashion: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png',
-                thobes: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png'
-              };
-              
-              let allCollectionsImg = '';
-              if (cat.id === 'all') {
-                try {
-                  const savedKey = localStorage.getItem('zoal_all_collections_image');
-                  if (savedKey && isImgValid(savedKey) && !savedKey.includes('/assets/categories/')) {
-                    allCollectionsImg = savedKey;
-                  } else {
-                    const gs = localStorage.getItem('zoal_admin_global_settings');
-                    if (gs) {
-                      const parsed = JSON.parse(gs);
-                      if (parsed && parsed.allCollectionsImage && isImgValid(parsed.allCollectionsImage) && !parsed.allCollectionsImage.includes('/assets/categories/')) {
-                        allCollectionsImg = parsed.allCollectionsImage;
-                      }
-                    }
-                  }
-                } catch (e) {}
-              }
+              const candidates = [
+                (cat as any).featuredImage,
+                (cat as any).bannerImage,
+                (cat as any).image,
+                (cat as any).imageUrl
+              ];
               let imgSrc = '';
-              if (cat.id === 'all') {
-                if (allCollectionsImg) {
-                  imgSrc = allCollectionsImg.trim();
-                } else {
-                  imgSrc = imgMap.all;
-                }
-              } else {
-                const candidates = [
-                  (cat as any).featuredImage,
-                  (cat as any).bannerImage,
-                  (cat as any).image,
-                  (cat as any).imageUrl
-                ];
-                for (const val of candidates) {
-                  if (isImgValid(val) && !val.includes('/assets/categories/')) {
-                    imgSrc = val.trim();
-                    break;
-                  }
-                }
-                if (!imgSrc) {
-                  imgSrc = imgMap[(cat as any).slug || cat.id] || imgMap.all;
+              for (const val of candidates) {
+                if (isImgValid(val)) {
+                  imgSrc = val.trim();
+                  break;
                 }
               }
               const isActive = activeCategory === cat.id;
