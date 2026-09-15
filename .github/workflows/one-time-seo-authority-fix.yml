@@ -1,0 +1,81 @@
+name: One-Time SEO Product Authority Fix
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+    paths:
+      - '.github/workflows/one-time-seo-authority-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.ref == 'refs/heads/audit/dashboard-sync-fix'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Remove static product fallback from SEO
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('server/seo.ts')
+          text = path.read_text(encoding='utf-8')
+
+          old_import = "import { PRODUCTS, ARTICLES } from '../src/data';"
+          new_import = "import { ARTICLES } from '../src/data';"
+          if old_import not in text:
+              raise SystemExit('Expected PRODUCTS import not found')
+          text = text.replace(old_import, new_import, 1)
+
+          text = text.replace("// Helper to query products (DB + fallbacks)", "// Helper to query the authoritative product catalog")
+          text = text.replace("    return PRODUCTS;\n", "    return [];\n", 1)
+          text = text.replace("    const result = await client.query('SELECT data FROM zoal_supabase_products');", "    const result = await client.query('SELECT * FROM zoal_products WHERE is_active = true ORDER BY created_at DESC');", 1)
+          old_map = """      return result.rows.map(row => {\n        try {\n          return typeof row.data === 'string' ? JSON.parse(row.data) : row.data;\n        } catch (e) {\n          return row.data;\n        }\n      });"""
+          new_map = """      return result.rows;"""
+          if old_map not in text:
+              raise SystemExit('Expected legacy SEO product-row mapping not found')
+          text = text.replace(old_map, new_map, 1)
+
+          text = text.replace("⚠️ Server SEO: Error fetching products from DB, using fallback PRODUCTS:", "⚠️ Server SEO: Error fetching authoritative products from DB; product metadata will be omitted:", 1)
+          # Replace the final fallback return in getProducts only.
+          marker = "async function getProducts(): Promise<any[]> {"
+          start = text.index(marker)
+          end = text.index("\n}\n\n// Structured category info map", start)
+          section = text[start:end]
+          if not section.rstrip().endswith("return PRODUCTS;"):
+              # It should have the second return only if the earlier replacement changed the wrong occurrence.
+              section = section.replace("return PRODUCTS;", "return [];", 1)
+          else:
+              section = section.rstrip()
+              section = section[:-len("return PRODUCTS;")] + "return [];"
+          text = text[:start] + section + text[end:]
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Verify SEO authority patch
+        run: |
+          grep -n "import { ARTICLES } from '../src/data';" server/seo.ts
+          grep -n "SELECT \* FROM zoal_products WHERE is_active = true" server/seo.ts
+          if grep -n "\bPRODUCTS\b" server/seo.ts; then exit 1; fi
+          if grep -n "zoal_supabase_products" server/seo.ts; then exit 1; fi
+          if grep -n "return PRODUCTS" server/seo.ts; then exit 1; fi
+          git diff --check
+          npm ci
+          npm run build
+
+      - name: Commit and remove one-time workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/seo.ts
+          git commit -m 'fix(seo): use authoritative database product catalog'
+          git rm .github/workflows/one-time-seo-authority-fix.yml
+          git commit -m 'chore(audit): remove one-time seo authority workflow'
+          git push origin audit/dashboard-sync-fix
