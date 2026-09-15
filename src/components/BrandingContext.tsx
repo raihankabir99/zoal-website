@@ -168,6 +168,14 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 export const useBranding = (): BrandingContextType => {
   const context = useContext(BrandingContext);
-  if (!context) throw new Error('useBranding must be used within a BrandingProvider');
+  if (!context) {
+    return {
+      settings: DEFAULT_SETTINGS,
+      updateSettings: async () => false,
+      loading: false,
+      error: null,
+      refreshBranding: async () => {},
+    };
+  }
   return context;
 };
