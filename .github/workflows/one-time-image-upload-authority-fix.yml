@@ -1,0 +1,66 @@
+name: One-time image upload authority remediation
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: ${{ !contains(github.event.head_commit.message, '[image-authority-remediation]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+
+      - name: Remove image-upload fake product generation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/imageRegistry.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          start_marker = "  // 2. Automatically generate corresponding custom Product inside Store section to maintain absolute reusability\n"
+          end_marker = "\n  notifyPoolListeners();\n  return newAsset;\n"
+
+          start = text.find(start_marker)
+          if start == -1:
+              raise SystemExit('TARGET_START_NOT_FOUND')
+
+          end = text.find(end_marker, start)
+          if end == -1:
+              raise SystemExit('TARGET_END_NOT_FOUND')
+
+          replacement = "  // Image uploads remain media assets only.\n  // Customer-facing products must be created through the authoritative\n  // Product API -> Supabase flow; never fabricate products in localStorage.\n"
+          updated = text[:start] + replacement + text[end:]
+
+          if updated == text:
+              raise SystemExit('NO_CHANGE')
+
+          path.write_text(updated, encoding='utf-8')
+
+      - name: Verify targeted change
+        shell: bash
+        run: |
+          ! grep -F "Automatically generate corresponding custom Product" src/imageRegistry.tsx
+          ! grep -F "const newCustomProduct: Product" src/imageRegistry.tsx
+          grep -F "Image uploads remain media assets only." src/imageRegistry.tsx
+          git diff --check
+
+      - name: Commit fix and remove one-time workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/one-time-image-upload-authority-fix.yml
+          git add src/imageRegistry.tsx .github/workflows/one-time-image-upload-authority-fix.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(store): stop image uploads from fabricating products [image-authority-remediation]"
+          git push origin audit/dashboard-sync-fix
