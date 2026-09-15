@@ -1,0 +1,59 @@
+name: One-time product authority cleanup
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message != 'chore(audit): apply product authority cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Apply narrow authority fix
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/imageRegistry.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          old = "if (hasCache && customProducts !== PRODUCTS && customProducts.length > 0) {"
+          new = "if (hasCache && customProducts !== PRODUCTS) {"
+          if old not in text:
+              raise SystemExit('Expected cache-authority condition not found')
+          text = text.replace(old, new, 1)
+
+          old = "const combined = sourceProducts.filter(p => p && p.id && !deletedStaticIds.includes(p.id));"
+          new = "const combined = sourceProducts.filter(p => p && p.id);"
+          if old not in text:
+              raise SystemExit('Expected static-delete filter not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Verify patch
+        run: |
+          grep -F "if (hasCache && customProducts !== PRODUCTS) {" src/imageRegistry.tsx
+          grep -F "const combined = sourceProducts.filter(p => p && p.id);" src/imageRegistry.tsx
+          if grep -Fq "const combined = sourceProducts.filter(p => p && p.id && !deletedStaticIds.includes(p.id));" src/imageRegistry.tsx; then exit 1; fi
+
+      - name: Commit and remove one-time workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/imageRegistry.tsx
+          git commit -m "chore(audit): apply product authority cleanup"
+          git rm .github/workflows/one-time-product-authority-fix.yml
+          git commit -m "chore(audit): self-remove one-time product authority workflow"
+          git push origin audit/dashboard-sync-fix
