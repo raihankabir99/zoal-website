@@ -1421,6 +1421,7 @@ function AppContent() {
                                 className="w-full h-full object-cover group-hover:scale-105 duration-500"
                                 containerClassName="w-full h-full overflow-hidden relative"
                                 priority={true}
+                                disableFallback={true}
                               />
                               <div className="absolute top-3 left-3 px-2 py-0.5 bg-black/80 text-[7.5px] uppercase tracking-widest text-[#D4AF37] rounded-full border border-gold-pure/20 z-10">
                                 {t(`home.categories.${item.category}`, { defaultValue: item.category.replace('_', ' ') })}
@@ -1475,6 +1476,7 @@ function AppContent() {
                             className="w-full h-full object-cover group-hover:scale-105 duration-500"
                             containerClassName="w-full h-full overflow-hidden relative"
                             priority={true}
+                            disableFallback={true}
                           />
                           <div className="absolute top-3 left-3 px-2 py-0.5 bg-black/80 text-[7.5px] uppercase tracking-widest text-[#D4AF37] rounded-full border border-gold-pure/20 z-10">
                             {t(`home.categories.${item.category}`, { defaultValue: item.category.replace('_', ' ') })}

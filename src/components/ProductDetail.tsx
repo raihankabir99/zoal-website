@@ -84,7 +84,7 @@ export default function ProductDetail({
   };
 
   const getInitialImage = () => {
-    return resolveProductImage(product);
+    return resolveProductImage(product, undefined, false);
   };
 
   const allProducts = useGlobalProducts();
@@ -532,6 +532,7 @@ Please confirm availability at your nearest flagship boutique. Thank you.`;
                 }`}
                 category={product.category}
                 priority={true}
+                disableFallback={true}
               />
 
               {/* Dynamic magnifying layout view */}
@@ -560,7 +561,7 @@ Please confirm availability at your nearest flagship boutique. Thank you.`;
                       : 'border-white/5 opacity-60 hover:opacity-100'
                   }`}
                 >
-                  <SafeImage src={img} alt={product.category === 'thobes' ? "ZOAL THOBES & MEN'S WEAR Thumbnail" : `Thumb ${i}`} className="w-full h-full object-contain" category={product.category} />
+                  <SafeImage src={img} alt={product.category === 'thobes' ? "ZOAL THOBES & MEN'S WEAR Thumbnail" : `Thumb ${i}`} className="w-full h-full object-contain" category={product.category} disableFallback={true} />
                 </button>
               ))}
             </div>
@@ -822,6 +823,7 @@ Please confirm availability at your nearest flagship boutique. Thank you.`;
                   : "w-full h-full object-cover opacity-80 mix-blend-lighten"
                 }
                 category={product.category}
+                disableFallback={true}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" />
             </div>
@@ -1254,7 +1256,8 @@ const RelatedProductCard = React.memo<RelatedProductCardProps>(({
         onClick={() => onProductSelect(rel)}
       >
         <ScrollZoomImage
-          src={resolveProductImage(rel)}
+          src={resolveProductImage(rel, undefined, false)}
+          disableFallback
           alt={rel.name}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           containerClassName="w-full h-full overflow-hidden absolute inset-0"

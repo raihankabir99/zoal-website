@@ -1157,10 +1157,10 @@ export function useGlobalProducts(): Product[] {
       const raw = localStorage.getItem('zoal_custom_products');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return PRODUCTS;
+    return [];
   });
   const [inventoryOverrides, setInventoryOverrides] = useState<Record<string, number>>(() => {
     try {
@@ -1187,12 +1187,12 @@ export function useGlobalProducts(): Product[] {
         const raw = localStorage.getItem('zoal_custom_products');
         if (raw) {
           const parsed = JSON.parse(raw);
-          setCustomProducts(Array.isArray(parsed) ? parsed : PRODUCTS);
+          setCustomProducts(Array.isArray(parsed) ? parsed : []);
         } else {
-          setCustomProducts(PRODUCTS);
+          setCustomProducts([]);
         }
       } catch (e) {
-        setCustomProducts(PRODUCTS);
+        setCustomProducts([]);
       }
 
       try {
@@ -1246,30 +1246,8 @@ export function useGlobalProducts(): Product[] {
   }, []);
 
   const mergedProducts = React.useMemo(() => {
-    let sourceProducts: Product[];
-
-    // Check if we have active products returned from the API / customProducts cache
-    const hasCache = (() => {
-      try {
-        const raw = localStorage.getItem('zoal_custom_products');
-        return !!raw;
-      } catch {
-        return false;
-      }
-    })();
-
-    // DEPRECATED old merge logic retained only as documentation; authoritative source is API/cache.
-    if (hasCache && customProducts !== PRODUCTS) {
-      // If the API/cache contains fetched products, use ONLY the API products.
-      // Never merge the static PRODUCTS array back in. This prevents deleted products from reappearing.
-      sourceProducts = customProducts;
-    } else {
-      // Fallback to static PRODUCTS only as the initial seed before the authoritative API response exists.
-      sourceProducts = [...PRODUCTS];
-    }
-    
-    // Authoritative API/cache product list: do not let stale local deleted-ID state hide server products.
-    const combined = sourceProducts.filter(p => p && p.id);
+    // Return only products loaded from customProducts (the authoritative API cache)
+    const combined = customProducts.filter(p => p && p.id);
     
     const seenIds = new Set<string>();
     const uniqueList: Product[] = [];
@@ -1309,7 +1287,7 @@ export function useGlobalProducts(): Product[] {
       }
       return normalizeProductImages(resolved) as Product;
     });
-  }, [customProducts, deletedStaticIds, productOverrides, inventoryOverrides]);
+  }, [customProducts, productOverrides, inventoryOverrides]);
 
   return mergedProducts;
 }
