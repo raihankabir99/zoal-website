@@ -1,17 +1,14 @@
+import { supabaseClient } from '../lib/supabaseClient';
+
 declare global {
   interface Window {
     dataLayer?: Record<string, unknown>[];
+    __zoalGtmContainerId?: string;
   }
 }
 
 let isGoogleTagManagerLoaded = false;
-
 const GTM_ID_PATTERN = /^GTM-[A-Z0-9]{5,10}$/;
-
-function getGtmContainerId(): string {
-  const value = import.meta.env.VITE_GTM_CONTAINER_ID;
-  return typeof value === 'string' ? value.trim().toUpperCase() : '';
-}
 
 function hasAnalyticsOrMarketingConsent(): boolean {
   try {
@@ -26,54 +23,59 @@ function hasAnalyticsOrMarketingConsent(): boolean {
   }
 }
 
-export function initializeGoogleTagManager(): void {
+async function getPersistedGtmContainerId(): Promise<string> {
+  try {
+    const { data, error } = await supabaseClient
+      .from('zoal_gtm_settings')
+      .select('container_id, enabled, consent_required')
+      .eq('enabled', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data?.enabled) return '';
+    if (data.consent_required !== false && !hasAnalyticsOrMarketingConsent()) return '';
+
+    const value = typeof data.container_id === 'string' ? data.container_id.trim().toUpperCase() : '';
+    return GTM_ID_PATTERN.test(value) ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+export async function initializeGoogleTagManager(): Promise<void> {
   if (typeof window === 'undefined' || isGoogleTagManagerLoaded) return;
+  if (!hasAnalyticsOrMarketingConsent()) return;
 
-  const containerId = getGtmContainerId();
-  if (!containerId || !GTM_ID_PATTERN.test(containerId)) {
-    return;
-  }
-
-  if (!hasAnalyticsOrMarketingConsent()) {
-    return;
-  }
+  const containerId = await getPersistedGtmContainerId();
+  if (!containerId || document.getElementById('zoal-gtm-loader')) return;
 
   try {
     window.dataLayer = window.dataLayer || [];
-    window.dataLayer.push({
-      'gtm.start': Date.now(),
-      event: 'gtm.js',
-    });
+    window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
 
     const script = document.createElement('script');
+    script.id = 'zoal-gtm-loader';
     script.async = true;
     script.src = `https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(containerId)}`;
     script.dataset.zoalGtm = containerId;
 
+    script.addEventListener('load', () => {
+      isGoogleTagManagerLoaded = true;
+      window.__zoalGtmContainerId = containerId;
+    });
     script.addEventListener('error', () => {
-      console.warn('Failed to load Google Tag Manager container:', containerId);
+      console.warn('[GTM] Failed to load configured container:', containerId);
     });
 
-    const firstScript = document.getElementsByTagName('script')[0];
-    if (firstScript?.parentNode) {
-      firstScript.parentNode.insertBefore(script, firstScript);
-    } else {
-      document.head.appendChild(script);
-    }
-
-    isGoogleTagManagerLoaded = true;
+    document.head.appendChild(script);
   } catch (error) {
-    console.error('Error initializing Google Tag Manager:', error);
+    console.error('[GTM] Initialization failed:', error);
   }
 }
 
 export function watchGoogleTagManagerConsent(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-
-  const handleConsentChange = () => initializeGoogleTagManager();
+  const handleConsentChange = () => { void initializeGoogleTagManager(); };
   window.addEventListener('zoal-cookie-preferences-changed', handleConsentChange);
-
-  return () => {
-    window.removeEventListener('zoal-cookie-preferences-changed', handleConsentChange);
-  };
+  return () => window.removeEventListener('zoal-cookie-preferences-changed', handleConsentChange);
 }
