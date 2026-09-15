@@ -4,24 +4,17 @@ import App from './App.tsx';
 import './index.css';
 import './i18n';
 import { initializeAnalytics } from './analytics';
-import { initializeGoogleTagManager, watchGoogleTagManagerConsent } from './analytics/GoogleTagManager';
+import { watchGoogleTagManagerConsent } from './analytics/GoogleTagManager';
 
 // Defer non-critical startup analytics to run in browser idle time to optimize initial FCP/LCP.
-// GTM is consent-aware and only loads when a valid VITE_GTM_CONTAINER_ID is configured
-// and the visitor has granted analytics or marketing consent.
+// GTM configuration is resolved from the persisted Supabase setting and remains blocked until consent.
 if (typeof window !== 'undefined') {
-  const initializeTracking = () => {
-    initializeAnalytics();
-    initializeGoogleTagManager();
-  };
-
-  if ('requestIdleCallback' in window) {
-    window.requestIdleCallback(initializeTracking);
-  } else {
-    setTimeout(initializeTracking, 1000);
-  }
-
   watchGoogleTagManagerConsent();
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(() => initializeAnalytics());
+  } else {
+    setTimeout(() => initializeAnalytics(), 1000);
+  }
 }
 
 createRoot(document.getElementById('root')!).render(
