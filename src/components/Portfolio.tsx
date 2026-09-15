@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ShoppingBag, Heart, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import ScrollZoomImage from './ScrollZoomImage';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { SafeImage, useGlobalProducts, resolveProductImage, normalizeCategory } from '../imageRegistry';
+import { useGlobalProducts, resolveProductImage, normalizeCategory } from '../imageRegistry';
 import { formatCurrency } from '../utils';
 import { Product } from '../types';
+import { categoryApi } from '../lib/categoryApi';
 
 interface PortfolioProps {
   setCurrentPage?: (page: string) => void;
@@ -25,7 +26,6 @@ const SECTIONS_CONFIG = [
     descKey: 'coffee_desc',
     ctaLabel: 'Explore Coffee',
     ctaLabelAr: 'استكشف دار القهوة',
-    defaultImg: '/images/collections/coffee.jpeg'
   },
   {
     id: 'bakery',
@@ -35,7 +35,6 @@ const SECTIONS_CONFIG = [
     descKey: 'bakery_desc',
     ctaLabel: 'Explore Bakery',
     ctaLabelAr: 'استكشف المخبز والمأكولات الخفيفة',
-    defaultImg: '/images/collections/bakery.jpeg'
   },
   {
     id: 'premium',
@@ -45,7 +44,6 @@ const SECTIONS_CONFIG = [
     descKey: 'fashion_desc',
     ctaLabel: 'Explore Premium',
     ctaLabelAr: 'استكشف المجموعات الفاخرة',
-    defaultImg: '/images/collections/premium.jpeg'
   },
   {
     id: 'market',
@@ -55,7 +53,6 @@ const SECTIONS_CONFIG = [
     descKey: 'market_desc',
     ctaLabel: 'Explore Market',
     ctaLabelAr: 'استكشف سوق المواد الغذائية',
-    defaultImg: '/images/collections/market.jpeg'
   },
   {
     id: 'thobes',
@@ -65,7 +62,6 @@ const SECTIONS_CONFIG = [
     descKey: 'thobes_desc',
     ctaLabel: 'Explore Collection',
     ctaLabelAr: 'استكشف التشكيلة',
-    defaultImg: '/images/collections/thobes.jpeg'
   }
 ];
 
@@ -91,7 +87,8 @@ const LookbookProductCard = React.memo(({ product, onProductSelect, onAddToCart,
         onClick={() => onProductSelect?.(product)}
       >
         <ScrollZoomImage
-          src={resolveProductImage(product)}
+          src={resolveProductImage(product, undefined, false)}
+          disableFallback
           alt={product.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           containerClassName="w-full h-full overflow-hidden absolute inset-0"
@@ -158,22 +155,33 @@ export default function Portfolio({
   const { t, i18n } = useTranslation();
   const allProducts = useGlobalProducts();
   const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);
+  const [cmsCategories, setCmsCategories] = useState<any[]>([]);
   const firstSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/homepage-editorial')
+    let active = true;
+
+    fetch('/api/homepage-editorial', { cache: 'no-store' })
       .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Offline or missing endpoint');
+        if (!res.ok) throw new Error(`Editorial request failed (${res.status})`);
+        return res.json();
       })
       .then(data => {
-        if (Array.isArray(data)) {
-          setCmsBlocks(data.filter(b => b && b.status === 'published'));
+        if (active && Array.isArray(data)) {
+          setCmsBlocks(data.filter((b: any) => b && b.status === 'published'));
         }
       })
-      .catch(err => {
-        console.warn('[Collection] Offline CMS fallback active:', err);
-      });
+      .catch(err => console.warn('[Collection] Editorial CMS unavailable; static image fallback disabled.', err));
+
+    categoryApi.list()
+      .then(rows => {
+        if (active) setCmsCategories(Array.isArray(rows) ? rows : []);
+      })
+      .catch(err => console.warn('[Collection] Category CMS unavailable; static image fallback disabled.', err));
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleExploreCollections = () => {
@@ -203,6 +211,7 @@ export default function Portfolio({
   const getCmsContent = (category: string) => {
     const target = normalizeCategory(category);
     const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);
+    const categoryCms = cmsCategories.find((c: any) => normalizeCategory(c.slug || c.name) === target);
     
     const tKey = target === 'fashion' ? 'fashion' : target;
     
@@ -217,22 +226,20 @@ export default function Portfolio({
       const image = block.desktop_image || block.mobile_image;
       return { title, description, tag, image };
     }
-    
-    const defaultImages: Record<string, string> = {
-      coffee: '/images/collections/coffee.jpeg',
-      bakery: '/images/collections/bakery.jpeg',
-      market: '/images/collections/market.jpeg',
-      fashion: '/images/collections/premium.jpeg',
-      thobes: '/images/collections/thobes.jpeg',
-    };
-
     return {
       title: defaultTitle,
       description: defaultDesc,
       tag: defaultTag,
-      image: defaultImages[target] || '/images/collections/collection.png'
+      image: categoryCms?.bannerImage || categoryCms?.featuredImage || categoryCms?.image || categoryCms?.imageUrl || ''
     };
   };
+
+  const collectionHeroImage = useMemo(() => {
+    const editorial = cmsBlocks.find((b: any) => b && b.status === 'published' && (b.desktop_image || b.mobile_image));
+    if (editorial) return editorial.desktop_image || editorial.mobile_image || '';
+    const category = cmsCategories.find((c: any) => [c.bannerImage, c.featuredImage, c.image, c.imageUrl].some((value: any) => typeof value === 'string' && value.trim() !== ''));
+    return category?.bannerImage || category?.featuredImage || category?.image || category?.imageUrl || '';
+  }, [cmsBlocks, cmsCategories]);
 
   const getCategoryProducts = (categoryName: string) => {
     const normTarget = normalizeCategory(categoryName);
@@ -254,10 +261,11 @@ export default function Portfolio({
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black z-10" />
         <div className="absolute inset-0 z-0 opacity-40">
           <ScrollZoomImage
-            src="/images/collections/collection.png"
+            src={collectionHeroImage}
             alt="The Zoal Collections Background"
             className="w-full h-full object-cover scale-105 filter blur-[1px]"
             priority={true}
+            disableFallback
           />
         </div>
 
@@ -318,6 +326,7 @@ export default function Portfolio({
                     <div className="relative aspect-[16/9] overflow-hidden sm:rounded-xs border-y sm:border border-white/5 group bg-[#020202]">
                       <ScrollZoomImage
                         src={cmsContent.image}
+                        disableFallback
                         alt={cmsContent.title}
                         className="w-full h-full object-cover transition-transform duration-700"
                         containerClassName="w-full h-full overflow-hidden absolute inset-0"
@@ -402,9 +411,10 @@ export default function Portfolio({
         <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80 z-10" />
         <div className="absolute inset-0 z-0 opacity-15">
           <ScrollZoomImage
-            src="/images/collections/collection.png"
+            src={collectionHeroImage}
             alt="ZOAL Store Collection Background"
             className="w-full h-full object-cover filter blur-[2px]"
+            disableFallback
           />
         </div>
 

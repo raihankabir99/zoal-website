@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, SlidersHorizontal, Heart, ShoppingBag, Eye, X, SearchX 
 } from 'lucide-react';
-import { Product, BusinessCategory } from '../types';
+import { Product } from '../types';
 import ScrollZoomImage from './ScrollZoomImage';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
@@ -576,6 +576,8 @@ export default React.memo(function Store({
                       product.category === 'market' ? '' : 'group-hover:scale-105'
                     }`}>
                       <SafeImage
+                      disableFallback
+                        disableFallback
                         product={product}
                         alt={product.category === 'thobes' ? "ZOAL THOBES & MEN'S WEAR" : product.name}
                         className={product.category === 'market' ? "w-full h-full object-contain" : "w-full h-full object-cover"}

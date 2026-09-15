@@ -222,11 +222,28 @@ export function normalizeProductImages<T extends Partial<Product>>(product: T): 
 
 export function resolveProductImage(
   product?: Partial<Product> | null,
-  categoryOverride?: BusinessCategory
+  categoryOverride?: BusinessCategory,
+  allowFallback: boolean = true
 ): string {
   if (!product) {
     const category = categoryOverride ? normalizeCategory(categoryOverride) : 'coffee';
-    return getCategoryFallback(category);
+    return allowFallback ? getCategoryFallback(category) : ABSOLUTE_PLACEHOLDER;
+  }
+
+  if (!allowFallback) {
+    const strictCandidates = [
+      ...(Array.isArray(product.images) ? product.images : []),
+      ...(Array.isArray(product.image_urls) ? product.image_urls : []),
+      product.image,
+      product.image_url
+    ].map(cleanUrlString).filter(Boolean);
+    const strictImage = strictCandidates.find((url) =>
+      !url.startsWith('/images/collections/') &&
+      !url.startsWith('/images/about/') &&
+      !url.includes('images.unsplash.com') &&
+      (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/'))
+    );
+    return strictImage || ABSOLUTE_PLACEHOLDER;
   }
 
   const category = categoryOverride ? normalizeCategory(categoryOverride) : normalizeCategory(product.category);
@@ -299,6 +316,7 @@ interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   priority?: boolean;
   isHero?: boolean;
   product?: Partial<Product> | null;
+  disableFallback?: boolean;
 }
 
 function optimizeImageUrl(url: string): string {
@@ -682,6 +700,7 @@ export const SafeImage = React.memo(function SafeImage({
   priority,
   isHero,
   product,
+  disableFallback = false,
   ...props
 }: SafeImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -690,7 +709,14 @@ export const SafeImage = React.memo(function SafeImage({
   // Authoritative target URL determination
   const computeTarget = () => {
     if (product) {
-      return resolveProductImage(product, category);
+      return resolveProductImage(product, category, !disableFallback);
+    }
+    if (disableFallback) {
+      const candidate = cleanUrlString(src);
+      if (candidate && !candidate.startsWith('/images/collections/') && !candidate.startsWith('/images/about/') && !candidate.includes('images.unsplash.com') && isValidCustomUrl(candidate)) {
+        return candidate;
+      }
+      return ABSOLUTE_PLACEHOLDER;
     }
     if (isHero) {
       return src && src.trim() !== '' ? src : '/local/images/hero-placeholder.webp';
@@ -813,6 +839,13 @@ export const SafeImage = React.memo(function SafeImage({
   };
 
   const handleError = () => {
+    if (disableFallback) {
+      setLoadPhase('placeholder');
+      setShowPlaceholder(true);
+      setIsLoading(false);
+      return;
+    }
+
     if (isHero) {
       console.warn(`[Audit] SafeImage Hero load failed. src: ${src}`);
       setLoadPhase('placeholder');
