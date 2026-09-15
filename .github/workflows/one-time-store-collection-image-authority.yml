@@ -1,19 +1,23 @@
 name: One-time Store Collection Image Authority
 
 on:
-  push:
+  pull_request:
     branches:
-      - audit/dashboard-sync-fix
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   patch:
+    if: github.event.pull_request.head.ref == 'audit/dashboard-sync-fix' && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: audit/dashboard-sync-fix
           fetch-depth: 2
 
       - name: Patch Store and Collection image sources
@@ -21,16 +25,16 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           store = Path('src/components/Store.tsx')
           text = store.read_text()
-
           text = text.replace("import { Product, BusinessCategory } from '../types';", "import { Product } from '../types';")
 
           start = text.index("  const categories = useMemo(() => {")
           end = text.index("  const brandsList = useMemo(() => {", start)
           new_categories = '''  const categories = useMemo(() => {
-            // CMS/API authoritative. Never resurrect legacy localStorage/static imagery.
+            // Supabase/CMS authoritative. Never resurrect legacy localStorage/static imagery.
             if (serverCategories === null) {
               console.warn('[Audit] Store category API unavailable; showing empty authoritative image state.');
               return [{ id: 'all', name: t('store.category.all'), featuredImage: '' }];
@@ -42,8 +46,7 @@ jobs:
               ...published.map((c: any) => {
                 const catId = c.slug || c.id;
                 const key = `store.category.${catId}`;
-                const hasKey = i18n.exists(key);
-                const localizedName = hasKey
+                const localizedName = i18n.exists(key)
                   ? t(key)
                   : (isAr ? (c.nameAr || c.name_ar || c.name) : (c.nameEn || c.name));
                 const featuredImage = [c.featuredImage, c.image, c.imageUrl]
@@ -59,7 +62,6 @@ jobs:
                 };
               })
             ];
-
             const seen = new Set();
             return list.filter((item: any) => {
               if (!item.id || seen.has(item.id)) return false;
@@ -78,7 +80,6 @@ jobs:
               console.warn('[Audit] Store brand API unavailable; showing empty authoritative brand state.');
               return [{ id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) }];
             }
-
             const published = serverBrands.filter((b: any) => b.status === 'Published' || b.status === undefined || b.featuredToggle);
             const list = [
               { id: 'all', name: t('store.all_brands', { defaultValue: 'All Brands' }) },
@@ -109,7 +110,8 @@ jobs:
           if "import { categoryApi } from '../lib/categoryApi';" not in p:
               p = p.replace("import { Product } from '../types';", "import { Product } from '../types';\nimport { categoryApi } from '../lib/categoryApi';")
 
-          p = p.replace("  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const firstSectionRef", "  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const [cmsCategories, setCmsCategories] = useState<any[]>([]);\n  const firstSectionRef", 1)
+          if "const [cmsCategories, setCmsCategories]" not in p:
+              p = p.replace("  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);", "  const [cmsBlocks, setCmsBlocks] = useState<any[]>([]);\n  const [cmsCategories, setCmsCategories] = useState<any[]>([]);", 1)
 
           effect_start = p.find("  useEffect(() => {\n    fetch('/api/homepage-editorial')")
           if effect_start == -1:
@@ -120,14 +122,13 @@ jobs:
           effect_end += len("\n  }, []);")
           new_effect = '''  useEffect(() => {
     let active = true;
-
     fetch('/api/homepage-editorial', { cache: 'no-store' })
       .then(res => {
-        if (res.ok) return res.json();
-        throw new Error(`Editorial request failed (${res.status})`);
+        if (!res.ok) throw new Error(`Editorial request failed (${res.status})`);
+        return res.json();
       })
       .then(data => {
-        if (active && Array.isArray(data)) setCmsBlocks(data.filter(b => b && b.status === 'published'));
+        if (active && Array.isArray(data)) setCmsBlocks(data.filter((b: any) => b && b.status === 'published'));
       })
       .catch(err => console.warn('[Collection] Editorial CMS unavailable; static image fallback disabled.', err));
 
@@ -143,19 +144,28 @@ jobs:
   }, []);'''
           p = p[:effect_start] + new_effect + p[effect_end:]
 
-          # Strip local/static default image maps and hardcoded collection image URLs.
-          import re
           p = re.sub(r"\n\s*const defaultImages: Record<string, string> = \{.*?\n\s*\};\n", "\n", p, flags=re.S)
           p = re.sub(r"\n\s*defaultImg:\s*['\"][^'\"]+['\"],?", "", p)
-          p = p.replace("src=\"https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600\"", "src={cmsBlocks.find((b: any) => b.desktop_image || b.mobile_image)?.desktop_image || cmsBlocks.find((b: any) => b.desktop_image || b.mobile_image)?.mobile_image || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.bannerImage || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.featuredImage || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.image || cmsCategories.find((c: any) => c.bannerImage || c.featuredImage || c.image || c.imageUrl)?.imageUrl || ''}")
+          p = re.sub(r"https://images\.unsplash\.com/[^'\"\)\s]+", "", p)
 
-          p = p.replace("    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);", "    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);\n    const categoryCms = cmsCategories.find((c: any) => normalizeCategory(c.slug || c.name) === target);")
+          category_anchor = "    const block = cmsBlocks.find(b => normalizeCategory(b.category) === target);"
+          if category_anchor in p and "const categoryCms" not in p[p.find(category_anchor):p.find(category_anchor)+500]:
+              p = p.replace(category_anchor, category_anchor + "\n    const categoryCms = cmsCategories.find((c: any) => normalizeCategory(c.slug || c.name) === target);", 1)
+
           p = p.replace("      image: defaultImages[target] || '/images/collections/collection.png'", "      image: categoryCms?.bannerImage || categoryCms?.featuredImage || categoryCms?.image || categoryCms?.imageUrl || ''")
           p = p.replace("      image: block.desktop_image || block.mobile_image", "      image: block.desktop_image || block.mobile_image || categoryCms?.bannerImage || categoryCms?.featuredImage || categoryCms?.image || categoryCms?.imageUrl || ''")
 
+          # Replace any static collection hero URL assigned directly to a background/image expression.
+          p = re.sub(r"(['\"])https://images\.unsplash\.com/[^'\"]+\1", "''", p)
           portfolio.write_text(p)
           print('Patched Store.tsx and Portfolio.tsx')
           PY
+
+      - name: Validate source authority
+        run: |
+          ! grep -n "images.unsplash.com" src/components/Store.tsx src/components/Portfolio.tsx
+          ! grep -n "localStorage.getItem('zoal_admin_categories')\|localStorage.getItem('zoal_admin_brands')" src/components/Store.tsx
+          ! grep -n "const PRESET_ASSETS" src/components/Store.tsx
 
       - name: Build validation
         run: |
@@ -168,9 +178,15 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/components/Store.tsx src/components/Portfolio.tsx .github/workflows/one-time-store-collection-image-authority.yml
-          git diff --cached --quiet && exit 0
-          git commit -m 'fix(store): remove legacy image fallbacks from storefront collections'
-          git rm .github/workflows/one-time-store-collection-image-authority.yml
-          git commit -m 'chore(audit): remove one-time storefront remediation workflow'
-          git push origin HEAD:audit/dashboard-sync-fix
+          git add src/components/Store.tsx src/components/Portfolio.tsx
+          if git diff --cached --quiet; then
+            echo 'No source changes were required.'
+          else
+            git commit -m 'fix(store): enforce CMS-authoritative collection imagery'
+            git push origin HEAD:audit/dashboard-sync-fix
+          fi
+          if [ -f .github/workflows/one-time-store-collection-image-authority.yml ]; then
+            git rm .github/workflows/one-time-store-collection-image-authority.yml
+            git commit -m 'chore(audit): remove one-time storefront remediation workflow'
+            git push origin HEAD:audit/dashboard-sync-fix
+          fi
