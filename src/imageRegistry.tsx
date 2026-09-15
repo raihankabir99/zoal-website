@@ -1126,16 +1126,9 @@ export function useGlobalImages(categoryFilter?: BusinessCategory) {
  * Reactive hook merging static and custom products continuously
  */
 export function useGlobalProducts(): Product[] {
-  const [customProducts, setCustomProducts] = useState<Product[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_custom_products');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
-  });
+  // Customer-facing catalog starts empty and is populated only by the live Product API.
+  // Never hydrate storefront products from legacy localStorage snapshots.
+  const [customProducts, setCustomProducts] = useState<Product[]>([]);
   const [inventoryOverrides, setInventoryOverrides] = useState<Record<string, number>>(() => {
     try {
       const raw = localStorage.getItem('zoal_product_inventories');
@@ -1157,17 +1150,9 @@ export function useGlobalProducts(): Product[] {
 
   useEffect(() => {
     const readProductsAndOverrides = () => {
-      try {
-        const raw = localStorage.getItem('zoal_custom_products');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          setCustomProducts(Array.isArray(parsed) ? parsed : []);
-        } else {
-          setCustomProducts([]);
-        }
-      } catch (e) {
-        setCustomProducts([]);
-      }
+      // Product catalog is refreshed exclusively by productSync.triggerProductFetch().
+      // This listener only reacts to the authoritative cache after that fetch completes.
+      setCustomProducts([]);
 
       try {
         const rawOverrides = localStorage.getItem('zoal_product_inventories');
@@ -1252,9 +1237,13 @@ export function useGlobalProducts(): Product[] {
       if (p.name_en && !p.nameEn) normalizedProduct.nameEn = p.name_en;
       if (p.name_ar && !p.nameAr) normalizedProduct.nameAr = p.name_ar;
 
+      // Product image fields remain authoritative from the server catalog.
+      // Local overrides may not replace customer-facing image fields.
       let resolved = normalizeProductImages(normalizedProduct);
       if (p.id in productOverrides) {
-        resolved = { ...resolved, ...productOverrides[p.id] };
+        const { images, image_urls, image, image_url, imageUrl, thumbnail, ...safeOverrides } = productOverrides[p.id] || {};
+        void images; void image_urls; void image; void image_url; void imageUrl; void thumbnail;
+        resolved = { ...resolved, ...safeOverrides };
       }
       if (p.id in inventoryOverrides) {
         resolved = { ...resolved, inventory: inventoryOverrides[p.id] };
