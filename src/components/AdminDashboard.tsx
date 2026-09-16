@@ -8701,7 +8701,7 @@ export default function AdminDashboard({
                   <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xs flex items-center gap-3 text-left">
                     <Info className="w-4 h-4 text-amber-400 shrink-0" />
                     <p className="text-amber-300 text-xs font-mono leading-relaxed">
-                      UI Preview • Server Integration API Not Connected. Integrations configured here exist in local session state only.
+                      Production integration registry • Server-backed encrypted credentials with Owner/Admin access control.
                     </p>
                   </div>
 
@@ -8779,7 +8779,7 @@ export default function AdminDashboard({
                   <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-4">
                     <div className="border-b border-white/10 pb-3">
                       <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">Integration Registry</h3>
-                      <p className="text-zinc-400 text-xs font-mono mt-1">Federated ecosystem configurations & API mappings (UI Preview)</p>
+                      <p className="text-zinc-400 text-xs font-mono mt-1">Federated ecosystem configurations & encrypted server-side credential mappings</p>
                     </div>
 
                     {integrationsList.filter(item => {
@@ -8792,7 +8792,7 @@ export default function AdminDashboard({
                         <Plug className="w-10 h-10 text-zinc-600" />
                         <h4 className="text-white text-sm font-mono font-bold uppercase tracking-wider">No Integrations Configured</h4>
                         <p className="text-zinc-400 text-xs font-mono max-w-md">
-                          No third-party integration nodes are currently configured in this session. Configure local integration drafts using the button below.
+                          No third-party integration nodes are currently configured in this session. Add a supported integration credential below. It is encrypted server-side and remains inactive until deliberately enabled.
                         </p>
                         <button
                           onClick={() => {
@@ -8875,7 +8875,7 @@ export default function AdminDashboard({
                                   <td className="p-3 text-right space-x-2">
                                     <button
                                       onClick={() => {
-                                        setIntegrationFeedback(`View: ${item.name} is configured via provider ${item.provider}. (UI Preview Mode)`);
+                                        setIntegrationFeedback(`View: ${item.name} is configured via provider ${item.provider}.`);
                                       }}
                                       className="text-zinc-400 hover:text-white transition-colors cursor-pointer px-1.5 py-1"
                                     >
@@ -8958,14 +8958,14 @@ export default function AdminDashboard({
                   <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-4">
                     <div className="border-b border-white/10 pb-3">
                       <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">Audit & Activity Log</h3>
-                      <p className="text-zinc-400 text-xs font-mono mt-1">UI-only local activity preview — server audit ledger not yet connected</p>
+                      <p className="text-zinc-400 text-xs font-mono mt-1">Server audit events are written to the production activity ledger.</p>
                     </div>
 
                     <div className="overflow-y-auto max-h-[250px]">
                       {integrationAuditLogs.length === 0 ? (
                         <div className="py-8 flex flex-col items-center justify-center text-center space-y-2 border border-dashed border-white/10 rounded-xs">
                           <FileText className="w-6 h-6 text-zinc-600 mb-1" />
-                          <span className="text-zinc-400 text-xs font-mono">No local activity logged yet in this session.</span>
+                          <span className="text-zinc-400 text-xs font-mono">No integration activity recorded yet.</span>
                         </div>
                       ) : (
                         <div className="border border-white/10 rounded-xs">
@@ -9015,7 +9015,7 @@ export default function AdminDashboard({
                         <h3 className="text-white text-base font-display uppercase tracking-widest font-bold">
                           {editingIntegration ? 'Edit Integration Workspace' : 'Add Integration Workspace'}
                         </h3>
-                        <p className="text-zinc-400 text-xs font-mono mt-0.5">Configure federated API nodes and transport credentials (UI Preview)</p>
+                        <p className="text-zinc-400 text-xs font-mono mt-0.5">Configure a supported integration and store its credential securely on the server.</p>
                       </div>
                       <button onClick={() => setIsAddIntegrationOpen(false)} className="text-zinc-400 hover:text-white transition-colors cursor-pointer p-1">
                         <X className="w-5 h-5" />
@@ -9026,7 +9026,7 @@ export default function AdminDashboard({
                       {/* Informational Warning message */}
                       <div className="bg-gold-pure/10 border border-gold-pure/20 p-3.5 rounded-xs">
                         <p className="text-gold-pure text-xs leading-relaxed font-mono">
-                          Production credentials will be stored securely on the server in the backend implementation phase. Entering an API key is a configuration draft and does NOT automatically activate live services. Activation must be a deliberate lifecycle step.
+                          Credentials are encrypted server-side. Saving keeps the integration inactive; Publish/Enable is the deliberate activation step.
                         </p>
                       </div>
 
