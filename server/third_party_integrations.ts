@@ -8,6 +8,7 @@ const SUPPORTED_PROVIDERS = new Set(['metricool']);
 const PROVIDER_ENDPOINTS: Record<string, string> = {
   metricool: 'https://app.metricool.com'
 };
+const METRICOOL_VERIFY_ENDPOINT = 'https://app.metricool.com/api/admin/simpleProfiles';
 
 function getPgClient() {
   const connectionString = process.env.DATABASE_URL;
@@ -54,6 +55,19 @@ function normalizeProvider(value: unknown) {
 function maskSecret(secret: string) {
   if (secret.length <= 8) return '••••••••';
   return `${secret.slice(0, 4)}••••${secret.slice(-4)}`;
+}
+
+function parseMetricoolCredential(secret: string) {
+  try {
+    const parsed = JSON.parse(secret);
+    const userToken = String(parsed?.userToken ?? parsed?.token ?? '').trim();
+    const userId = String(parsed?.userId ?? '').trim();
+    const blogId = String(parsed?.blogId ?? '').trim();
+    if (!userToken || !userId || !blogId) return null;
+    return { userToken, userId, blogId };
+  } catch {
+    return null;
+  }
 }
 
 async function audit(req: Request, action: string, resourceId: string | null, metadata: Record<string, unknown> = {}) {
@@ -189,20 +203,64 @@ export async function testThirdPartyIntegration(req: Request, res: Response) {
       const row = result.rows[0];
       if (!row) return res.status(404).json({ ok: false, error: 'Integration not found' });
       if (row.provider !== 'metricool') return res.status(400).json({ ok: false, error: 'No provider adapter is available for this integration yet' });
-      decryptSecret(row.encrypted_secret, row.iv, row.auth_tag);
-      if (row.status === 'active') {
-        await client.query(`update public.zoal_third_party_integrations set status = 'inactive', last_error = 'Provider API adapter has not completed a live connectivity test' where id = $1`, [id]);
+
+      const secret = decryptSecret(row.encrypted_secret, row.iv, row.auth_tag);
+      const credential = parseMetricoolCredential(secret);
+      if (!credential) {
+        await client.query(
+          `update public.zoal_third_party_integrations
+           set status = 'error', last_verified_at = null, last_error = $2, updated_at = now()
+           where id = $1`,
+          [id, 'Metricool credential must contain userToken, userId and blogId']
+        );
+        await audit(req, 'THIRD_PARTY_INTEGRATION_TEST', id, { provider: row.provider, adapter: 'metricool', apiCalled: false, verified: false, reason: 'invalid_credential_format' });
+        return res.status(400).json({ ok: false, verified: false, active: false, error: 'Metricool credential must contain userToken, userId and blogId' });
       }
-      await audit(req, 'THIRD_PARTY_INTEGRATION_CREDENTIAL_CHECK', id, { provider: row.provider, adapter: 'credential-integrity', apiCalled: false });
-      return res.json({
-        ok: true,
-        verified: false,
-        mode: 'credential-integrity',
-        active: false,
-        message: 'Credential encryption integrity verified. No provider API call was made, so this integration remains inactive.'
-      });
+
+      const url = new URL(METRICOOL_VERIFY_ENDPOINT);
+      url.searchParams.set('blogId', credential.blogId);
+      url.searchParams.set('userId', credential.userId);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-Mc-Auth': credential.userToken
+          },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok) {
+        const providerError = `Metricool API verification failed with HTTP ${response.status}`;
+        await client.query(
+          `update public.zoal_third_party_integrations
+           set status = 'error', last_verified_at = null, last_error = $2, updated_at = now()
+           where id = $1`,
+          [id, providerError]
+        );
+        await audit(req, 'THIRD_PARTY_INTEGRATION_TEST', id, { provider: row.provider, adapter: 'metricool', apiCalled: true, verified: false, httpStatus: response.status });
+        return res.status(502).json({ ok: false, verified: false, active: false, error: providerError });
+      }
+
+      await client.query(
+        `update public.zoal_third_party_integrations
+         set status = 'active', last_verified_at = now(), last_error = null, updated_at = now(), updated_by = $2
+         where id = $1`,
+        [id, String((req as any).user.id)]
+      );
+      await audit(req, 'THIRD_PARTY_INTEGRATION_TEST', id, { provider: row.provider, adapter: 'metricool', apiCalled: true, verified: true, httpStatus: response.status });
+      return res.json({ ok: true, verified: true, active: true, message: 'Metricool API connectivity verified successfully.' });
     } finally { await client.end(); }
   } catch (error: any) {
-    return res.status(error?.statusCode || 500).json({ ok: false, verified: false, active: false, error: error?.message || 'Integration test failed' });
+    const message = error?.name === 'AbortError' ? 'Metricool API verification timed out' : (error?.message || 'Integration test failed');
+    return res.status(error?.statusCode || 502).json({ ok: false, verified: false, active: false, error: message });
   }
 }
