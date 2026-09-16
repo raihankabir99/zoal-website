@@ -23,6 +23,7 @@ interface SimulationRun {
   scenario_name: string;
   revenue_projection: number;
   profit_projection: number;
+  profitStatus?: 'unavailable' | 'derived_from_verified_gross_profit' | string;
   risk_score: number;
   parameters: any;
   captured_at: string;
@@ -77,9 +78,11 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      const sessionToken = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const headers = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
       const [resModels, resRuns] = await Promise.all([
-        fetch('/api/simulation/models'),
-        fetch('/api/simulation/runs')
+        fetch('/api/simulation/models', { headers }),
+        fetch('/api/simulation/runs', { headers })
       ]);
 
       if (!resModels.ok || !resRuns.ok) throw new Error('Secure handshake with Simulation Center failed.');
@@ -130,196 +133,64 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
     };
   }, []);
 
-  // Seeding models if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const seedModels = [
-        { name: 'Pricing Simulation', description: 'Optimizes premium gown and luxury Sudanese coffee prices against regional Hofuf and Riyadh indices.', risk_weight: 4.5, variables: { base_price: 350, elasticity: -1.2 } },
-        { name: 'Warehouse Expansion', description: 'Simulates profit margins and dispatch throughput of establishing a secondary fulfillment terminal in Dammam.', risk_weight: 5.8, variables: { footprint_sqm: 1200, rent_sar: 140000 } },
-        { name: 'Discount Campaign Impact', description: 'Forecasts flash-discount conversion curves and customer lifetime value spikes.', risk_weight: 3.2, variables: { default_discount: 15, duration_days: 7 } }
-      ];
-
-      for (const m of seedModels) {
-        await supabaseClient.from('zoal_decision_models').insert(m);
-      }
-      await fetchSimulationData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Run Simulation Calculation (Client-side projection logic that writes to DB)
+  // Server-authoritative scenario execution: browser sends inputs only.
   const handleRunSimulation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedModel || !simScenario.trim()) return;
-
     try {
-      setActionLoading(true);
-      setError(null);
-
-      // Algorithmic Projection Engine
-      const val1 = parseFloat(simParam1) || 1.0;
-      const val2 = parseFloat(simParam2) || 0;
-
-      let projectedRev = 125000;
-      let projectedProfit = 48000;
-      let calculatedRisk = selectedModel.risk_weight;
-
-      if (selectedModel.name.includes('Pricing')) {
-        // Revenue = base_sales * multiplier * elasticity
-        projectedRev = 125000 * val1 * (1 - (val2 / 100) * 0.5);
-        projectedProfit = projectedRev * 0.42;
-        calculatedRisk = Math.min(10, Math.max(1, selectedModel.risk_weight + (val1 - 1.0) * 3));
-      } else if (selectedModel.name.includes('Warehouse')) {
-        projectedRev = 125000 * (1 + (val1 / 1000) * 0.25);
-        projectedProfit = projectedRev * 0.38 - (val2 * 0.1);
-        calculatedRisk = Math.min(10, Math.max(1, selectedModel.risk_weight + (val1 > 1500 ? 1.5 : -0.5)));
-      } else {
-        projectedRev = 125000 * (1 + (val2 / 100) * 1.2);
-        projectedProfit = projectedRev * (0.42 - (val1 / 100));
-        calculatedRisk = Math.min(10, Math.max(1, selectedModel.risk_weight + (val1 > 25 ? 2.0 : -1.0)));
-      }
-
-      const payload = {
-        model_id: selectedModel.id,
-        scenario_name: simScenario,
-        revenue_projection: Math.round(projectedRev),
-        profit_projection: Math.round(projectedProfit),
-        risk_score: parseFloat(calculatedRisk.toFixed(1)),
-        parameters: { param1: val1, param2: val2 },
-        captured_at: new Date().toISOString()
-      };
-
-      // Call API Endpoint POST `/api/simulation/runs`
-      // Use local session token if available or fallback
-      const sessionToken = localStorage.getItem('supabase-token') || 'dev-preview-token';
+      setActionLoading(true); setError(null);
+      const sessionToken = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch('/api/simulation/runs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`
-        },
-        body: JSON.stringify(payload)
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+        body: JSON.stringify({ model_id: selectedModel.id, scenario_name: simScenario.trim(), parameters: { param1: Number(simParam1), param2: Number(simParam2) } })
       });
-
-      if (!res.ok) throw new Error('API server rejected simulation registration.');
-
-      setSimScenario('');
-      setIsSimulating(false);
-      await fetchSimulationData();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to submit simulation model run.');
-    } finally {
-      setActionLoading(false);
-    }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'API server rejected simulation registration.');
+      setSimScenario(''); setIsSimulating(false); await fetchSimulationData();
+    } catch (err: any) { console.error(err); setError(err.message || 'Failed to submit simulation model run.'); }
+    finally { setActionLoading(false); }
   };
 
-  // Manage Decision Models (CRUD)
-  const handleOpenModelCreate = () => {
-    setEditingModel(null);
-    setModelName('');
-    setModelDesc('');
-    setModelRisk('4.5');
-    setIsModelFormOpen(true);
-  };
-
-  const handleOpenModelEdit = (m: DecisionModel) => {
-    setEditingModel(m);
-    setModelName(m.name);
-    setModelDesc(m.description);
-    setModelRisk(m.risk_weight.toString());
-    setIsModelFormOpen(true);
-  };
-
+  // Protected API owns model persistence and schema.
+  const handleOpenModelCreate = () => { setEditingModel(null); setModelName(''); setModelDesc(''); setModelRisk('4.5'); setIsModelFormOpen(true); };
+  const handleOpenModelEdit = (m: DecisionModel) => { setEditingModel(m); setModelName(m.name); setModelDesc(m.description); setModelRisk(m.risk_weight.toString()); setIsModelFormOpen(true); };
   const handleModelSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!modelName.trim()) return;
-
-    try {
-      setActionLoading(true);
-      setError(null);
-
-      const payload = {
-        name: modelName,
-        description: modelDesc,
-        risk_weight: parseFloat(modelRisk) || 4.5,
-        variables: editingModel?.variables || { base: 100 }
-      };
-
-      if (editingModel) {
-        const { error: err } = await supabaseClient
-          .from('zoal_decision_models')
-          .update(payload)
-          .eq('id', editingModel.id);
-        if (err) throw err;
-      } else {
-        const { error: err } = await supabaseClient
-          .from('zoal_decision_models')
-          .insert(payload);
-        if (err) throw err;
-      }
-
-      setIsModelFormOpen(false);
-      await fetchSimulationData();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failure updating model registry.');
-    } finally {
-      setActionLoading(false);
-    }
+    e.preventDefault(); if (!modelName.trim()) return;
+    try { setActionLoading(true); setError(null);
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const payload = { name: modelName.trim(), type: 'Pricing', configuration: { description: modelDesc.trim(), risk_weight: Number(modelRisk), variables: editingModel?.variables || {} } };
+      const res = await fetch(editingModel ? `/api/simulation/models/${editingModel.id}` : '/api/simulation/models', { method: editingModel ? 'PUT' : 'POST', headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) });
+      const data = await res.json().catch(()=>null); if(!res.ok) throw new Error(data?.error || 'Failure updating model registry.');
+      setIsModelFormOpen(false); await fetchSimulationData();
+    } catch(err:any) { setError(err.message || 'Failure updating model registry.'); } finally { setActionLoading(false); }
   };
-
   const handleDeleteModel = async (id: string) => {
     if (!confirm('Are you sure you want to permanently delete this model template registry?')) return;
-    try {
-      setActionLoading(true);
-      const { error: err } = await supabaseClient.from('zoal_decision_models').delete().eq('id', id);
-      if (err) throw err;
-      await fetchSimulationData();
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message || 'Deletion error.');
-    } finally {
-      setActionLoading(false);
-    }
+    try { setActionLoading(true); const token=localStorage.getItem('zoal_auth_token')||sessionStorage.getItem('zoal_auth_token')||''; const res=await fetch(`/api/simulation/models/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}}); const data=await res.json().catch(()=>null); if(!res.ok) throw new Error(data?.error||'Deletion error.'); await fetchSimulationData(); } catch(err:any){setError(err.message||'Deletion error.');} finally{setActionLoading(false);}
   };
 
-  // Delete Simulation Run
+  // Delete through the protected backend only.
   const handleDeleteRun = async (id: string) => {
     if (!confirm('Are you sure you want to permanently erase this simulated run trace?')) return;
-    try {
-      setActionLoading(true);
-      const { error: err } = await supabaseClient.from('zoal_simulation_runs').delete().eq('id', id);
-      if (err) throw err;
-      await fetchSimulationData();
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message || 'Deletion error.');
-    } finally {
-      setActionLoading(false);
-    }
+    try { setActionLoading(true); const token=localStorage.getItem('zoal_auth_token')||sessionStorage.getItem('zoal_auth_token')||''; const res=await fetch(`/api/simulation/runs/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}}); const data=await res.json().catch(()=>null); if(!res.ok) throw new Error(data?.error||'Deletion error.'); await fetchSimulationData(); } catch(err:any){setError(err.message||'Deletion error.');} finally{setActionLoading(false);}
   };
 
   // Dynamic Metrics calculations
   const totalRunsCount = useMemo(() => runs.length, [runs]);
   const averageRisk = useMemo(() => {
-    return runs.length ? parseFloat((runs.reduce((sum, r) => sum + r.risk_score, 0) / runs.length).toFixed(1)) : 0;
+    return runs.length ? parseFloat((runs.reduce((sum, r) => sum + r.risk_score, 0) / runs.length).toFixed(1)) : null;
   }, [runs]);
 
-  const maxProfitProjections = useMemo(() => {
-    return runs.length ? Math.max(...runs.map(r => r.profit_projection)) : 0;
+  const maxRevenueProjection = useMemo(() => {
+    return runs.length ? Math.max(...runs.map(r => r.revenue_projection)) : null;
   }, [runs]);
 
-  // Chart dataset
+  // Chart dataset. Profit is intentionally omitted when the backend marks it unavailable.
   const chartData = useMemo(() => {
     return runs.map(r => ({
       scenario: r.scenario_name.substring(0, 15),
       Revenue: r.revenue_projection,
-      Profit: r.profit_projection,
+      Profit: r.profitStatus === 'unavailable' ? undefined : r.profit_projection,
       Risk: r.risk_score * 10000, // scaled for single axis visual comparison
     }));
   }, [runs]);
@@ -339,8 +210,8 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
   // CSV Export
   const handleExportCSV = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
-      + ["Scenario,Projected Revenue (SAR),Projected Profit (SAR),Risk Score"].concat(
-        runs.map(r => `"${r.scenario_name}",${r.revenue_projection},${r.profit_projection},${r.risk_score}`)
+      + ["Scenario,Projected Revenue (SAR),Projected Profit (SAR) - Verified Only,Model Risk Signal"].concat(
+        runs.map(r => `"${r.scenario_name}",${r.revenue_projection},${r.profitStatus === 'unavailable' ? 'Not Available' : r.profit_projection},${r.risk_score}`)
       ).join("\n");
     
     const encodedUri = encodeURI(csvContent);
@@ -418,15 +289,8 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
               <Compass className="w-12 h-12 text-gold-pure/40 mx-auto" />
               <h3 className="text-white font-bold uppercase tracking-widest font-display text-sm font-sans">Sovereign Simulation Templates Empty</h3>
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                Supabase registers possess no decision structures. Initializing foundational Pricing, Expansion, and Flash Campaign templates immediately unlocks dynamic visualizer runs.
+                Supabase registers possess no decision structures. Register foundational Pricing, Expansion, and Flash Campaign templates to unlock dynamic visualizer runs.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Auto-Seed Decision Templates
-              </button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -441,17 +305,17 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                 </div>
 
                 <div className="bg-zinc-950 border border-white/5 p-4 rounded-xs">
-                  <span className="text-zinc-500 text-[8px] font-mono uppercase tracking-widest block">Average Aggregated Threat Risk</span>
+                  <span className="text-zinc-500 text-[8px] font-mono uppercase tracking-widest block">Average Model Risk Signal</span>
                   <div className="flex justify-between items-baseline pt-1">
-                    <span className="text-white text-md font-bold font-mono">{averageRisk} / 10</span>
+                    <span className="text-white text-md font-bold font-mono">{averageRisk == null ? 'Not Available' : `${averageRisk} / 10`}</span>
                     <ShieldAlert className="w-4 h-4 text-red-400" />
                   </div>
                 </div>
 
                 <div className="bg-zinc-950 border border-white/5 p-4 rounded-xs">
-                  <span className="text-zinc-500 text-[8px] font-mono uppercase tracking-widest block">Max Projected Yield Benefit</span>
+                  <span className="text-zinc-500 text-[8px] font-mono uppercase tracking-widest block">Max Projected Revenue</span>
                   <div className="flex justify-between items-baseline pt-1">
-                    <span className="text-white text-md font-bold font-mono">{maxProfitProjections.toLocaleString()} SAR</span>
+                    <span className="text-white text-md font-bold font-mono">{maxRevenueProjection == null ? 'Not Available' : `${maxRevenueProjection.toLocaleString()} SAR`}</span>
                     <DollarSign className="w-4 h-4 text-emerald-400" />
                   </div>
                 </div>
@@ -490,7 +354,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                           </div>
                         </div>
                         <p className="text-zinc-500 text-[10px] leading-relaxed mb-2">{m.description}</p>
-                        <span className="text-[8px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-1.5 py-0.5 border border-white/5 rounded-xs">Risk: {m.risk_weight}</span>
+                        <span className="text-[8px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-1.5 py-0.5 border border-white/5 rounded-xs">Model Risk Signal: {m.risk_weight}</span>
                       </div>
                     ))}
                   </div>
@@ -498,7 +362,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
 
                 {/* Runs Chart comparison */}
                 <div className="lg:col-span-2 bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4 flex flex-col justify-between">
-                  <h3 className="text-white text-xs font-bold font-display uppercase tracking-wider border-b border-white/5 pb-2">Revenue vs Profit Projections (SAR)</h3>
+                  <h3 className="text-white text-xs font-bold font-display uppercase tracking-wider border-b border-white/5 pb-2">Revenue vs Verified Profit Projections (SAR)</h3>
                   <div className="h-64 text-xs font-mono">
                     {runs.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-zinc-500">Run a simulation on an active template template above to graph results.</div>
@@ -510,7 +374,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                           <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#222' }} />
                           <Legend />
                           <Bar dataKey="Revenue" fill="#D4AF37" name="Projected Sales" />
-                          <Bar dataKey="Profit" fill="#10b981" name="Projected Margin" />
+                          <Bar dataKey="Profit" fill="#10b981" name="Verified Profit" />
                         </BarChart>
                       </ResponsiveContainer>
                     )}
@@ -536,7 +400,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                         <th className="py-3 px-4">Scenario</th>
                         <th className="py-3 px-4">Projected Revenue</th>
                         <th className="py-3 px-4">Projected Profit</th>
-                        <th className="py-3 px-4">Calculated Risk Score</th>
+                        <th className="py-3 px-4">Model Risk Signal</th>
                         <th className="py-3 px-4">Captured At</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
@@ -546,7 +410,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                         <tr key={r.id} className="border-b border-white/5 hover:bg-white/1 font-sans">
                           <td className="py-3 px-4 text-white font-bold">{r.scenario_name}</td>
                           <td className="py-3 px-4 font-mono text-zinc-300">{r.revenue_projection.toLocaleString()} SAR</td>
-                          <td className="py-3 px-4 font-mono text-gold-pure font-bold">{r.profit_projection.toLocaleString()} SAR</td>
+                          <td className="py-3 px-4 font-mono text-gold-pure font-bold">{r.profitStatus === 'unavailable' ? 'Not Available' : `${r.profit_projection.toLocaleString()} SAR`}</td>
                           <td className="py-3 px-4 font-mono text-red-400 font-bold">{r.risk_score} / 10</td>
                           <td className="py-3 px-4 font-mono text-zinc-500">{new Date(r.captured_at).toLocaleDateString()}</td>
                           <td className="py-3 px-4 text-right">
@@ -701,7 +565,7 @@ export const EnterpriseDecisionSimulation: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-zinc-500 text-[9px] uppercase tracking-wider block mb-1">Threat Risk Weight (1.0 - 10.0)</label>
+                  <label className="text-zinc-500 text-[9px] uppercase tracking-wider block mb-1">Model Risk Signal (1.0 - 10.0)</label>
                   <input 
                     type="number" 
                     step="0.1"

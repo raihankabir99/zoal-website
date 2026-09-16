@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const rawUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jglveforpqhioxpambbq.supabase.co';
-const supabaseAnonKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_usAlnI8l2JjcgwOIiWbgRw_ZUKVJ2C3';
+const rawUrl = (typeof import.meta !== 'undefined' && import.meta?.env?.NEXT_PUBLIC_SUPABASE_URL) || (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SUPABASE_URL) || 'https://jglveforpqhioxpambbq.supabase.co';
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta?.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY) || (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY) || 'sb_publishable_usAlnI8l2JjcgwOIiWbgRw_ZUKVJ2C3';
 
 function cleanUrl(url: string): string {
   let cleaned = (url || '').trim();

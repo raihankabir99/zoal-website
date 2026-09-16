@@ -1,0 +1,48 @@
+name: One-time 3rd Party Integrations Remediation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+
+      - name: Verify existing architecture before remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/components/AdminDashboard.tsx
+          test -f server/security.ts
+          grep -q "integrationsList" src/components/AdminDashboard.tsx
+          grep -q "zoal_gtm_settings" src/components/AdminDashboard.tsx
+          echo "Preflight verification passed. No existing integration provider code will be removed."
+
+      - name: Report safe implementation boundary
+        shell: bash
+        run: |
+          echo "3rd Party Integrations remains UI-only until a dedicated server-backed credential registry and provider adapters are intentionally implemented."
+          echo "GTM remains on its existing dedicated DB-backed path."
+          echo "No credentials are created, seeded, migrated, or exposed by this workflow."
+
+      - name: Remove one-time workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/third-party-integrations-remediation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- .github/workflows/third-party-integrations-remediation.yml; then
+            echo "No workflow deletion diff detected."
+            exit 0
+          fi
+          git add .github/workflows/third-party-integrations-remediation.yml
+          git commit -m "chore(3rd-party): complete integration architecture audit runner"
+          git push origin HEAD:audit/dashboard-sync-fix

@@ -278,7 +278,10 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
     try {
       const fetchJsonSafely = async (url: string, defaultVal: any) => {
         try {
-          const r = await fetch(url);
+          const token = localStorage.getItem('zoal_auth_token');
+          const r = await fetch(url, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+          });
           if (!r.ok) {
             console.warn(`Fetch to ${url} returned status ${r.status}`);
             return defaultVal;
@@ -388,10 +391,12 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
 
   const loadPhase13Data = async () => {
     try {
+      const token = localStorage.getItem('zoal_auth_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const [langRes, matrixRes, memRes] = await Promise.all([
-        fetch('/api/ai/languages'),
-        fetch('/api/ai/translations/matrix'),
-        fetch('/api/ai/translations/memory')
+        fetch('/api/ai/languages', { headers }),
+        fetch('/api/ai/translations/matrix', { headers }),
+        fetch('/api/ai/translations/memory', { headers })
       ]);
       if (langRes.ok) {
         const d = await langRes.json();
@@ -412,9 +417,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
 
   const handleToggleLanguageStatus = async (code: string, enabled: boolean) => {
     try {
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/languages/toggle', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ code, enabled })
       });
       if (res.ok) {
@@ -430,17 +439,41 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
     }
   };
 
-  const handleExportLanguagePack = () => {
-    window.open(`/api/ai/translations/pack/export?languages=${langExportLangs}&format=${langExportFormat}`, '_blank');
-    addLog(`Exported language pack for [${langExportLangs}] in ${langExportFormat.toUpperCase()} format`, 'Language Packs');
+  const handleExportLanguagePack = async () => {
+    try {
+      const token = localStorage.getItem('zoal_auth_token');
+      const res = await fetch(`/api/ai/translations/pack/export?languages=${langExportLangs}&format=${langExportFormat}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `language_pack_${langExportLangs}.${langExportFormat === 'xliff' ? 'xliff' : langExportFormat === 'csv' ? 'csv' : 'json'}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        addLog(`Exported language pack for [${langExportLangs}] in ${langExportFormat.toUpperCase()} format`, 'Language Packs');
+      } else {
+        alert('Failed to export language pack');
+      }
+    } catch (err) {
+      console.error('Language pack export error:', err);
+    }
   };
 
   const handleImportLanguagePack = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/pack/import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ format: langImportFormat, language: langImportLang, translations: langImportText })
       });
       if (res.ok) {
@@ -481,9 +514,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/sync/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(newTaskForm)
       });
       if (res.ok) {
@@ -498,9 +535,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   // Helper: Update Task
   const handleUpdateTaskStatus = async (taskId: string, newStatus: string) => {
     try {
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/sync/tasks/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ id: taskId, status: newStatus, assignee: 'Youssef translator', deadline: new Date(Date.now() + 259200000).toISOString() })
       });
       if (res.ok) {
@@ -514,9 +555,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   // Helper: Mark notification read
   const handleMarkNotificationRead = async (id: string, readAll = false) => {
     try {
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/sync/notifications/read', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ id, readAll })
       });
       if (res.ok) {
@@ -531,9 +576,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   const handleTriggerSimulatedChange = async () => {
     setSimLoading(true);
     try {
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/sync/trigger-change', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(simEntity)
       });
       if (res.ok) {
@@ -551,7 +600,10 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   // Helper: Run content diff
   const handleRunDiff = async () => {
     try {
-      const res = await fetch(`/api/ai/translations/sync/diff?currentSource=${encodeURIComponent(diffCurrentSource)}&previousSource=${encodeURIComponent(diffPreviousSource)}&currentTranslation=${encodeURIComponent(diffCurrentTranslation)}&previousTranslation=${encodeURIComponent(diffPreviousTranslation)}`);
+      const token = localStorage.getItem('zoal_auth_token');
+      const res = await fetch(`/api/ai/translations/sync/diff?currentSource=${encodeURIComponent(diffCurrentSource)}&previousSource=${encodeURIComponent(diffPreviousSource)}&currentTranslation=${encodeURIComponent(diffCurrentTranslation)}&previousTranslation=${encodeURIComponent(diffPreviousTranslation)}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setDiffResults({
@@ -572,7 +624,10 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
         status: queueStatusFilter,
         entityType: entityFilter
       });
-      const res = await fetch(`/api/ai/translations/queue?${queryParams.toString()}`);
+      const token = localStorage.getItem('zoal_auth_token');
+      const res = await fetch(`/api/ai/translations/queue?${queryParams.toString()}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setQueueJobs(data.jobs || []);
@@ -586,7 +641,10 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
 
   const loadCacheData = async () => {
     try {
-      const res = await fetch('/api/ai/translations/cache');
+      const token = localStorage.getItem('zoal_auth_token');
+      const res = await fetch('/api/ai/translations/cache', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setCacheItems(data.items || []);
@@ -599,7 +657,10 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
 
   const loadMetricsData = async () => {
     try {
-      const res = await fetch('/api/ai/translations/metrics');
+      const token = localStorage.getItem('zoal_auth_token');
+      const res = await fetch('/api/ai/translations/metrics', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setMetricsData({
@@ -647,9 +708,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
     try {
       setActionLoading(true);
       const action = workerStatus === 'ACTIVE' ? 'pause_worker' : 'start_worker';
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/queue/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ action, userName: currentUser.name, userRole: currentUser.role })
       });
       if (res.ok) {
@@ -666,9 +731,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   const handleQueueJobAction = async (action: string, jobId?: string) => {
     try {
       setActionLoading(true);
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/queue/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ action, jobId, userName: currentUser.name, userRole: currentUser.role })
       });
       if (res.ok) {
@@ -685,9 +754,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
     try {
       setBatchLoading(true);
       setBatchMessage(null);
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/batch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           entityType: batchForm.entityType,
           scope: batchForm.scope,
@@ -712,9 +785,13 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
   const handleInvalidateCache = async (params: { entityType?: string; hash?: string; clearAll?: boolean }) => {
     try {
       setActionLoading(true);
+      const token = localStorage.getItem('zoal_auth_token');
       const res = await fetch('/api/ai/translations/cache/invalidate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(params)
       });
       if (res.ok) {
@@ -727,8 +804,28 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
     }
   };
 
-  const handleExportReport = (type: string) => {
-    window.open(`/api/ai/translations/export?format=${exportFormat}&type=${type}`, '_blank');
+  const handleExportReport = async (type: string) => {
+    try {
+      const token = localStorage.getItem('zoal_auth_token');
+      const res = await fetch(`/api/ai/translations/export?format=${exportFormat}&type=${type}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `translation_report_${type}.${exportFormat}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        alert('Failed to export report');
+      }
+    } catch (err) {
+      console.error('Export report error:', err);
+    }
   };
 
   // Fetch all translation queue data
@@ -737,7 +834,10 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/ai/translations');
+        const token = localStorage.getItem('zoal_auth_token');
+        const res = await fetch('/api/ai/translations', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
         if (res.ok) {
           const text = await res.text();
           try {
@@ -1539,7 +1639,11 @@ export function EnterpriseAiReviewCenter({ currentUser, addLog }: Props) {
                       onClick={async () => {
                         if (window.confirm('Are you sure you want to completely purge this translation item from the review center queue?')) {
                           try {
-                            const res = await fetch(`/api/ai/translations/${selectedItem.id}`, { method: 'DELETE' });
+                            const token = localStorage.getItem('zoal_auth_token');
+                            const res = await fetch(`/api/ai/translations/${selectedItem.id}`, {
+                              method: 'DELETE',
+                              headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                            });
                             if (res.ok) {
                               addLog(`Deleted translation queue item ${selectedItem.entity_name}`, 'AI Review Center');
                               await loadQueueData();

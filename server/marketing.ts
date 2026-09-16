@@ -1,8 +1,53 @@
 import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
+import { logAuditEvent } from './audit';
 
 function getClient() {
   return getServiceSupabaseClient() || getSupabaseClient();
+}
+
+async function requireMarketingReadAccess(req: Request, res: Response): Promise<boolean> {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const token = typeof headerValue === 'string' && headerValue.startsWith('Bearer ')
+    ? headerValue.substring(7)
+    : '';
+
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+
+  const supabase = getSupabaseClient();
+  const serviceSupabase = getServiceSupabaseClient();
+  if (!supabase || !serviceSupabase) {
+    res.status(500).json({ error: 'MARKETING_AUTH_UNAVAILABLE' });
+    return false;
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+
+  const { data: profile, error: profileError } = await serviceSupabase
+    .from('zoal_users')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    res.status(500).json({ error: 'MARKETING_AUTH_UNAVAILABLE' });
+    return false;
+  }
+
+  if (!profile || !['admin', 'manager', 'staff'].includes(profile.role)) {
+    res.status(403).json({ error: 'Forbidden' });
+    return false;
+  }
+
+  return true;
 }
 
 const DEFAULT_CAMPAIGNS = [
@@ -118,6 +163,8 @@ export async function getMarketingData(req: Request, res: Response) {
 }
 
 export async function getCampaigns(req: Request, res: Response) {
+  if (!(await requireMarketingReadAccess(req, res))) return;
+
   const isProd = process.env.NODE_ENV === 'production';
   const supabase = getClient();
   if (!supabase) {
@@ -163,6 +210,16 @@ export async function createCampaign(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+  
+  logAuditEvent({
+    req,
+    action: 'CREATE_MARKETING_CAMPAIGN',
+    resourceType: 'campaign',
+    resourceId: data.id,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.status(201).json(mapCampaign(data));
 }
 
@@ -172,6 +229,12 @@ export async function updateCampaign(req: Request, res: Response) {
 
   const { id } = req.params;
   const body = req.body;
+
+  const { data: existing } = await supabase
+    .from('zoal_campaigns')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
   if (body.name !== undefined) payload.name = body.name;
@@ -188,6 +251,17 @@ export async function updateCampaign(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'UPDATE_MARKETING_CAMPAIGN',
+    resourceType: 'campaign',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.json(mapCampaign(data));
 }
 
@@ -196,16 +270,36 @@ export async function deleteCampaign(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
   const { id } = req.params;
+  const { data: existing } = await supabase
+    .from('zoal_campaigns')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('zoal_campaigns')
     .delete()
     .eq('id', id);
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'DELETE_MARKETING_CAMPAIGN',
+    resourceType: 'campaign',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: null,
+    severity: 'WARN',
+    source: 'marketing'
+  });
+
   res.json({ success: true, id });
 }
 
 export async function getCoupons(req: Request, res: Response) {
+  if (!(await requireMarketingReadAccess(req, res))) return;
+
   const isProd = process.env.NODE_ENV === 'production';
   const supabase = getClient();
   if (!supabase) {
@@ -252,6 +346,16 @@ export async function createCoupon(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'CREATE_COUPON',
+    resourceType: 'coupon',
+    resourceId: data.id,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.status(201).json(mapCoupon(data));
 }
 
@@ -261,6 +365,12 @@ export async function updateCoupon(req: Request, res: Response) {
 
   const { id } = req.params;
   const body = req.body;
+
+  const { data: existing } = await supabase
+    .from('zoal_coupons')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
   const payload: Record<string, any> = {};
   if (body.code !== undefined) payload.code = body.code.toUpperCase().trim();
@@ -276,6 +386,17 @@ export async function updateCoupon(req: Request, res: Response) {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'UPDATE_COUPON',
+    resourceType: 'coupon',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: data,
+    source: 'marketing'
+  });
+
   res.json(mapCoupon(data));
 }
 
@@ -284,24 +405,38 @@ export async function deleteCoupon(req: Request, res: Response) {
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
   const { id } = req.params;
+  const { data: existing } = await supabase
+    .from('zoal_coupons')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('zoal_coupons')
     .delete()
     .eq('id', id);
 
   if (error) return res.status(500).json({ error: error.message });
+
+  logAuditEvent({
+    req,
+    action: 'DELETE_COUPON',
+    resourceType: 'coupon',
+    resourceId: id,
+    beforeState: existing || null,
+    afterState: null,
+    severity: 'WARN',
+    source: 'marketing'
+  });
+
   res.json({ success: true, id });
 }
 
 export async function sendEmailCampaign(req: Request, res: Response) {
-  const supabase = getClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
-
-  const { campaign_id, subject, body } = req.body;
-  const { data, error } = await supabase.from('zoal_email_campaigns').insert({
-    campaign_id, subject, body, status: 'Sent', sent_at: new Date().toISOString()
-  }).select().single();
-  
-  if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json(data);
+  // The existing handler only inserted a row and labeled it "Sent"; it did not
+  // connect to the project's real SMTP transport. Never report false delivery.
+  return res.status(501).json({
+    error: 'MARKETING_EMAIL_TRANSPORT_NOT_CONFIGURED',
+    message: 'Marketing email delivery is not configured. No email was sent and no campaign was marked as sent.'
+  });
 }

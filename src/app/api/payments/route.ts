@@ -3,8 +3,9 @@ import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, val
 
 /**
  * POST /api/payments
- * Secure mockup integration for Credit Card/Mada payments.
- * Updates order payment status to paid upon success and registers activity/analytics.
+ * Development-only mock payment endpoint.
+ * Real gateway integration is intentionally not enabled yet.
+ * Production must never settle an order as paid through this mock flow.
  */
 export async function POST(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
@@ -14,11 +15,16 @@ export async function POST(req: NextRequest) {
     if (auth.error) return auth.error;
     const user = auth.user!;
 
+    // Never allow the mock gateway to settle real production orders.
+    if (process.env.NODE_ENV === 'production') {
+      return apiError('Payment gateway is not configured. Real payment processing is unavailable.', 503);
+    }
+
     const body = await req.json();
     const validationErr = validateFields(body, ['orderId', 'paymentMethod', 'cardNumber']);
     if (validationErr) return apiError(validationErr, 400);
 
-    // Verify order exists and matches customer
+    // Verify order exists and matches customer.
     const { data: order, error: orderErr } = await supabase
       .from('zoal_orders')
       .select('*')
@@ -33,20 +39,18 @@ export async function POST(req: NextRequest) {
       return apiError('Forbidden: Unauthorized order payment', 403);
     }
 
-    // Process mock gateway payment validation
-    const isSuccess = !body.cardNumber.startsWith('4000000000000002'); // Mock failure card
+    // Development-only simulated gateway response.
+    const isSuccess = !body.cardNumber.startsWith('4000000000000002');
 
     if (!isSuccess) {
-      // Mark as failed
       await supabase
         .from('zoal_orders')
         .update({ payment_status: 'failed', updated_at: new Date().toISOString() })
         .eq('id', body.orderId);
 
-      return apiError('Payment transaction was declined by bank gateway', 402);
+      return apiError('Development mock payment declined', 402);
     }
 
-    // Mark as paid
     const { data: updatedOrder, error: updateErr } = await supabase
       .from('zoal_orders')
       .update({
@@ -60,15 +64,16 @@ export async function POST(req: NextRequest) {
 
     if (updateErr) return apiError(updateErr.message, 500);
 
-    // Register analytics event for purchase
     await supabase.from('zoal_analytics').insert({
       event_name: 'purchase',
       user_id: user.id,
-      metadata: { orderId: body.orderId, amount: Number(order.total_amount) }
+      metadata: { orderId: body.orderId, amount: Number(order.total_amount), source: 'development_mock_payment' }
     });
 
     return apiResponse({
-      transactionId: 'TXN-' + Math.floor(10000000 + Math.random() * 90000000),
+      transactionId: 'DEV-MOCK-' + Math.floor(10000000 + Math.random() * 90000000),
+      paymentStatus: 'paid',
+      mode: 'development_mock',
       order: updatedOrder
     });
 

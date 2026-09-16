@@ -54,7 +54,7 @@ export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthInd
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
       transition={{ duration: 0.25 }}
-      className="mt-2.5 space-y-3 overflow-hidden text-left"
+      className="mt-2.5 space-y-3 overflow-hidden text-start"
     >
       {/* Header and Label */}
       <div className="flex items-center justify-between text-[11px]">
@@ -76,7 +76,7 @@ export function PasswordStrengthIndicator({ password = '' }: PasswordStrengthInd
       </div>
 
       {/* Checklist */}
-      <div className="space-y-1.5 pl-0.5">
+      <div className="space-y-1.5 ps-0.5">
         <span className="text-[9px] text-zinc-500 font-mono tracking-wider uppercase block mb-1">
           Security Requirements:
         </span>

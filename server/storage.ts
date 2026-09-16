@@ -1,5 +1,6 @@
 import multer from 'multer';
 import { getSupabaseClient, getCleanSupabaseUrl, getServiceSupabaseClient } from './supabase';
+import { validateFileSecurity } from '../backend/file_security';
 
 // Configure Multer for in-memory file handling (production-ready, avoids disk I/O)
 const uploadMemory = multer({
@@ -14,7 +15,7 @@ export const storageMultipleUploadMiddleware = uploadMemory.array('files', 10); 
 
 /**
  * Uploads a file buffer directly to a specified Supabase Storage bucket.
- * 
+ *
  * @param bucket Name of the Supabase bucket (e.g. 'products', 'avatars')
  * @param filePath Path inside the bucket (e.g. 'products/item-123.jpg' or '1234/avatar.png')
  * @param fileBuffer Buffer of the file content
@@ -37,9 +38,25 @@ export async function uploadToSupabase(
     // Sanitize the filepath (remove leading slashes, resolve double-slashes)
     const sanitizedPath = filePath.replace(/^\/+/, '').replace(/\/+/g, '/');
 
+    // Enforce server-side file security before any Storage write.
+    // This is required because this helper may use the service-role client,
+    // which bypasses Supabase Storage RLS policies.
+    const securityResult = validateFileSecurity(
+      sanitizedPath,
+      fileBuffer,
+      mimeType,
+      bucket
+    );
+
+    if (!securityResult.valid) {
+      return { success: false, error: securityResult.error || 'File security validation failed.' };
+    }
+
+    const validatedBuffer = securityResult.sanitizedBuffer || fileBuffer;
+
     let { data, error } = await supabase.storage
       .from(bucket)
-      .upload(sanitizedPath, fileBuffer, {
+      .upload(sanitizedPath, validatedBuffer, {
         contentType: mimeType,
         upsert: true, // Replace if already exists
         cacheControl: '3600' // 1 hour browser cache
@@ -49,7 +66,7 @@ export async function uploadToSupabase(
       try {
         console.log(`Creating missing storage bucket "${bucket}"...`);
         await supabase.storage.createBucket(bucket, { public: bucket !== 'invoices' });
-        const retry = await supabase.storage.from(bucket).upload(sanitizedPath, fileBuffer, {
+        const retry = await supabase.storage.from(bucket).upload(sanitizedPath, validatedBuffer, {
           contentType: mimeType,
           upsert: true,
           cacheControl: '3600'
@@ -88,7 +105,7 @@ export async function uploadToSupabase(
 
 /**
  * Deletes a file from a specified Supabase Storage bucket.
- * 
+ *
  * @param bucket Name of the Supabase bucket
  * @param filePath Path inside the bucket
  * @returns {Promise<{ success: boolean; error?: string }>}
@@ -121,7 +138,7 @@ export async function deleteFromSupabase(
 
 /**
  * Generates an Optimized Image URL leveraging Supabase's native CDN-cached Image Optimization engine.
- * 
+ *
  * @param bucket Bucket containing the image
  * @param filePath Path to the image
  * @param options Optimization parameters (width, height, quality, resize)
@@ -218,4 +235,3 @@ export async function checkImageReferences(supabase: any, targetFilename: string
 
   return refCount;
 }
-

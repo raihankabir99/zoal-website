@@ -1,26 +1,13 @@
 import { getSupabaseClient, getServiceSupabaseClient } from './supabase';
 import { Request, Response } from 'express';
 import { syncSupabaseUser } from '../backend/security';
+import { logAuditEvent } from './audit';
 
 async function getOptionalUser(req: any) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
   
-  if (!headerValue) return null;
-
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    headerValue === 'Bearer dev-preview-token'
-  ) {
-    return {
-      id: 'dev-preview',
-      email: process.env.DEV_BYPASS_EMAIL || 'rkinfinity.official@gmail.com',
-      role: 'owner',
-      permissions: ['can_manage_cms']
-    };
-  }
-
-  if (!headerValue.startsWith('Bearer ')) return null;
+  if (!headerValue || !headerValue.startsWith('Bearer ')) return null;
   const token = headerValue.substring(7);
   const supabase = getSupabaseClient();
   if (!supabase) return null;
@@ -229,6 +216,16 @@ export async function createBlogPost(req: Request, res: Response) {
     details: { title: data.title, role: user.role, status: data.status }
   });
 
+  logAuditEvent({
+    req,
+    action: 'CREATE_BLOG_POST',
+    resourceType: 'blog_post',
+    resourceId: data.id,
+    afterState: data,
+    metadata: { title: data.title, status: data.status },
+    source: 'blog'
+  });
+
   res.status(201).json(data);
 }
 
@@ -329,6 +326,17 @@ export async function updateBlogPost(req: Request, res: Response) {
     details: { title: data.title, role: user.role, status: data.status }
   });
 
+  logAuditEvent({
+    req,
+    action: 'UPDATE_BLOG_POST',
+    resourceType: 'blog_post',
+    resourceId: id,
+    beforeState: postBeforeUpdate,
+    afterState: data,
+    metadata: { title: data.title, status: data.status },
+    source: 'blog'
+  });
+
   res.json(data);
 }
 
@@ -379,6 +387,18 @@ export async function deleteBlogPost(req: Request, res: Response) {
     entity_id: id,
     actor: user.email,
     details: { title: post.title, role: user.role }
+  });
+
+  logAuditEvent({
+    req,
+    action: 'ARCHIVE_BLOG_POST',
+    resourceType: 'blog_post',
+    resourceId: id,
+    beforeState: post,
+    afterState: { ...post, status: 'archived' },
+    severity: 'WARN',
+    metadata: { title: post.title },
+    source: 'blog'
   });
 
   res.json({ success: true, message: 'Post archived successfully.' });

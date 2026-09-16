@@ -1,206 +1,200 @@
 import { NextRequest } from 'next/server';
 import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, validateFields } from '../helpers';
 
-/**
- * GET /api/orders
- * Returns a list of orders.
- * RBAC: Admins & Staff can see all orders with pagination and status filters.
- * Customers can only see their own orders.
- */
 export async function GET(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
-
   try {
     const auth = await verifyAuthAndRole(req, ['customer', 'staff', 'admin']);
     if (auth.error) return auth.error;
     const user = auth.user!;
-
     const url = new URL(req.url);
     const limit = parseInt(url.searchParams.get('limit') || '10', 10);
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const offset = (page - 1) * limit;
     const status = url.searchParams.get('status');
-
-    let query = supabase
-      .from('zoal_orders')
-      .select('*', { count: 'exact' });
-
-    // RBAC logic constraint: Customers only retrieve their own orders
-    if (user.role === 'customer') {
-      query = query.eq('customer_id', user.id);
-    } else {
-      // Staff or Admin filtering by specific customer ID is allowed
+    let query = supabase.from('zoal_orders').select('*', { count: 'exact' });
+    if (user.role === 'customer') query = query.eq('customer_id', user.id);
+    else {
       const filterCustomerId = url.searchParams.get('customerId');
-      if (filterCustomerId) {
-        query = query.eq('customer_id', filterCustomerId);
-      }
+      if (filterCustomerId) query = query.eq('customer_id', filterCustomerId);
     }
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    // Sorting
-    query = query.order('created_at', { ascending: false });
-    // Pagination
-    query = query.range(offset, offset + limit - 1);
-
+    if (status) query = query.eq('status', status);
+    query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
     const { data: orders, error, count } = await query;
-
     if (error) return apiError(error.message, 500);
 
-    return apiResponse({
-      orders,
-      pagination: {
-        page,
-        limit,
-        totalItems: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
-      }
-    });
+    let enrichedOrders = orders || [];
+    if (enrichedOrders.length > 0) {
+      const orderIds = enrichedOrders.map((order: any) => order.id);
+      const { data: items, error: itemsError } = await supabase
+        .from('zoal_order_items')
+        .select('order_id, product_id, quantity, unit_price, total_price')
+        .in('order_id', orderIds);
+      if (itemsError) return apiError(itemsError.message, 500);
 
-  } catch (err: any) {
-    return apiError(err.message || 'Server error', 500);
-  }
+      const itemsByOrder = new Map<string, any[]>();
+      for (const item of items || []) {
+        const list = itemsByOrder.get(String(item.order_id)) || [];
+        list.push(item);
+        itemsByOrder.set(String(item.order_id), list);
+      }
+      enrichedOrders = enrichedOrders.map((order: any) => ({
+        ...order,
+        items: itemsByOrder.get(String(order.id)) || [],
+      }));
+    }
+
+    return apiResponse({ orders: enrichedOrders, pagination: { page, limit, totalItems: count || 0, totalPages: Math.ceil((count || 0) / limit) } });
+  } catch (err: any) { return apiError(err.message || 'Server error', 500); }
 }
 
 /**
- * POST /api/orders
- * Creates a new order. (RBAC: authenticated user or customer checkout)
+ * Creates an order from authoritative server-side pricing.
+ * Coupon redemption is reserved through an atomic database RPC so concurrent
+ * requests cannot exceed usage limits.
  */
 export async function POST(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
-
   try {
     const auth = await verifyAuthAndRole(req, ['customer', 'staff', 'admin']);
     if (auth.error) return auth.error;
     const user = auth.user!;
-
     const body = await req.json();
     const validationErr = validateFields(body, ['items', 'shipping_address']);
     if (validationErr) return apiError(validationErr, 400);
-
     const items = body.items || [];
-    if (!Array.isArray(items) || items.length === 0) {
-      return apiError('Order items must not be empty', 400);
-    }
+    if (!Array.isArray(items) || items.length === 0) return apiError('Order items must not be empty', 400);
 
-    // P0 Financial Security: Server-Authoritative Calculation
     let subtotal = 0;
-    const validatedItems = [];
+    const validatedItems: Array<{ product_id: string; quantity: number; unit_price: number; unit_cost: number | null; total_price: number }> = [];
 
     for (const item of items) {
       const pId = item.product_id || item.productId || item.id;
-      const { data: prod } = await supabase
-        .from('zoal_products')
-        .select('price, sale_price')
-        .eq('id', pId)
-        .maybeSingle();
+      const { data: prod, error: productErr } = await supabase.from('zoal_products').select('price, sale_price, cost_price').eq('id', pId).maybeSingle();
+      if (productErr) return apiError(productErr.message, 500);
+      if (!prod) return apiError(`Product not found: ${pId}`, 400);
 
-      const unitPrice = prod ? Number(prod.sale_price || prod.price || 45) : (Number(item.price) || 45);
+      const unitPrice = Number(prod.sale_price ?? prod.price);
+      const unitCost = prod.cost_price === null || prod.cost_price === undefined ? null : Number(prod.cost_price);
       const qty = Math.max(1, parseInt(item.quantity || '1', 10));
-      subtotal += unitPrice * qty;
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) return apiError(`Invalid product price for ${pId}`, 400);
+      if (unitCost !== null && (!Number.isFinite(unitCost) || unitCost < 0)) return apiError(`Invalid product cost for ${pId}`, 400);
 
-      validatedItems.push({
-        product_id: pId,
-        quantity: qty,
-        unit_price: unitPrice,
-        total_price: unitPrice * qty
-      });
+      subtotal += unitPrice * qty;
+      validatedItems.push({ product_id: pId, quantity: qty, unit_price: unitPrice, unit_cost: unitCost, total_price: unitPrice * qty });
     }
 
-    // Shipping cost
     let shippingCost = 0;
     if (body.shippingMethodId) {
-      const { data: shipping } = await supabase
-        .from('zoal_shipping')
-        .select('cost')
-        .eq('id', body.shippingMethodId)
-        .maybeSingle();
+      const { data: shipping } = await supabase.from('zoal_shipping').select('cost').eq('id', body.shippingMethodId).maybeSingle();
       if (shipping) shippingCost = Number(shipping.cost);
-    } else {
-      shippingCost = subtotal >= 500 ? 0 : 35;
-    }
+    } else shippingCost = subtotal >= 500 ? 0 : 35;
 
-    // Coupon discount
     let discountAmount = 0;
-    if (body.couponCode) {
-      const { data: coupon } = await supabase
+    let appliedCoupon: { id: string; code: string } | null = null;
+    const requestedCouponCode = typeof body.couponCode === 'string' ? body.couponCode.trim().toUpperCase() : '';
+
+    if (requestedCouponCode) {
+      const { data: coupon, error: couponErr } = await supabase
         .from('zoal_coupons')
         .select('*')
-        .ilike('code', String(body.couponCode).trim())
+        .ilike('code', requestedCouponCode)
         .eq('is_active', true)
         .maybeSingle();
 
-      if (coupon) {
-        const now = new Date();
-        const start = coupon.start_date ? new Date(coupon.start_date) : null;
-        const end = coupon.expiration_date ? new Date(coupon.expiration_date) : null;
-        const isDateValid = (!start || now >= start) && (!end || now <= end);
-        const isAmountValid = subtotal >= Number(coupon.min_order_amount || 0);
+      if (couponErr) return apiError(couponErr.message, 500);
+      if (!coupon) return apiError('Coupon is invalid or inactive', 400);
 
-        if (isDateValid && isAmountValid) {
-          if (coupon.discount_type === 'percentage') {
-            discountAmount = (subtotal * Number(coupon.discount_value)) / 100;
-            if (coupon.max_discount_amount) {
-              discountAmount = Math.min(discountAmount, Number(coupon.max_discount_amount));
-            }
-          } else {
-            discountAmount = Number(coupon.discount_value);
-          }
-          discountAmount = Math.min(discountAmount, subtotal);
-        }
+      const now = new Date();
+      const start = coupon.start_date ? new Date(coupon.start_date) : null;
+      const end = coupon.expiration_date ? new Date(coupon.expiration_date) : null;
+      const usageAvailable = coupon.usage_limit === null || coupon.usage_limit === undefined
+        || Number(coupon.usage_count || 0) < Number(coupon.usage_limit);
+
+      if (start && now < start) return apiError('Coupon is not active yet', 400);
+      if (end && now > end) return apiError('Coupon has expired', 400);
+      if (!usageAvailable) return apiError('Coupon usage limit has been reached', 400);
+      if (subtotal < Number(coupon.min_order_amount || 0)) return apiError('Minimum order amount for this coupon has not been reached', 400);
+
+      if (coupon.discount_type === 'percentage') {
+        discountAmount = subtotal * Number(coupon.discount_value) / 100;
+        if (coupon.max_discount_amount) discountAmount = Math.min(discountAmount, Number(coupon.max_discount_amount));
+      } else {
+        discountAmount = Number(coupon.discount_value);
       }
+
+      discountAmount = Math.min(Math.max(0, discountAmount), subtotal);
+      appliedCoupon = { id: coupon.id, code: coupon.code };
     }
 
-    // Tax calculation (15% Saudi VAT)
     const taxableAmount = Math.max(0, subtotal - discountAmount);
     const taxAmount = Number((taxableAmount * 0.15).toFixed(2));
     const totalAmount = Number((taxableAmount + taxAmount + shippingCost).toFixed(2));
-
     const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
-    // Insert order header
-    const { data: order, error: orderErr } = await supabase
-      .from('zoal_orders')
-      .insert({
-        id: orderId,
-        customer_id: user.id,
-        status: 'pending',
-        subtotal,
-        discount_amount: discountAmount,
-        shipping_cost: shippingCost,
-        tax_amount: taxAmount,
-        total_amount: totalAmount,
-        payment_status: 'unpaid',
-        payment_method: body.payment_method || 'card',
-        notes: body.notes || ''
-      })
-      .select()
-      .single();
+    const { data: order, error: orderErr } = await supabase.from('zoal_orders').insert({
+      id: orderId,
+      customer_id: user.id,
+      status: 'pending',
+      coupon_id: appliedCoupon?.id || null,
+      subtotal,
+      discount_amount: discountAmount,
+      shipping_cost: shippingCost,
+      tax_amount: taxAmount,
+      total_amount: totalAmount,
+      payment_status: 'unpaid',
+      payment_method: body.payment_method || 'card',
+      notes: body.notes || '',
+      order_data: { ...(body.order_data || {}), shipping_address: body.shipping_address }
+    }).select().single();
 
     if (orderErr) return apiError(orderErr.message, 500);
 
-    // Insert order items
+    if (appliedCoupon) {
+      const { error: redemptionErr } = await supabase.rpc('redeem_coupon_for_order', {
+        p_coupon_id: appliedCoupon.id,
+        p_order_id: orderId,
+        p_customer_id: user.id,
+        p_discount_amount: discountAmount
+      });
+
+      if (redemptionErr) {
+        await supabase.from('zoal_orders').delete().eq('id', orderId);
+        return apiError(
+          redemptionErr.message?.includes('COUPON_REDEMPTION_NOT_AVAILABLE')
+            ? 'Coupon usage limit has been reached'
+            : `Failed to redeem coupon: ${redemptionErr.message}`,
+          400
+        );
+      }
+    }
+
     const orderItems = validatedItems.map(item => ({
       order_id: orderId,
       product_id: item.product_id,
       quantity: item.quantity,
       unit_price: item.unit_price,
+      unit_cost: item.unit_cost,
       total_price: item.total_price
     }));
 
-    const { error: itemsErr } = await supabase
-      .from('zoal_order_items')
-      .insert(orderItems);
-
+    const { error: itemsErr } = await supabase.from('zoal_order_items').insert(orderItems);
     if (itemsErr) {
+      // Redemption is removed explicitly so the database rollback trigger can
+      // restore usage_count before the partially-created order is removed.
+      if (appliedCoupon) {
+        await supabase.from('zoal_coupon_redemptions').delete().eq('order_id', orderId);
+      }
       await supabase.from('zoal_orders').delete().eq('id', orderId);
       return apiError(`Failed to save order detail components: ${itemsErr.message}`, 500);
     }
 
-    return apiResponse({ order, items: orderItems, totals: { subtotal, discountAmount, shippingCost, taxAmount, totalAmount } }, 201);
-
+    return apiResponse({
+      order,
+      items: orderItems,
+      coupon: appliedCoupon ? { id: appliedCoupon.id, code: appliedCoupon.code, discountAmount } : null,
+      totals: { subtotal, discountAmount, shippingCost, taxAmount, totalAmount }
+    }, 201);
   } catch (err: any) {
     return apiError(err.message || 'Server error', 500);
   }

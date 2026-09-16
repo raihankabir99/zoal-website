@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
-import { supabase, checkRateLimit, apiResponse, apiError } from '../helpers';
+import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole } from '../helpers';
+
+const PRODUCT_MANAGEMENT_ROLES = ['owner', 'admin', 'manager', 'staff'] as const;
 
 /**
  * GET /api/products
@@ -77,12 +79,12 @@ export async function POST(req: NextRequest) {
     return apiError('Too many requests', 429);
   }
 
-  try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return apiError('Unauthorized', 401);
-    }
+  const auth = await verifyAuthAndRole(req, PRODUCT_MANAGEMENT_ROLES);
+  if (auth.error) {
+    return auth.error;
+  }
 
+  try {
     const body = await req.json();
     
     // Validation

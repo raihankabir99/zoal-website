@@ -13,10 +13,12 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { Order, Product } from '../types';
-import { updateProductInventory, updateProductFields, SafeImage, normalizeCategory } from '../imageRegistry';
+import { SafeImage, normalizeCategory } from '../imageRegistry';
+import { triggerProductFetch } from '../lib/productSync';
 import { formatCurrency } from '../utils';
 import { supabaseClient } from '../lib/supabaseClient';
 import { useNotificationEngine } from '../lib/notificationStore';
+import AuthoritativeInventoryActivityPanel, { InventoryDataNotProvisionedPanel } from './AuthoritativeInventoryActivityPanel';
 
 // Movement / Transaction Type Definitions
 export interface InventoryTransaction {
@@ -110,6 +112,11 @@ export default function EnterpriseInventoryManagement({
   const isStaff = userRole === 'staff' || userRole === 'admin';
   const isAdmin = userRole === 'admin';
 
+  // Re-read authoritative product state after inventory mutations.
+  const refreshProducts = async () => {
+    await triggerProductFetch(true);
+  };
+
   // State Management
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<
@@ -138,111 +145,11 @@ export default function EnterpriseInventoryManagement({
       .catch(err => console.error('Failed fetching warehouses in EnterpriseInventoryManagement:', err));
   }, []);
 
-  // Batch details state
-  const [batches, setBatches] = useState<BatchRecord[]>(() => {
-    const saved = localStorage.getItem('zoal_batches');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      {
-        id: 'B-101',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        batchNumber: 'BAT-COF-2026A',
-        supplierBatch: 'SUP-ROAST-99A',
-        manufacturingDate: '2026-06-01',
-        expiryDate: '2026-12-01',
-        initialQty: 100,
-        availableQty: 85,
-        warehouse: 'Branch B Hub',
-        status: 'Active'
-      },
-      {
-        id: 'B-102',
-        productId: 'p-bak-1',
-        productName: 'Saffron Cardamom Brioche',
-        sku: 'ALZ-BAK-002',
-        batchNumber: 'BAT-SFF-449X',
-        supplierBatch: 'SUP-BAKERY-31',
-        manufacturingDate: '2026-07-14',
-        expiryDate: '2026-07-18',
-        initialQty: 40,
-        availableQty: 12,
-        warehouse: 'Al Hofuf Gourmet Kitchen',
-        status: 'Expiring Soon'
-      },
-      {
-        id: 'B-103',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        batchNumber: 'BAT-COF-2025D',
-        supplierBatch: 'SUP-ROAST-44D',
-        manufacturingDate: '2025-05-01',
-        expiryDate: '2025-11-01',
-        initialQty: 120,
-        availableQty: 0,
-        warehouse: 'Branch B Hub',
-        status: 'Expired'
-      }
-    ];
-  });
+  // Batch/expiry data is not provisioned by the current authoritative backend.
+  const [batches, setBatches] = useState<BatchRecord[]>([]);
 
-  useEffect(() => {
-    localStorage.setItem('zoal_batches', JSON.stringify(batches));
-  }, [batches]);
-
-  // Purchase records state
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
-    const saved = localStorage.getItem('zoal_purchase_orders');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      {
-        id: 'PO-2026-001',
-        supplierName: 'Branch A Coffee Beans Co.',
-        dateRaised: '2026-07-01',
-        deliveryDate: '2026-07-04',
-        invoiceNumber: 'INV-RCF-9921',
-        amountSAR: 45000,
-        status: 'Received',
-        cargoDescription: 'Imperial Coffee Beans - 500 bags',
-        receivingNotes: 'Cargo received in pristine order. Checked by Raed Al-Fahad.',
-        itemsList: [
-          { productId: 'p-cof-1', name: 'Imperial Dark Roast', sku: 'ALZ-COF-001', qtyOrdered: 500, qtyReceived: 500 }
-        ]
-      },
-      {
-        id: 'PO-2026-002',
-        supplierName: 'Paris Artisanal Flours',
-        dateRaised: '2026-07-05',
-        invoiceNumber: 'INV-PAF-3829',
-        amountSAR: 18500,
-        status: 'In Transit',
-        cargoDescription: 'French Pastry Flour - 200 bags',
-        itemsList: [
-          { productId: 'p-bak-1', name: 'Saffron Cardamom Brioche', sku: 'ALZ-BAK-002', qtyOrdered: 200 }
-        ]
-      },
-      {
-        id: 'PO-2026-003',
-        supplierName: 'Branch A Couture Textiles',
-        dateRaised: '2026-07-10',
-        invoiceNumber: 'INV-RCT-0492',
-        amountSAR: 120000,
-        status: 'Pending',
-        cargoDescription: 'Cashmere Wool Bolt - 80 rolls',
-        itemsList: []
-      }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_purchase_orders', JSON.stringify(purchaseOrders));
-  }, [purchaseOrders]);
+  // Purchase-order data is not provisioned by the current authoritative backend.
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   // Systemic notifications engine
   const notificationEngine = useNotificationEngine(currentUser);
@@ -319,73 +226,8 @@ export default function EnterpriseInventoryManagement({
   const [scannerActive, setScannerActive] = useState(true);
   const [scannerAlert, setScannerAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Transaction state
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>(() => {
-    const saved = localStorage.getItem('zoal_inventory_transactions');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to restore inventory logs list:', e);
-      }
-    }
-
-    // Default Seed transactions if empty
-    return [
-      {
-        id: 'TX-1001',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        type: 'Stock In',
-        quantityChange: 150,
-        stockBefore: 0,
-        stockAfter: 150,
-        warehouse: 'Branch B Hub',
-        shelfLocation: 'Aisle 3 - Shelf B',
-        operator: 'Raed Al-Fahad',
-        reason: 'Initial shipment reception',
-        timestamp: new Date(Date.now() - 3600000 * 24 * 3).toLocaleString(),
-        batchNumber: 'B-DR-2026'
-      },
-      {
-        id: 'TX-1002',
-        productId: 'p-bak-1',
-        productName: 'Saffron Cardamom Brioche',
-        sku: 'ALZ-BAK-002',
-        type: 'Stock In',
-        quantityChange: 80,
-        stockBefore: 0,
-        stockAfter: 80,
-        warehouse: 'Al Hofuf Kitchen',
-        shelfLocation: 'Cold Room - Rack A',
-        operator: 'Jean-Luc Vagner',
-        reason: 'Fresh morning artisanal batch baking',
-        timestamp: new Date(Date.now() - 3600000 * 2).toLocaleString(),
-        batchNumber: 'B-SFF-449'
-      },
-      {
-        id: 'TX-1003',
-        productId: 'p-cof-1',
-        productName: 'Imperial Dark Roast',
-        sku: 'ALZ-COF-001',
-        type: 'Reservation',
-        quantityChange: -2,
-        stockBefore: 150,
-        stockAfter: 148,
-        warehouse: 'Branch B Hub',
-        shelfLocation: 'Aisle 3 - Shelf B',
-        operator: 'System Automations',
-        reason: 'Order #ORD-9482 Reserved',
-        timestamp: new Date(Date.now() - 1800000).toLocaleString(),
-        referenceId: 'ORD-9482'
-      }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_inventory_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+  // Transaction history is rendered from the authoritative activity panel; no client seed/localStorage fallback.
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
 
   // Handle systemic delay for professional high-end loading skeletons
   useEffect(() => {
@@ -425,65 +267,8 @@ export default function EnterpriseInventoryManagement({
   const [showImportArea, setShowImportArea] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
-  // Initialize realistic inventory defaults if missing
-  useEffect(() => {
-    products.forEach((p) => {
-      const needsUpdate = !p.sku || !p.barcode || p.minStock === undefined || p.maxStock === undefined || !p.warehouseLocation;
-      if (needsUpdate) {
-        const catPrefix = p.category ? p.category.substring(0, 3).toUpperCase() : 'ALZ';
-        const fallbackSku = p.sku || `ALZ-${catPrefix}-${p.id.split('-').pop()?.toUpperCase() || Math.floor(Math.random() * 1000)}`;
-        const fallbackBarcode = p.barcode || `628100${p.id.split('-').pop()?.substring(0, 4).padEnd(4, '0') || '9912'}9`;
-        
-        updateProductFields(p.id, {
-          sku: fallbackSku,
-          barcode: fallbackBarcode,
-          minStock: p.minStock || 15,
-          maxStock: p.maxStock || 200,
-          warehouseLocation: p.warehouseLocation || 'Branch B Main Shelf A',
-          reservedStock: p.reservedStock || 0,
-        });
-      }
-    });
-  }, [products]);
+  // Inventory identifiers and thresholds are authoritative data; never synthesize production values client-side.
 
-  // AUTOMATIC ORDER-TO-INVENTORY REALTIME SYNCHRONIZATION ENGINE
-  useEffect(() => {
-    // 1. Calculate reserved stock for each product based on current orders.
-    // An item is "Reserved" if the order is Pending, Confirmed, Processing, Preparing, Packed or Ready for Shipping
-    const reservedCounts: Record<string, number> = {};
-    const stockDeductedCounts: Record<string, number> = {}; // Official deductions (Shipped / Delivered / Completed)
-    const returnedRestoreCounts: Record<string, number> = {}; // Returned item counts
-
-    orders.forEach((order) => {
-      const isReserved = ['Pending', 'Confirmed', 'Processing', 'Preparing', 'Packed', 'Ready for Shipping'].includes(order.status);
-      const isDeducted = ['Shipped', 'Out for Delivery', 'Delivered', 'Completed'].includes(order.status);
-      const isReturned = ['Returned', 'Refund Completed'].includes(order.status);
-
-      order.items?.forEach((item) => {
-        const prodId = item.productId;
-        if (!prodId) return;
-
-        if (isReserved) {
-          reservedCounts[prodId] = (reservedCounts[prodId] || 0) + (item.quantity || 0);
-        }
-        if (isDeducted) {
-          stockDeductedCounts[prodId] = (stockDeductedCounts[prodId] || 0) + (item.quantity || 0);
-        }
-        if (isReturned) {
-          returnedRestoreCounts[prodId] = (returnedRestoreCounts[prodId] || 0) + (item.quantity || 0);
-        }
-      });
-    });
-
-    // 2. Safely sync counts into product overrides
-    products.forEach((p) => {
-      const currentReserved = reservedCounts[p.id] || 0;
-      if (p.reservedStock !== currentReserved) {
-        updateProductFields(p.id, { reservedStock: currentReserved });
-      }
-    });
-
-  }, [orders, products]);
 
   // USB Barcode Scanner keystroke simulator listener
   useEffect(() => {
@@ -799,123 +584,78 @@ export default function EnterpriseInventoryManagement({
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
-  // Manual Adjust Handler
-  const handleManualAdjustment = (e: React.FormEvent) => {
+  // Manual Adjust Handler — server-authoritative inventory mutation
+  const handleManualAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isStaff) return;
-
-    if (!adjustProductId) {
-      alert('Please select a product first.');
+    if (!isStaff || !adjustProductId) {
+      if (!adjustProductId) alert('Please select a product first.');
       return;
     }
-
     const prod = products.find((p) => p.id === adjustProductId);
     if (!prod) return;
-
     const currentInv = prod.inventory || 0;
-    let qtyChange = adjustQty;
-    let newInv = currentInv;
-
-    if (adjustType === 'Stock In' || adjustType === 'Return') {
-      newInv = currentInv + adjustQty;
-      qtyChange = adjustQty;
-    } else {
-      newInv = Math.max(0, currentInv - adjustQty);
-      qtyChange = -Math.min(adjustQty, currentInv);
+    const delta = (adjustType === 'Stock In' || adjustType === 'Return') ? adjustQty : -adjustQty;
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('Authentication is required to adjust inventory.'); return; }
+    try {
+      const response = await fetch('/api/inventory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        body: JSON.stringify({
+          productId: prod.id,
+          operation: 'adjust',
+          quantityChange: delta,
+          warehouseId: adjustWarehouse || undefined,
+          reason: adjustReason || adjustType,
+          referenceId: adjustRef || undefined,
+          batchNumber: adjustBatch || undefined
+        })
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || result?.error || 'Inventory update failed.');
+      await refreshProducts();
+      const newInv = currentInv + delta;
+      if (newInv <= (prod.minStock || 15)) {
+        addNotification(newInv <= 0 ? 'out_of_stock' : 'low_stock', newInv <= 0 ? 'Out of Stock Alert' : 'Low Stock Alert', `${prod.name} (SKU: ${prod.sku}) is now at ${Math.max(0, newInv)} units.`, newInv <= 0 ? 'critical' : 'high');
+      }
+      addNotification('adjustment', 'Stock Adjustment Recorded', `${prod.name} stock adjustment was saved to the authoritative inventory ledger.`, 'low');
+      setAdjustQty(0); setAdjustReason(''); setAdjustBatch(''); setAdjustRef(''); setAdjustShelf('');
+    } catch (error: any) {
+      alert(error?.message || 'Inventory adjustment failed. No local fallback was used.');
     }
-
-    // Apply change in database/localStorage overrides
-    updateProductInventory(prod.id, newInv);
-
-    // Trigger notification if stock is low
-    if (newInv <= (prod.minStock || 15)) {
-      addNotification(
-        newInv === 0 ? 'out_of_stock' : 'low_stock',
-        newInv === 0 ? 'Out of Stock Alert' : 'Low Stock Alert',
-        `${prod.name} (SKU: ${prod.sku}) is now at ${newInv} units. Immediate restock recommended.`,
-        newInv === 0 ? 'critical' : 'high'
-      );
-    }
-
-    // Save customized field updates
-    const fieldUpdates: any = {};
-    if (adjustWarehouse) {
-      fieldUpdates.warehouseLocation = adjustWarehouse;
-    }
-    updateProductFields(prod.id, fieldUpdates);
-
-    // Append to transactions logs list
-    const newTx: InventoryTransaction = {
-      id: `TX-${Date.now().toString().slice(-4)}`,
-      productId: prod.id,
-      productName: prod.name,
-      sku: prod.sku || 'N/A',
-      type: adjustType,
-      quantityChange: qtyChange,
-      stockBefore: currentInv,
-      stockAfter: newInv,
-      warehouse: adjustWarehouse,
-      shelfLocation: adjustShelf || 'Aisle 1 - Row A',
-      operator: currentUser?.name || 'Authorized Staff',
-      reason: adjustReason || `${adjustType} recorded manually.`,
-      timestamp: new Date().toLocaleString(),
-      batchNumber: adjustBatch || undefined,
-      referenceId: adjustRef || undefined
-    };
-
-    setTransactions((prev) => [newTx, ...prev]);
-
-    addNotification('adjustment', 'Stock Adjustment Recorded', `${prod.name} available stock updated from ${currentInv} to ${newInv} units.`, 'low');
-    
-    // Clear form inputs
-    setAdjustQty(0);
-    setAdjustReason('');
-    setAdjustBatch('');
-    setAdjustRef('');
-    setAdjustShelf('');
   };
 
-  // Single Item Edit Save handler
-  const handleSaveProductSettings = () => {
+  // Single Item Edit Save handler — metadata persists through the existing product API
+  const handleSaveProductSettings = async () => {
     if (!selectedProduct || !isStaff) return;
-
-    const updatedSpecs = {
-      ...(selectedProduct.specifications || {}),
-      'Shelf Position': editShelf || 'Shelf A',
-      'Zone': editZone || 'Zone A',
-      'Rack': editRack || 'Rack R-12',
-      'Bin': editBin || 'Bin B-09'
-    };
-
-    updateProductFields(selectedProduct.id, {
-      sku: editSku,
-      barcode: editBarcode,
-      warehouseLocation: editWarehouse,
-      minStock: editMinStock,
-      maxStock: editMaxStock,
-      specifications: updatedSpecs
-    });
-
-    // Write a system log
-    const newTx: InventoryTransaction = {
-      id: `TX-${Date.now().toString().slice(-4)}`,
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
-      sku: editSku,
-      type: 'Stock Adjustment',
-      quantityChange: 0,
-      stockBefore: selectedProduct.inventory || 0,
-      stockAfter: selectedProduct.inventory || 0,
-      warehouse: editWarehouse,
-      shelfLocation: `${editZone} - ${editRack} - ${editShelf} - ${editBin}`,
-      operator: currentUser?.name || 'Authorized Admin',
-      reason: 'Product inventory thresholds and tracking SKU/Barcode settings updated.',
-      timestamp: new Date().toLocaleString(),
-    };
-
-    setTransactions((prev) => [newTx, ...prev]);
-    setShowEditModal(false);
-    alert(`Inventory settings for ${selectedProduct.name} saved successfully.`);
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+    if (!token) { alert('Authentication is required to update inventory settings.'); return; }
+    if (editMinStock < 0 || editMaxStock < editMinStock) {
+      alert('Invalid stock thresholds. Max Stock must be greater than or equal to Min Stock.');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/products/${selectedProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        credentials: 'include',
+        body: JSON.stringify({
+          sku: editSku.trim(),
+          barcode: editBarcode.trim(),
+          warehouseLocation: editWarehouse.trim(),
+          minStock: editMinStock,
+          maxStock: editMaxStock
+        })
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || result?.error || 'Product inventory settings update failed.');
+      await refreshProducts();
+      setShowEditModal(false);
+      alert(`Inventory settings for ${selectedProduct.name} saved successfully.`);
+    } catch (error: any) {
+      alert(error?.message || 'Inventory settings update failed. No local fallback was used.');
+    }
   };
 
   // Export List as CSV file
@@ -955,167 +695,120 @@ export default function EnterpriseInventoryManagement({
     }
   };
 
-  // CSV Import handler
-  const handleCSVImportSubmit = (e: React.FormEvent) => {
+  // CSV Import handler — stock mutations are sent to the authoritative inventory API
+  const handleCSVImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
       alert('Only Administrators can perform bulk inventory CSV imports.');
       return;
     }
-
-    try {
-      const lines = csvText.split('\n');
-      if (lines.length < 2) {
-        setImportStatus('Error: Invalid CSV format or empty file.');
-        return;
-      }
-
-      // Parse headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-      const idIdx = headers.findIndex(h => (h || '').toLowerCase().includes('id'));
-      const stockIdx = headers.findIndex(h => (h || '').toLowerCase().includes('stock') || (h || '').toLowerCase().includes('available'));
-      const skuIdx = headers.findIndex(h => (h || '').toLowerCase().includes('sku'));
-      const barcodeIdx = headers.findIndex(h => (h || '').toLowerCase().includes('barcode'));
-      const warehouseIdx = headers.findIndex(h => (h || '').toLowerCase().includes('warehouse') || (h || '').toLowerCase().includes('location'));
-
-      if (idIdx === -1 || stockIdx === -1) {
-        setImportStatus('Error: CSV must include at least "Product ID" and "Available Stock" (or "Stock") columns.');
-        return;
-      }
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // basic comma split (ignoring quoted commas for simplicity of simulation)
-        const cols = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-        const pid = cols[idIdx];
-        const stockVal = parseInt(cols[stockIdx], 10);
-
-        if (!pid || isNaN(stockVal)) {
-          errorCount++;
-          continue;
-        }
-
-        // Verify if product exists
-        const matched = products.find(p => p.id === pid || p.sku === pid);
-        if (matched) {
-          // Update Stock
-          updateProductInventory(matched.id, stockVal);
-          
-          // If SKU/Barcode/Warehouse columns were found and exist, override them
-          const extraFields: any = {};
-          if (skuIdx !== -1 && cols[skuIdx]) extraFields.sku = cols[skuIdx];
-          if (barcodeIdx !== -1 && cols[barcodeIdx]) extraFields.barcode = cols[barcodeIdx];
-          if (warehouseIdx !== -1 && cols[warehouseIdx]) extraFields.warehouseLocation = cols[warehouseIdx];
-
-          if (Object.keys(extraFields).length > 0) {
-            updateProductFields(matched.id, extraFields);
-          }
-
-          // Register import log
-          const newTx: InventoryTransaction = {
-            id: `TX-IMP-${Date.now().toString().slice(-4)}-${i}`,
-            productId: matched.id,
-            productName: matched.name,
-            sku: cols[skuIdx] || matched.sku || 'N/A',
-            type: 'Stock Adjustment',
-            quantityChange: stockVal - (matched.inventory || 0),
-            stockBefore: matched.inventory || 0,
-            stockAfter: stockVal,
-            warehouse: cols[warehouseIdx] || matched.warehouseLocation || 'Imported Warehouse',
-            shelfLocation: 'Bulk CSV Row',
-            operator: currentUser?.name || 'Administrator',
-            reason: 'Database bulk CSV synchronization upload.',
-            timestamp: new Date().toLocaleString(),
-          };
-          setTransactions(prev => [newTx, ...prev]);
-
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      }
-
-      setImportStatus(`Success: Processed ${successCount} products. Failed/Skipped: ${errorCount} items.`);
-      setCsvText('');
-    } catch (err: any) {
-      setImportStatus(`Import Exception: ${err.message}`);
-    }
-  };
-
-  // Bulk operation triggers
-  const handleBulkUpdate = (action: 'stock' | 'warehouse' | 'archive' | 'barcode-print') => {
-    if (selectedProductIds.length === 0) {
-      alert('Please select at least one product using checkboxes.');
+    const lines = csvText.split('\n');
+    if (lines.length < 2) {
+      setImportStatus('Error: Invalid CSV format or empty file.');
       return;
     }
-
-    if (action === 'stock') {
-      const parsed = parseInt(bulkStockVal, 10);
-      if (isNaN(parsed) || parsed < 0) {
-        alert('Please enter a valid stock quantity.');
-        return;
-      }
-      
-      selectedProductIds.forEach(id => {
-        const prod = products.find(p => p.id === id);
-        if (prod) {
-          const old = prod.inventory || 0;
-          updateProductInventory(id, parsed);
-
-          // log transaction
-          const newTx: InventoryTransaction = {
-            id: `TX-${Date.now().toString().slice(-4)}`,
-            productId: id,
-            productName: prod.name,
-            sku: prod.sku || '',
-            type: 'Stock Adjustment',
-            quantityChange: parsed - old,
-            stockBefore: old,
-            stockAfter: parsed,
-            warehouse: prod.warehouseLocation || 'Branch B Main',
-            shelfLocation: 'Bulk Operation',
-            operator: currentUser?.name || 'Authorized Operator',
-            reason: 'Admin bulk stock value override.',
-            timestamp: new Date().toLocaleString(),
-          };
-          setTransactions(prev => [newTx, ...prev]);
-        }
-      });
-      alert(`Bulk updated ${selectedProductIds.length} products stock to ${parsed} units.`);
-      setSelectedProductIds([]);
-      setBulkStockVal('');
-
-    } else if (action === 'warehouse') {
-      if (!bulkWarehouseVal.trim()) {
-        alert('Please enter a warehouse destination.');
-        return;
-      }
-
-      selectedProductIds.forEach(id => {
-        updateProductFields(id, {
-          warehouseLocation: `${bulkWarehouseVal} - ${bulkShelfVal || 'Shelf A'}`
-        });
-      });
-
-      alert(`Bulk reassigned ${selectedProductIds.length} products to ${bulkWarehouseVal}.`);
-      setSelectedProductIds([]);
-      setBulkWarehouseVal('');
-      setBulkShelfVal('');
-    } else if (action === 'archive') {
-      if (!confirm(`Are you sure you want to bulk-deactivate tracking for ${selectedProductIds.length} items?`)) return;
-      selectedProductIds.forEach(id => {
-        updateProductFields(id, { status: 'Inactive' });
-      });
-      alert(`Archived / Deactivated inventory monitoring for ${selectedProductIds.length} items.`);
-      setSelectedProductIds([]);
-    } else if (action === 'barcode-print') {
-      setShowBarcodePrintModal(true);
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+    const idIdx = headers.findIndex(h => (h || '').toLowerCase().includes('id'));
+    const stockIdx = headers.findIndex(h => (h || '').toLowerCase().includes('stock') || (h || '').toLowerCase().includes('available'));
+    const warehouseIdx = headers.findIndex(h => (h || '').toLowerCase().includes('warehouse') || (h || '').toLowerCase().includes('location'));
+    if (idIdx === -1 || stockIdx === -1) {
+      setImportStatus('Error: CSV must include Product ID and Available Stock/Stock columns.');
+      return;
     }
+    let successCount = 0, errorCount = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const cols = line.split(',').map(x => x.trim().replace(/^["']|["']$/g, ''));
+      const pid = cols[idIdx];
+      const targetStock = parseInt(cols[stockIdx], 10);
+      const matched = pid ? products.find(p => p.id === pid || p.sku === pid) : undefined;
+      if (!matched || isNaN(targetStock) || targetStock < 0) { errorCount++; continue; }
+      const currentStock = matched.inventory || 0;
+      const delta = targetStock - currentStock;
+      if (delta === 0) { successCount++; continue; }
+      try {
+        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+        if (!token) { errorCount++; continue; }
+        const response = await fetch('/api/inventory', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          credentials: 'include',
+          body: JSON.stringify({
+            productId: matched.id,
+            operation: 'adjust',
+            quantityChange: delta,
+            warehouseId: cols[warehouseIdx] || undefined,
+            reason: 'CSV bulk inventory synchronization',
+            referenceId: `CSV-${Date.now()}-${i}`
+          })
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.message || result?.error || 'Inventory update failed');
+        successCount++;
+      } catch { errorCount++; }
+    }
+    await refreshProducts();
+    setImportStatus(`Completed: ${successCount} synchronized, ${errorCount} failed/skipped. All successful stock changes were recorded through the server.`);
+    if (successCount > 0) setCsvText('');
+  };
+
+  // Bulk operation triggers — stock changes are server-authoritative
+  const handleBulkUpdate = async (action: 'stock' | 'warehouse' | 'archive' | 'barcode-print') => {
+    if (selectedProductIds.length === 0) { alert('Please select at least one product using checkboxes.'); return; }
+    if (action === 'stock') {
+      const targetStock = parseInt(bulkStockVal, 10);
+      if (isNaN(targetStock) || targetStock < 0) { alert('Please enter a valid stock quantity.'); return; }
+      let succeeded = 0, failed = 0;
+      for (const id of selectedProductIds) {
+        const prod = products.find(p => p.id === id);
+        if (!prod) { failed++; continue; }
+        const delta = targetStock - (prod.inventory || 0);
+        if (delta === 0) { succeeded++; continue; }
+        try {
+          const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+          if (!token) { failed++; continue; }
+          const response = await fetch('/api/inventory', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, credentials: 'include',
+            body: JSON.stringify({ productId: id, operation: 'adjust', quantityChange: delta, reason: 'Admin bulk stock synchronization', referenceId: `BULK-${Date.now()}-${id}` })
+          });
+          if (!response.ok) throw new Error('Inventory update failed');
+          succeeded++;
+        } catch { failed++; }
+      }
+      await refreshProducts();
+      alert(`Bulk stock update complete. Success: ${succeeded}, Failed: ${failed}.`);
+      setSelectedProductIds([]); setBulkStockVal('');
+      return;
+    }
+    if (action === 'warehouse' || action === 'archive') {
+      if (action === 'warehouse' && !bulkWarehouseVal.trim()) { alert('Please enter a warehouse destination.'); return; }
+      if (action === 'archive' && !confirm(`Are you sure you want to bulk-deactivate tracking for ${selectedProductIds.length} items?`)) return;
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token');
+      if (!token) { alert('Authentication is required for bulk product updates.'); return; }
+      let succeeded = 0, failed = 0;
+      for (const id of selectedProductIds) {
+        try {
+          const body = action === 'warehouse'
+            ? { warehouseLocation: `${bulkWarehouseVal} - ${bulkShelfVal || 'Shelf A'}` }
+            : { status: 'Inactive' };
+          const response = await fetch(`/api/products/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            credentials: 'include',
+            body: JSON.stringify(body)
+          });
+          if (!response.ok) throw new Error('Product update failed');
+          succeeded++;
+        } catch { failed++; }
+      }
+      await refreshProducts();
+      alert(`Bulk ${action} complete. Success: ${succeeded}, Failed: ${failed}.`);
+      setSelectedProductIds([]);
+      if (action === 'warehouse') { setBulkWarehouseVal(''); setBulkShelfVal(''); }
+      return;
+    }
+    if (action === 'barcode-print') setShowBarcodePrintModal(true);
   };
 
   // Helper for status badge
@@ -1151,6 +844,18 @@ export default function EnterpriseInventoryManagement({
       </span>
     );
   };
+
+  if (activeTab === 'logs') {
+    return <AuthoritativeInventoryActivityPanel currentUser={currentUser} />;
+  }
+
+  if (activeTab === 'batches') {
+    return <InventoryDataNotProvisionedPanel title="Batches & Expiry" />;
+  }
+
+  if (activeTab === 'purchases') {
+    return <InventoryDataNotProvisionedPanel title="Purchase Orders" />;
+  }
 
   return (
     <div className="space-y-6 text-left animate-fade-in pb-12">
@@ -2180,7 +1885,7 @@ export default function EnterpriseInventoryManagement({
           )}
 
           {/* ======================= TAB IV: AUDIT MOVE TRAIL ======================= */}
-          {activeTab === 'logs' && (
+          {(activeTab as string) === 'logs' && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
