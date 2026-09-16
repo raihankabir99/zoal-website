@@ -20,22 +20,27 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           p = Path('/tmp/AdminDashboard.tsx')
-          s = p.read_text()
-          marker = 'Publish Config'
-          i = s.find(marker)
-          if i < 0:
+          lines = p.read_text().splitlines()
+          marker_index = next((i for i, line in enumerate(lines) if 'Publish Config' in line), -1)
+          if marker_index < 0:
               raise SystemExit('Publish Config marker not found')
-          head, tail = s[:i], s[i:]
-          bad = '                        }}\n                        }}\n                        className="py-2.5 px-4 bg-gold-pure'
-          good = '                        }}\n                        className="py-2.5 px-4 bg-gold-pure'
-          if bad not in tail:
-              raise SystemExit('Expected duplicate publish-handler brace not found')
-          p.write_text(head + tail.replace(bad, good, 1))
+          removed = False
+          for i in range(marker_index - 1, max(-1, marker_index - 45), -1):
+              if lines[i].strip() == '}}' and i > 0 and lines[i - 1].strip() == '}}':
+                  del lines[i]
+                  removed = True
+                  break
+          if not removed:
+              raise SystemExit('Could not locate duplicate publish-handler brace')
+          p.write_text('\n'.join(lines) + '\n')
           PY
           cp /tmp/AdminDashboard.tsx src/components/AdminDashboard.tsx
+          test "$(wc -c < src/components/AdminDashboard.tsx)" -gt 100000
+          npm ci --ignore-scripts
+          npx vite build
           git add src/components/AdminDashboard.tsx
-          rm -f .github/workflows/recover-admin-dashboard-build.yml
-          git add -u .github/workflows/recover-admin-dashboard-build.yml
+          rm -f .github/workflows/recover-admin-dashboard-build.yml RECOVERY_TRIGGER_20260916.txt
+          git add -u .github/workflows/recover-admin-dashboard-build.yml RECOVERY_TRIGGER_20260916.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix(3rd-party): recover AdminDashboard build syntax'
