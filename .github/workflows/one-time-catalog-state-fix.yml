@@ -1,0 +1,84 @@
+name: One-Time Catalog State Fix
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+    paths:
+      - '.github/CATALOG_STATE_FIX_TRIGGER'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+
+      - name: Apply authoritative catalog state fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          image = Path('src/imageRegistry.tsx')
+          text = image.read_text()
+
+          text = text.replace("import { PRODUCTS } from './data';\n", "")
+          text = text.replace(
+              "  const [customProducts, setCustomProducts] = useState<Product[]>([]);",
+              "  // Customer-facing catalog state is populated only from authoritative Product API responses.\n  const [customProducts, setCustomProducts] = useState<Product[]>([]);"
+          )
+          text = text.replace(
+              "      // Product catalog is refreshed exclusively by productSync.triggerProductFetch().\n      // This listener only reacts to the authoritative cache after that fetch completes.\n      setCustomProducts([]);",
+              "      // Product catalog state is updated only by the server-response event below.\n      // This listener handles inventory/field metadata changes without reading product records from localStorage."
+          )
+          old_listener = """    poolChangeListeners.add(readProductsAndOverrides);\n    window.addEventListener('storage', readProductsAndOverrides);\n    \n    // Dynamically trigger Supabase fetch on hook mount to keep state perfectly synchronized\n    import('./lib/productSync').then(mod => {\n      mod.triggerProductFetch();\n    }).catch(err => {\n      console.error('Failed to load productSync module on mount:', err);\n    });\n\n    return () => {\n      poolChangeListeners.delete(readProductsAndOverrides);\n      window.removeEventListener('storage', readProductsAndOverrides);\n    };"""
+          new_listener = """    const handleAuthoritativeProducts = (event: Event) => {\n      const detail = (event as CustomEvent<Product[]>).detail;\n      setCustomProducts(Array.isArray(detail) ? detail : []);\n    };\n\n    poolChangeListeners.add(readProductsAndOverrides);\n    window.addEventListener('storage', readProductsAndOverrides);\n    window.addEventListener('zoal-products-updated', handleAuthoritativeProducts);\n    \n    // Trigger a fresh server fetch on hook mount. The resulting response populates state directly.\n    import('./lib/productSync').then(mod => {\n      mod.triggerProductFetch(true);\n    }).catch(err => {\n      console.error('Failed to load productSync module on mount:', err);\n    });\n\n    return () => {\n      poolChangeListeners.delete(readProductsAndOverrides);\n      window.removeEventListener('storage', readProductsAndOverrides);\n      window.removeEventListener('zoal-products-updated', handleAuthoritativeProducts);\n    };"""
+          if old_listener not in text:
+              raise SystemExit('Expected imageRegistry listener block not found')
+          text = text.replace(old_listener, new_listener)
+          image.write_text(text)
+
+          sync = Path('src/lib/productSync.ts')
+          s = sync.read_text()
+          success_anchor = """      window.dispatchEvent(new Event('storage'));\n      notifyPoolListeners();\n      return finalProducts;"""
+          success_repl = """      window.dispatchEvent(new Event('storage'));\n      notifyPoolListeners();\n      window.dispatchEvent(new CustomEvent<Product[]>('zoal-products-updated', { detail: finalProducts }));\n      return finalProducts;"""
+          if success_anchor not in s:
+              raise SystemExit('Expected productSync success anchor not found')
+          s = s.replace(success_anchor, success_repl, 1)
+
+          failure_anchor = """    clearCatalogCache();\n    updateCacheMeta({ lastFetched: 0 });\n    window.dispatchEvent(new Event('storage'));\n    notifyPoolListeners();\n    return [];"""
+          failure_repl = """    clearCatalogCache();\n    updateCacheMeta({ lastFetched: 0 });\n    window.dispatchEvent(new Event('storage'));\n    notifyPoolListeners();\n    window.dispatchEvent(new CustomEvent<Product[]>('zoal-products-updated', { detail: [] }));\n    return [];"""
+          if failure_anchor not in s:
+              raise SystemExit('Expected productSync failure anchor not found')
+          s = s.replace(failure_anchor, failure_repl, 1)
+          sync.write_text(s)
+          PY
+
+      - name: Verify fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -n "import { PRODUCTS } from './data';" src/imageRegistry.tsx
+          grep -n "zoal-products-updated" src/imageRegistry.tsx
+          grep -n "zoal-products-updated" src/lib/productSync.ts
+          grep -n "const \[customProducts, setCustomProducts\] = useState<Product\[\]>(\[\]);" src/imageRegistry.tsx
+          grep -n "Product image fields remain authoritative from the server catalog" src/imageRegistry.tsx
+
+      - name: Commit source fix and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/one-time-catalog-state-fix.yml .github/CATALOG_STATE_FIX_TRIGGER
+          git add src/imageRegistry.tsx src/lib/productSync.ts
+          git commit -m "fix(catalog): synchronize storefront from authoritative API response"
+          git push origin audit/dashboard-sync-fix
