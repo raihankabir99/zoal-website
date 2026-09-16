@@ -1,0 +1,42 @@
+name: Recover AdminDashboard Build
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+permissions:
+  contents: write
+jobs:
+  recover:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore and repair AdminDashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 9855363a1feabea81d056d9851f59d8ef2023bdb:src/components/AdminDashboard.tsx > /tmp/AdminDashboard.tsx
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/AdminDashboard.tsx')
+          s = p.read_text()
+          marker = 'Publish Config'
+          i = s.find(marker)
+          if i < 0:
+              raise SystemExit('Publish Config marker not found')
+          head, tail = s[:i], s[i:]
+          bad = '                        }}\n                        }}\n                        className="py-2.5 px-4 bg-gold-pure'
+          good = '                        }}\n                        className="py-2.5 px-4 bg-gold-pure'
+          if bad not in tail:
+              raise SystemExit('Expected duplicate publish-handler brace not found')
+          p.write_text(head + tail.replace(bad, good, 1))
+          PY
+          cp /tmp/AdminDashboard.tsx src/components/AdminDashboard.tsx
+          git add src/components/AdminDashboard.tsx
+          rm -f .github/workflows/recover-admin-dashboard-build.yml
+          git add -u .github/workflows/recover-admin-dashboard-build.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(3rd-party): recover AdminDashboard build syntax'
+          git push
