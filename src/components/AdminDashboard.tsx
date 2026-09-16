@@ -297,6 +297,68 @@ export default function AdminDashboard({
   const [integrationAuditLogs, setIntegrationAuditLogs] = useState<any[]>([]);
   const [integrationFeedback, setIntegrationFeedback] = useState<string | null>(null);
 
+  const getThirdPartyAuthHeaders = async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) throw new Error('No active authenticated admin session.');
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  };
+
+  const loadThirdPartyIntegrations = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const headers = await getThirdPartyAuthHeaders();
+      const response = await fetch('/api/admin/third-party', { headers });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'Unable to load integrations.');
+      setIntegrationsList((payload.integrations || []).map((item: any) => ({
+        ...item,
+        name: item.display_name,
+        provider: item.provider,
+        environment: 'Production',
+        lastTested: item.last_verified_at ? new Date(item.last_verified_at).toLocaleString() : 'Never',
+        lastUpdated: item.updated_at ? new Date(item.updated_at).toLocaleString() : 'Never',
+        status: item.status === 'active' ? 'Connected' : item.status === 'error' ? 'Error' : 'Draft',
+        description: item.category
+      })));
+    } catch (error: any) {
+      console.error('[Admin] Third-party integrations load failed:', error);
+      setIntegrationFeedback(`Error: ${error?.message || 'Unable to load integrations.'}`);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => { loadThirdPartyIntegrations(); }, [loadThirdPartyIntegrations]);
+
+  const saveThirdPartyIntegration = async (activate: boolean) => {
+    const headers = await getThirdPartyAuthHeaders();
+    const body = {
+      provider: integrationForm.provider,
+      displayName: integrationForm.name,
+      category: integrationForm.category,
+      secret: integrationForm.apiKey || integrationForm.accessToken || integrationForm.clientSecret || integrationForm.webhookSecret
+    };
+    if (!body.secret) throw new Error('A credential is required.');
+    const response = editingIntegration
+      ? await fetch(`/api/admin/third-party/${editingIntegration.id}`, { method: 'PATCH', headers, body: JSON.stringify({ displayName: body.displayName, category: body.category, status: activate ? 'active' : 'inactive', secret: body.secret }) })
+      : await fetch('/api/admin/third-party', { method: 'POST', headers, body: JSON.stringify(body) });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || 'Unable to save integration.');
+    await loadThirdPartyIntegrations();
+    setIsAddIntegrationOpen(false);
+    setEditingIntegration(null);
+    setIntegrationFeedback(activate ? `Published "${integrationForm.name}" securely.` : `Saved "${integrationForm.name}" securely as inactive.`);
+  };
+
+  const testThirdPartyIntegration = async (id: string) => {
+    const headers = await getThirdPartyAuthHeaders();
+    const response = await fetch(`/api/admin/third-party/${id}/test`, { method: 'POST', headers });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || 'Integration test failed.');
+    await loadThirdPartyIntegrations();
+    setIntegrationFeedback(payload?.message || 'Credential integrity verified.');
+  };
+
+
   useEffect(() => {
     const fetchAdminBaseline = async () => {
       try {
