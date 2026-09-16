@@ -314,8 +314,7 @@ export default function SEO({ currentPage, selectedProduct, selectedPost, authMo
           'url': `${window.location.origin}/store?product=${selectedProduct.id}`,
           'priceCurrency': 'SAR',
           'price': selectedProduct.price.toFixed(2),
-          'priceValidUntil': '2030-12-31',
-          'availability': selectedProduct.inventory > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            'availability': selectedProduct.inventory > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
           'itemCondition': 'https://schema.org/NewCondition',
           'seller': {
             '@type': 'Organization',
@@ -325,7 +324,6 @@ export default function SEO({ currentPage, selectedProduct, selectedPost, authMo
         'aggregateRating': selectedProduct.rating ? {
           '@type': 'AggregateRating',
           'ratingValue': selectedProduct.rating.toString(),
-          'reviewCount': '15',
           'bestRating': '5',
           'worstRating': '1'
         } : undefined

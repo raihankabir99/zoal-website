@@ -36,6 +36,27 @@ export default function ReturnRefundPolicy() {
   const isAr = i18n.language === 'ar';
 
   const [returnsConfig, setReturnsConfig] = useState<ReturnsConfig>(() => getReturnsConfig());
+  const [legalPolicySections, setLegalPolicySections] = useState<Array<{ id: string; num: string; titleEn: string; titleAr: string; contentEn: string; contentAr: string; bulletsEn?: string[]; bulletsAr?: string[] }> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const hydrateLegalPolicy = async () => {
+      try {
+        const response = await fetch('/api/legal/documents/returns', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+        if (!response.ok) return;
+        const document = await response.json();
+        const currentVersion = document?.current_version;
+        if (!currentVersion || currentVersion.status !== 'Published') return;
+        const parsed = typeof currentVersion.content === 'string' ? JSON.parse(currentVersion.content) : currentVersion.content;
+        if (!Array.isArray(parsed?.sections) || parsed.sections.length !== 10) return;
+        if (!cancelled) setLegalPolicySections(parsed.sections);
+      } catch (error) {
+        console.error('Error hydrating published Returns Legal sections:', error);
+      }
+    };
+    void hydrateLegalPolicy();
+    return () => { cancelled = true; };
+  }, []);
   const [activeSectionId, setActiveSectionId] = useState<string>('return-eligibility');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -92,7 +113,7 @@ export default function ReturnRefundPolicy() {
 
   // Defined 10 Content Sections exactly mapping user requests
   const policySections = useMemo(() => {
-    return [
+    const fallbackSections = [
       {
         id: 'return-eligibility',
         num: '1',
@@ -278,7 +299,29 @@ export default function ReturnRefundPolicy() {
         ]
       }
     ];
-  }, [returnsConfig]);
+
+    if (!legalPolicySections?.length) return fallbackSections;
+
+    const resolveText = (value: string) => value.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_match, key: string) => {
+      const configValue = (returnsConfig as unknown as Record<string, unknown>)[key];
+      return configValue == null ? '' : String(configValue);
+    });
+
+    return legalPolicySections.map((legalSection) => {
+      const fallback = fallbackSections.find((section) => section.id === legalSection.id);
+      return {
+        ...(fallback || {}),
+        id: legalSection.id,
+        num: legalSection.num,
+        titleEn: resolveText(legalSection.titleEn),
+        titleAr: resolveText(legalSection.titleAr),
+        contentEn: resolveText(legalSection.contentEn),
+        contentAr: resolveText(legalSection.contentAr),
+        bulletsEn: (legalSection.bulletsEn || (legalSection.id === 'non-returnable' ? returnsConfig.nonReturnableEn : legalSection.id === 'exchange-policy' ? returnsConfig.exchangeOptionsEn : fallback?.bulletsEn) || []).map(resolveText),
+        bulletsAr: (legalSection.bulletsAr || (legalSection.id === 'non-returnable' ? returnsConfig.nonReturnableAr : legalSection.id === 'exchange-policy' ? returnsConfig.exchangeOptionsAr : fallback?.bulletsAr) || []).map(resolveText)
+      };
+    });
+  }, [returnsConfig, legalPolicySections]);
 
   // SEO Optimization & Structured Data Injection
   useEffect(() => {

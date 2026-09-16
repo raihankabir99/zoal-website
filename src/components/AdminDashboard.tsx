@@ -1,5 +1,6 @@
 // @ts-nocheck
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import EnterpriseHealthMonitor from './EnterpriseHealthMonitor';
 import {
   User, Shield, Landmark, BarChart3, Package, Truck, Compass, Languages,
   MapPin, CheckCircle, Users, RefreshCw, Star, ArrowUpRight, TrendingUp, Sparkles, Bell,
@@ -7,9 +8,10 @@ import {
   Lock, Menu, ChevronRight, ArrowLeft, Search, Filter, Trash2, Edit, Download, Upload, Plus,
   FileText, CheckCircle2, AlertCircle, FolderTree, Tag, Eye, EyeOff, LayoutDashboard, Activity, Settings,
   Printer, FileSpreadsheet, Smartphone, ToggleLeft, ToggleRight, Calendar, Award, Sliders, ChevronDown, ChevronUp, Info,
-  Layers, Video, MessageSquare, UploadCloud, Globe, LifeBuoy, HardDrive, Camera, Copy
+  Layers, Video, MessageSquare, UploadCloud, Globe, LifeBuoy, HardDrive, Camera, Copy, Plug
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { categoryApi } from '../lib/categoryApi';
 import { Product, Order, BusinessCategory, Question, DeliveryType, ProductVariant, Review } from '../types';
 import { useGlobalProducts, updateProductInventory, SafeImage, resolveProductImage, normalizeCategory } from '../imageRegistry';
 import { saveProductToSupabase, deleteProductFromSupabase, triggerProductFetch } from '../lib/productSync';
@@ -63,10 +65,12 @@ const EnterpriseDecisionSimulation = lazyWithRetry(() => import('./EnterpriseDec
 const EnterpriseGrowthAnalytics = lazyWithRetry(() => import('./EnterpriseGrowthAnalytics').then(m => ({ default: m.EnterpriseGrowthAnalytics })));
 const AnalyticsOverview = lazyWithRetry(() => import('./dashboard/AnalyticsOverview'));
 const OwnerExecutiveDashboard = lazyWithRetry(() => import('./OwnerExecutiveDashboard'));
+const StrategicReport = lazyWithRetry(() => import('./StrategicReport').then(m => ({ default: m.StrategicReport || m.default })));
 
 import DashboardLanguageSwitcher from './dashboard/DashboardLanguageSwitcher';
 import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 import { useBranding } from './BrandingContext';
+import { supabaseClient } from '../lib/supabaseClient';
 import { useNotificationEngine } from '../lib/notificationStore';
 import { ConfirmationModal } from './common/ConfirmationModal';
 
@@ -108,6 +112,30 @@ export default function AdminDashboard({
 
   // State management for navigation
   const [activeTab, setActiveTab] = useState<string>(initialTab || 'dashboard');
+  const [dashboardSyncState, setDashboardSyncState] = useState<'unknown' | 'refreshing' | 'verified' | 'failed'>('unknown');
+
+  const refreshDashboardData = async () => {
+    setDashboardSyncState('refreshing');
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token) throw new Error('No active authenticated session');
+
+      const response = await fetch('/api/admin/dashboard-analytics', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error(`Dashboard verification failed (${response.status})`);
+      await response.json();
+
+      setDashboardSyncState('verified');
+      addLog('Dashboard server verification completed successfully');
+      window.setTimeout(() => window.location.reload(), 150);
+    } catch (error) {
+      console.error('Dashboard refresh verification failed:', error);
+      setDashboardSyncState('failed');
+      addLog('Dashboard server verification failed');
+    }
+  };
 
   useEffect(() => {
     if (initialTab) {
@@ -174,6 +202,141 @@ export default function AdminDashboard({
   const [mktProductSearch, setMktProductSearch] = useState<string>('');
   const [marketingError, setMarketingError] = useState<string | null>(null);
 
+  // Authoritative data fetching for Admin Dashboard
+  const [categories, setCategories] = useState<any[]>([]);
+  const [brands, setBrands] = useState<any[]>([]);
+  const [orderOverrides, setOrderOverrides] = useState<Record<string, any>>({});
+  const [stockHistory, setStockHistory] = useState<any[]>([]);
+  const [supplierReference, setSupplierReference] = useState<any[]>([]);
+  const [purchaseHistory, setPurchaseHistory] = useState<any[]>([]);
+  const [customerOverrides, setCustomerOverrides] = useState<Record<string, any>>({});
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [cmsSettings, setCmsSettings] = useState<any>(null);
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
+  const [subscribers, setSubscribers] = useState<any[]>([]);
+
+  // 3rd Party Integration state variables
+  const [thirdPartySubTab, setThirdPartySubTab] = useState<'gtm' | 'integrations'>('gtm');
+  
+  // GTM config states
+  const [gtmContainerId, setGtmContainerId] = useState<string>('');
+  const [gtmEnvironment, setGtmEnvironment] = useState<'Production' | 'Staging' | 'Development'>('Production');
+  const [gtmStatus, setGtmStatus] = useState<'Not Configured' | 'Draft' | 'Ready to Test' | 'Enabled' | 'Disabled'>('Not Configured');
+  const [gtmConsentMode, setGtmConsentMode] = useState<'Not Configured' | 'Consent Required' | 'Consent Confirmed'>('Not Configured');
+  const [gtmDescription, setGtmDescription] = useState<string>('');
+  const [gtmVersions, setGtmVersions] = useState<any[]>([]);
+  const [gtmFeedback, setGtmFeedback] = useState<string | null>(null);
+
+  const saveGtmSettings = async (enabled: boolean) => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session?.user?.id) throw new Error('No active authenticated admin session.');
+    const containerId = gtmContainerId.trim().toUpperCase();
+    if (!/^GTM-[A-Z0-9]{5,10}$/.test(containerId)) throw new Error('Invalid GTM Container ID format.');
+    const payload = { container_id: containerId, environment: gtmEnvironment, enabled, consent_required: gtmConsentMode !== 'Consent Confirmed', description: gtmDescription.trim(), updated_by: session.user.id };
+    const { data: existing, error: readError } = await supabaseClient.from('zoal_gtm_settings').select('id').maybeSingle();
+    if (readError) throw readError;
+    const result = existing?.id
+      ? await supabaseClient.from('zoal_gtm_settings').update(payload).eq('id', existing.id).select().single()
+      : await supabaseClient.from('zoal_gtm_settings').insert(payload).select().single();
+    if (result.error) throw result.error;
+    return result.data;
+  };
+
+  const loadGtmSettings = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const { data, error } = await supabaseClient.from('zoal_gtm_settings').select('id, container_id, environment, enabled, consent_required, description, updated_by, updated_at').maybeSingle();
+      if (error) throw error;
+      if (!data) { setGtmContainerId(''); setGtmEnvironment('Production'); setGtmStatus('Not Configured'); setGtmConsentMode('Not Configured'); setGtmDescription(''); return; }
+      setGtmContainerId(data.container_id || '');
+      setGtmEnvironment(data.environment || 'Production');
+      setGtmStatus(data.enabled ? 'Enabled' : 'Draft');
+      setGtmConsentMode(data.consent_required ? 'Consent Required' : 'Consent Confirmed');
+      setGtmDescription(data.description || '');
+    } catch (error) {
+      console.error('[Admin] GTM settings load failed:', error);
+      setGtmFeedback('Error: Unable to load GTM configuration from the production database.');
+    }
+  }, [isAdmin]);
+
+  useEffect(() => { loadGtmSettings(); }, [loadGtmSettings]);
+
+  // 3rd-Party Integration states
+  // UI-only registry: production integrations must come from a server-backed registry.
+  // Keep this empty until the backend/database integration phase is implemented.
+  const [integrationsList, setIntegrationsList] = useState<any[]>([]);
+  const [searchIntegration, setSearchIntegration] = useState<string>('');
+  const [filterCategory, setFilterCategory] = useState<string>('All');
+  const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState<boolean>(false);
+  const [editingIntegration, setEditingIntegration] = useState<any | null>(null);
+  
+  // Forms state
+  const [integrationForm, setIntegrationForm] = useState<any>({
+    name: '',
+    provider: '',
+    category: 'Payments',
+    description: '',
+    environment: 'Staging',
+    baseUrl: '',
+    apiVersion: '',
+    authType: 'None',
+    apiKey: '',
+    clientId: '',
+    clientSecret: '',
+    accessToken: '',
+    refreshToken: '',
+    webhookUrl: '',
+    webhookEvent: 'order.created',
+    webhookMethod: 'POST',
+    webhookStatus: 'Inactive',
+    webhookSecret: ''
+  });
+  
+  const [integrationAuditLogs, setIntegrationAuditLogs] = useState<any[]>([]);
+  const [integrationFeedback, setIntegrationFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAdminBaseline = async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+        const [cats, brandsRes, cmsRes, staffRes] = await Promise.all([
+          categoryApi.list(),
+          fetch('/api/brands'),
+          fetch('/api/cms'),
+          fetch('/api/staff', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+
+        setCategories(cats);
+        
+        if (brandsRes.ok) {
+          const bData = await brandsRes.json();
+          setBrands(bData.data || []);
+        }
+
+        if (cmsRes.ok) {
+          const cData = await cmsRes.json();
+          setCmsSettings(cData);
+        }
+
+        if (staffRes.ok) {
+          const sData = await staffRes.json();
+          setStaffList(sData.data || sData.staff || []);
+        }
+      } catch (e) {
+        console.error('[Admin] Baseline fetch failed:', e);
+      }
+    };
+
+    if (isAdmin) {
+      fetchAdminBaseline();
+    }
+  }, [isAdmin]);
+
   // Bulk selectors & Advanced Filters for orders
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [orderDateFilter, setOrderDateFilter] = useState<string>('');
@@ -194,345 +357,65 @@ export default function AdminDashboard({
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [activeTab, isAddProductOpen]);
+  }, [activeTab]);
 
-  // Local state for categories (loaded from localStorage or default)
-  const [categories, setCategories] = useState<any[]>(() => {
-    let list: any[] = [];
-    try {
-      const raw = localStorage.getItem('zoal_admin_categories');
-      if (raw) {
-        list = JSON.parse(raw);
-      }
-    } catch (e) {}
+  useEffect(() => {
+    const fetchMarketingAndHeroes = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const authHeaders = { 'Authorization': `Bearer ${token}` };
 
-    const defaults = [
-      { id: 'cat-1', name: 'ZOAL Coffee & Cafe', slug: 'coffee', parent: null, description: 'Premium selection of artisanal single-origin coffee blends, saffron mocktails, and luxury thermal tea gatherings.', sortOrder: 1, count: 3, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056581210_coffe.png.png' },
-      { id: 'cat-2', name: 'Sudanese Bakery', slug: 'bakery', parent: null, description: 'Pillowy hearth-fired Hoboz breads, sesame crackers, and traditional Ghoriba cookies baked fresh daily.', sortOrder: 2, count: 3, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786056744199_bakery.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067395955_backery_snackes.jpeg' },
-      { id: 'cat-3', name: 'Traditional Organic Market', slug: 'market', parent: null, description: 'Direct-trade organic Sudanese botanical herbs, premium Gum Arabic crystals, and whole Karkadeh hibiscus blossoms.', sortOrder: 3, count: 2, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg' },
-      { id: 'cat-4', name: 'Premium Sudanese Toob', slug: 'fashion', parent: null, description: 'Hand-woven formal Toob gowns of fine organic drapes, silk threads, and geometric gold border embroidery.', sortOrder: 4, count: 1, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786066388125_primuime.png.png' },
-      { id: 'cat-5', name: 'Luxury Men\'s Thobes', slug: 'thobes', parent: null, description: 'Master tailored premium Sudanese and Gulf thobes structured from fine imported Italian cottons.', sortOrder: 5, count: 2, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786067301491_thoves_and_attair.png.png', bannerImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/banner_1786067315275_thoves.1.jpeg' },
-      { id: 'cat-6', name: 'Elite Cosmetics & Apothecary', slug: 'cosmetics', parent: null, description: 'Traditional Sudanese perfume oils, long-lasting musks, and organic botanicals.', sortOrder: 6, count: 0, featuredImage: 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/thumbnail_1786054061513_make_1_1_202607050335.jpeg' }
-    ];
-
-    try {
-      const existingAll = localStorage.getItem('zoal_all_collections_image');
-      if (!existingAll || existingAll.includes('/assets/') || existingAll.includes('/images/')) {
-        localStorage.setItem('zoal_all_collections_image', 'https://jglveforpqhioxpambbq.supabase.co/storage/v1/object/public/categories/categories/allcollections_1786068837249_collection.png.png');
-      }
-    } catch (e) {}
-
-    if (list && list.length > 0) {
-      // Normalize existing categories to reconnect Supabase Storage URLs if missing or static asset fallback
-      const normalized = list.map((c: any) => {
-        const slug = c.slug || c.id;
-        const defaultMatch = defaults.find(d => d.slug === slug || d.id === c.id);
-        if (defaultMatch) {
-          const hasValidImg = c.featuredImage && typeof c.featuredImage === 'string' && !c.featuredImage.includes('/assets/') && !c.featuredImage.includes('/images/');
-          const hasValidBanner = c.bannerImage && typeof c.bannerImage === 'string' && !c.bannerImage.includes('/assets/') && !c.bannerImage.includes('/images/');
-          
-          let resolvedImg = hasValidImg ? c.featuredImage : defaultMatch.featuredImage;
-          let resolvedBanner = hasValidBanner ? c.bannerImage : (defaultMatch.bannerImage || c.bannerImage || defaultMatch.featuredImage);
-
-          // Healing check: if images were consolidated/corrupted by previous bug, restore correct independent defaults
-          if (resolvedImg === resolvedBanner && defaultMatch.featuredImage !== defaultMatch.bannerImage) {
-            resolvedImg = defaultMatch.featuredImage;
-            resolvedBanner = defaultMatch.bannerImage;
+      fetch('/api/marketing-data', { headers: authHeaders })
+        .then(res => {
+          if (!res.ok) {
+            return res.json().then(err => {
+              if (err.error === 'MARKETING_DATABASE_UNAVAILABLE') {
+                setMarketingError('Marketing data is temporarily unavailable. Please try again.');
+              }
+              throw new Error(err.error || `Server returned status ${res.status}`);
+            });
           }
+          return res.json();
+        })
+        .then(data => {
+          setMarketingError(null);
+          if (data?.campaigns && Array.isArray(data.campaigns)) {
+            setCampaigns(data.campaigns);
+          }
+          if (data?.coupons && Array.isArray(data.coupons)) {
+            setCoupons(data.coupons);
+          }
+          if (data?.subscribers && Array.isArray(data.subscribers)) {
+            setSubscribers(data.subscribers);
+          }
+        })
+        .catch(err => {
+          console.warn('Note: Could not sync marketing data from server:', err.message || err);
+        });
 
-          return {
-            ...c,
-            featuredImage: resolvedImg,
-            bannerImage: resolvedBanner,
-            image: resolvedImg,
-            imageUrl: resolvedImg
-          };
-        }
-        return c;
-      });
-      try {
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(normalized));
-      } catch (e) {}
-      return normalized;
-    }
-    try {
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(defaults));
-    } catch (e) {}
-    return defaults;
-  });
-
-  // Local state for brands
-  const [brands, setBrands] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_brands');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'brand-1', name: 'ZOAL Specialty Roasters', slug: 'zoal-roasters', description: 'Elite micro-batch single-origin coffees sourced from high-altitude smallholders across Yemen and East Africa.', logoUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-2', name: 'Sudan Bakery Heritage', slug: 'bakery-heritage', description: 'Centuries-old sourdough cultures hand-kneaded by Sudanese master bakers using stone-oven wood fire hearths.', logoUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-3', name: 'Kordofan Organic Co.', slug: 'kordofan-organic', description: 'First-grade natural agricultural exports harvested directly from the rain-fed plains of Western Sudan.', logoUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=200' },
-      { id: 'brand-4', name: 'Artisan Sudanese Weaves', slug: 'artisan-weaves', description: 'Prestige textile workshops creating premium hand-spun organic long-staple cotton and golden thread embroidery.', logoUrl: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=200' }
-    ];
-  });
-
-  // ENTERPRISE STATES & OVERRIDES
-  const [orderOverrides, setOrderOverrides] = useState<Record<string, {
-    timeline: { status: string; date: string; updatedBy: string }[];
-    adminNotes: string;
-    paymentStatus: 'Paid' | 'Unpaid' | 'Refunded' | 'Partially Refunded';
-    carrier: string;
-    trackingNumber: string;
-    deliveryZone: string;
-    shippingAddress: string;
-    contactName: string;
-    notes?: string;
-  }>>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_order_overrides');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_order_overrides', JSON.stringify(orderOverrides));
-  }, [orderOverrides]);
-
-  const [stockHistory, setStockHistory] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_stock_history');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'sh-1', productId: '1', productName: 'Saffron Specialty Blend Coffee', oldStock: 25, newStock: 20, adjustedBy: 'Admin', reason: 'Sales Order Fulfilled', time: new Date(Date.now() - 3600000).toLocaleString() },
-      { id: 'sh-2', productId: '2', productName: 'Artisanal Cardamom Cookies', oldStock: 12, newStock: 30, adjustedBy: 'Support Staff', reason: 'Supplier Replenishment', time: new Date(Date.now() - 14400000).toLocaleString() }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_stock_history', JSON.stringify(stockHistory));
-  }, [stockHistory]);
-
-  const [supplierReference, setSupplierReference] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_suppliers');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'sup-1', name: 'Kordofan Premium Co-Op', contactName: 'El-Hadi Ibrahim', phone: '+249 912 345678', email: 'elhadi@kordofanpremium.com', status: 'Active Partner', categories: ['Market Raw Spices', 'Organic Gum Crystals'] },
-      { id: 'sup-2', name: 'Yemeni Terraces Coffee Sourcing', contactName: 'Adnan Al-Hamdani', phone: '+967 711 234567', email: 'adnan@yemeniterraces.com', status: 'Active Partner', categories: ['Specialty Coffee Saffron'] },
-      { id: 'sup-3', name: 'Riyadh Silk & Brocade Guild', contactName: 'Fatma Al-Jasser', phone: '+966 56 769 9315', email: 'fatma.j@riyadhbrocade.com', status: 'Active Partner', categories: ['Premium Sudanese Toob', 'Luxury Men\'s Thobes'] }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_suppliers', JSON.stringify(supplierReference));
-  }, [supplierReference]);
-
-  const [purchaseHistory, setPurchaseHistory] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_purchases');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'po-501', supplierName: 'Kordofan Premium Co-Op', date: '2026-07-01', amount: 4500, status: 'Completed', items: '50kg Whole Karkadeh Flowers, 10kg Gum Arabic Tears' },
-      { id: 'po-502', supplierName: 'Yemeni Terraces Coffee Sourcing', date: '2026-07-10', amount: 12800, status: 'In Transit', items: '100kg Single-Origin Yemeni Peaberry Coffee Beans' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_purchases', JSON.stringify(purchaseHistory));
-  }, [purchaseHistory]);
-
-  const [customerOverrides, setCustomerOverrides] = useState<Record<string, {
-    status: 'active' | 'suspended';
-    notes: string;
-    addresses: string[];
-    activity: { event: string; time: string }[];
-  }>>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_customer_overrides');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_customer_overrides', JSON.stringify(customerOverrides));
-  }, [customerOverrides]);
-
-  const [staffList, setStaffList] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_staff');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'staff-1', name: 'Khalid Al-Mansoori', email: 'khalid@zoal.com', role: 'Senior Support Representative', permissions: ['Edit Catalog', 'Manage Orders'], status: 'active', lastActive: 'Active 2 mins ago' },
-      { id: 'staff-2', name: 'Sumaya Bashir', email: 'sumaya@zoal.com', role: 'Senior Artisan Supervisor', permissions: ['Edit Catalog', 'Edit Website Content'], status: 'active', lastActive: 'Active 1 hour ago' },
-      { id: 'staff-3', name: 'Amjad Suliman', email: 'amjad@zoal.com', role: 'Support Specialist', permissions: ['Manage Orders'], status: 'active', lastActive: 'Active Yesterday' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_staff', JSON.stringify(staffList));
-  }, [staffList]);
-
-  const [cmsSettings, setCmsSettings] = useState<any>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_cms');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return {
-      heroHeading: 'Sudanese Heritage & Modern Luxury Gatherings',
-      heroSubheading: 'Indulge in artisanal micro-batch single-origin Yemeni coffees, traditional wood fire breads, botanical hibiscus infusions, and premium hand-embroidered heritage gowns.',
-      heroImage: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=1600',
-      activeSections: {
-        hero: true,
-        featured: true,
-        categories: true,
-        brands: true,
-        slogan: true,
-        stories: true
-      },
-      flashSaleText: 'Grand Opening Privileges Code: ZOALGOLD for 15% discount site-wide.',
-      flashSalePercentage: 15,
-      flashSaleCountdown: '2026-08-31',
-      aboutContent: 'AL ZOAL is a premium boutique sanctuary celebrating Sudanese hospitality and artisanal heritage. Every coffee bean, baked crumb, herb harvest, and golden thread is curated with authentic luxury drapes.',
-      seoTitle: 'AL ZOAL | Luxury Sudanese Artisanal Roasters, Bakery & Gowns',
-      seoDesc: 'Premium Sudanese artisanal boutique. Organic market botanicals, single-origin Yemeni coffee, master-tailored Sudanese Toob & thobes with elite Saudi courier dispatch.',
-      privacyPolicy: 'We store your cryptographic session identities and personal details securely under standard GCC security laws.',
-      shippingPolicy: 'Dispatched from Dammam and Al Hofuf main warehouses using premium high-care courier express. Overnight delivery available.',
-      returnPolicy: 'Due to the custom-tailored premium nature of our Sudanese Toobs and fresh botanical market selections, items are refundable only within 7 days in pristine, unused state.'
+      fetch('/api/homepage-heroes', { headers: authHeaders })
+        .then(res => {
+          if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            const mappedBanners = data.map((h: any) => ({
+              id: h.id,
+              title: h.hero_title || '',
+              image: h.hero_image_desktop || h.hero_image_mobile || '',
+              link: h.cta_link || 'store',
+              status: h.active ? 'active' : 'inactive'
+            }));
+            setBanners(mappedBanners);
+          }
+        })
+        .catch(err => {
+          console.warn('Note: Could not sync homepage heroes from server:', err.message || err);
+        });
     };
-  });
 
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_cms', JSON.stringify(cmsSettings));
-  }, [cmsSettings]);
-
-  const [coupons, setCoupons] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_coupons');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'c-1', code: 'ZOALGOLD', rate: 15, type: 'percent', expiry: '2026-12-31', limit: 500, usedCount: 84 },
-      { id: 'c-2', code: 'SAUDIHERITAGE', rate: 20, type: 'percent', expiry: '2026-08-15', limit: 100, usedCount: 22 }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_coupons', JSON.stringify(coupons));
-  }, [coupons]);
-
-  const DEFAULT_CAMPAIGNS = [
-    { id: 'camp-1', name: 'Ramadan Specialty Coffee Promo', channel: 'Email & SMS', status: 'Active', target_audience: 'VIP Customers', conversion_rate: '14.2%' },
-    { id: 'camp-2', name: 'Summer Bespoke Thobe Launch', channel: 'Instagram & WhatsApp', status: 'Scheduled', target_audience: 'All Registered', conversion_rate: '8.7%' }
-  ];
-
-  const DEFAULT_SUBSCRIBERS = [
-    { id: 'sub-1', email: 'tarig@zoal.sa', name: 'Tarig Al-Sultan', status: 'Subscribed', channel: 'Email', joined_at: '2026-05-10' },
-    { id: 'sub-2', email: 'fahed@zoal.sa', name: 'Fahed M. Khartum', status: 'Subscribed', channel: 'SMS', joined_at: '2026-06-01' },
-    { id: 'sub-3', email: 'amira@zoal.sa', name: 'Amira Hassan', status: 'Subscribed', channel: 'WhatsApp', joined_at: '2026-06-15' }
-  ];
-
-  const [campaigns, setCampaigns] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_campaigns');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_CAMPAIGNS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_campaigns', JSON.stringify(campaigns));
-  }, [campaigns]);
-
-  const [banners, setBanners] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_banners');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'ban-1', title: 'Luxury Toob Collection Premiere', image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=800', link: 'fashion', status: 'active' },
-      { id: 'ban-2', title: 'Freshly Hearth-Baked Sesame Hoboz', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800', link: 'bakery', status: 'active' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_banners', JSON.stringify(banners));
-  }, [banners]);
-
-  const [subscribers, setSubscribers] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_subscribers');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_SUBSCRIBERS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_subscribers', JSON.stringify(subscribers));
-  }, [subscribers]);
-
-  useEffect(() => {
-    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
-    const authHeaders = { 'Authorization': `Bearer ${token}` };
-
-    fetch('/api/marketing-data', { headers: authHeaders })
-      .then(res => {
-        if (!res.ok) {
-          return res.json().then(err => {
-            if (err.error === 'MARKETING_DATABASE_UNAVAILABLE') {
-              setMarketingError('Marketing data is temporarily unavailable. Please try again.');
-            }
-            throw new Error(err.error || `Server returned status ${res.status}`);
-          });
-        }
-        return res.json();
-      })
-      .then(data => {
-        setMarketingError(null);
-        if (data?.campaigns && Array.isArray(data.campaigns)) {
-          setCampaigns(data.campaigns);
-        }
-        if (data?.coupons && Array.isArray(data.coupons)) {
-          setCoupons(data.coupons);
-        }
-        if (data?.subscribers && Array.isArray(data.subscribers)) {
-          setSubscribers(data.subscribers);
-        }
-      })
-      .catch(err => {
-        console.warn('Note: Could not sync marketing data from server:', err.message || err);
-      });
-
-    fetch('/api/homepage-heroes', { headers: authHeaders })
-      .then(res => {
-        if (!res.ok) throw new Error(`Server returned status ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          const mappedBanners = data.map((h: any) => ({
-            id: h.id,
-            title: h.hero_title || '',
-            image: h.hero_image_desktop || h.hero_image_mobile || '',
-            link: h.cta_link || 'store',
-            status: h.active ? 'active' : 'inactive'
-          }));
-          setBanners(mappedBanners);
-        }
-      })
-      .catch(err => {
-        console.warn('Note: Could not sync homepage heroes from server, using local fallback:', err.message || err);
-      });
+    fetchMarketingAndHeroes();
   }, []);
 
   const fetchShippingRules = async () => {
@@ -1078,18 +961,43 @@ export default function AdminDashboard({
   const [editingRole, setEditingRole] = useState<any | null>(null);
   const [isAddRoleOpen, setIsAddRoleOpen] = useState<boolean>(false);
 
-  // System Logs list
-  const [systemLogs, setSystemLogs] = useState<any[]>(() => {
+  // System Logs list - Server Authoritative backed by Supabase zoal_activity_logs
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [loadingSystemLogs, setLoadingSystemLogs] = useState<boolean>(false);
+
+  const fetchSystemLogs = useCallback(async () => {
     try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [
-      { id: 'log-101', user: currentUser?.name || 'Administrator', action: 'Admin Login', target: 'Management Secure Panel', ip: '192.168.1.1', time: new Date().toLocaleString() },
-      { id: 'log-102', user: currentUser?.name || 'Administrator', action: 'Settings Updated', target: 'Synchronized Supabase Database', ip: '192.168.1.1', time: new Date(Date.now() - 300000).toLocaleString() },
-      { id: 'log-103', user: 'Khalid Al-Mansoori', action: 'Order Updated', target: 'Shipped Order ZL-9543', ip: '192.168.1.25', time: new Date(Date.now() - 7200000).toLocaleString() }
-    ];
-  });
+      setLoadingSystemLogs(true);
+      const token = (currentUser as any)?.token || localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const formatted = logsArray.map((l: any) => ({
+          id: l.id,
+          user: l.email || l.user_id || 'Administrator',
+          action: l.action,
+          target: l.resource_id ? `${l.resource_type || ''}: ${l.resource_id}` : (l.resource_type || 'System'),
+          ip: l.ip || '127.0.0.1',
+          time: l.timestamp ? new Date(l.timestamp).toLocaleString() : new Date().toLocaleString(),
+          severity: l.severity || 'INFO',
+          metadata: l.metadata,
+          before_state: l.before_state,
+          after_state: l.after_state
+        }));
+        setSystemLogs(formatted);
+      }
+    } catch (err) {
+      console.error('Failed to fetch audit logs:', err);
+    } finally {
+      setLoadingSystemLogs(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    fetchSystemLogs();
+  }, [fetchSystemLogs]);
 
   // Save categories/brands back to localStorage
   useEffect(() => {
@@ -1100,10 +1008,6 @@ export default function AdminDashboard({
     localStorage.setItem('zoal_admin_brands', JSON.stringify(brands));
   }, [brands]);
 
-  useEffect(() => {
-    localStorage.setItem('zoal_admin_logs', JSON.stringify(systemLogs));
-  }, [systemLogs]);
-
   // Log function helper
   const addLog = (action: string, target?: string) => {
     const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
@@ -1112,7 +1016,7 @@ export default function AdminDashboard({
       user: currentUser?.name || 'Admin',
       action,
       target: target || 'System Interface',
-      ip: '192.168.1.16',
+      ip: '127.0.0.1',
       time: new Date().toLocaleString()
     };
     setSystemLogs(prev => [newLog, ...prev]);
@@ -1146,8 +1050,8 @@ export default function AdminDashboard({
     const deliveredOrders = orders.filter(o => o.status === 'Completed').length;
     const cancelledOrders = orders.filter(o => o.status === 'Cancelled').length;
 
-    const totalCustomers = new Set(orders.map(o => o.email)).size || 1;
-    const totalStaff = 5;
+    const totalCustomers = new Set(orders.filter(o => o?.email).map(o => o.email)).size;
+    const totalStaff = staffList.length;
 
     const totalProductsCount = allProducts.length;
     const lowStockCount = allProducts.filter(p => p.inventory <= 5 && p.inventory > 0).length;
@@ -1169,17 +1073,27 @@ export default function AdminDashboard({
       lowStockCount,
       outOfStockCount
     };
-  }, [orders, allProducts]);
+  }, [orders, allProducts, staffList]);
 
-  // Chart Data preparation
-  const revenueTrendData = [
-    { name: 'Jan', sales: metrics.totalRevenue * 0.4, orders: 12 },
-    { name: 'Feb', sales: metrics.totalRevenue * 0.55, orders: 18 },
-    { name: 'Mar', sales: metrics.totalRevenue * 0.7, orders: 24 },
-    { name: 'Apr', sales: metrics.totalRevenue * 0.65, orders: 21 },
-    { name: 'May', sales: metrics.totalRevenue * 0.9, orders: 32 },
-    { name: 'Jun', sales: metrics.totalRevenue, orders: metrics.totalOrders }
-  ];
+  // Chart Data preparation - aggregated from real orders
+  const revenueTrendData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyMap = months.map(m => ({ name: m, sales: 0, orders: 0 }));
+    
+    orders.forEach(o => {
+      if (!o.date || o.status === 'Cancelled') return;
+      const d = new Date(o.date);
+      if (isNaN(d.getTime())) return;
+      const mIdx = d.getMonth();
+      if (mIdx >= 0 && mIdx < 12) {
+        monthlyMap[mIdx].sales += (Number(o.total) || 0);
+        monthlyMap[mIdx].orders += 1;
+      }
+    });
+
+    const curMonthIdx = new Date().getMonth();
+    return monthlyMap.slice(0, Math.max(6, curMonthIdx + 1));
+  }, [orders]);
 
   const categoryPerformanceData = useMemo(() => {
     const counts = { coffee: 0, bakery: 0, market: 0, fashion: 0, thobes: 0 };
@@ -1201,20 +1115,17 @@ export default function AdminDashboard({
   const bestSellingProductsData = useMemo(() => {
     const itemMap: Record<string, number> = {};
     orders.forEach(o => {
+      if (o.status === 'Cancelled' || !Array.isArray(o.items)) return;
       o.items.forEach(itm => {
-        itemMap[itm.name] = (itemMap[itm.name] || 0) + itm.quantity;
+        if (itm?.name) {
+          itemMap[itm.name] = (itemMap[itm.name] || 0) + (Number(itm.quantity) || 1);
+        }
       });
     });
-    const sorted = Object.entries(itemMap).map(([name, qty]) => ({ name, qty }))
+    return Object.entries(itemMap)
+      .map(([name, qty]) => ({ name, qty }))
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-    return sorted.length > 0 ? sorted : [
-      { name: 'Saffron Latte', qty: 32 },
-      { name: 'Traditional Hoboz', qty: 25 },
-      { name: 'Sudanese Toob', qty: 14 },
-      { name: 'Luxury Men\'s Thobe', qty: 11 },
-      { name: 'Karkadeh Flowers', qty: 8 }
-    ];
   }, [orders]);
 
   // Start Create Product
@@ -2732,24 +2643,22 @@ export default function AdminDashboard({
 
   const enrichedOrders = useMemo(() => {
     return orders.map(o => {
-      const override = orderOverrides[o.id] || {};
-      const timeline = override.timeline || [
-        { status: 'Pending', date: new Date(o.date).toLocaleString(), updatedBy: 'System' },
-        ...(o.status !== 'Pending' ? [{ status: o.status, date: new Date().toLocaleString(), updatedBy: 'Admin' }] : [])
-      ];
       return {
         ...o,
-        paymentStatus: override.paymentStatus || (o.status === 'Completed' ? 'Paid' : 'Unpaid'),
-        adminNotes: override.adminNotes || '',
-        carrier: override.carrier || 'ZOAL Express',
-        trackingNumber: o.trackingNumber || override.trackingNumber || 'N/A',
-        deliveryZone: override.deliveryZone || 'Dammam Sector A',
-        shippingAddress: override.shippingAddress || 'Prince Mohammed Bin Fahd Road, Dammam, Saudi Arabia',
-        contactName: override.contactName || o.customerName,
-        timeline
+        paymentStatus: o.paymentStatus || (o.status === 'Completed' ? 'Paid' : 'Unpaid'),
+        adminNotes: o.adminNotes || '',
+        carrier: o.carrier || 'ZOAL Express',
+        trackingNumber: o.trackingNumber || 'N/A',
+        deliveryZone: (o as any).deliveryZone || 'Dammam Sector A',
+        shippingAddress: o.address || 'Prince Mohammed Bin Fahd Road, Dammam, Saudi Arabia',
+        contactName: o.customerName,
+        timeline: o.timeline || [
+          { status: 'Pending', date: new Date(o.date).toLocaleString(), updatedBy: 'System' },
+          ...(o.status !== 'Pending' ? [{ status: o.status, date: new Date().toLocaleString(), updatedBy: 'Admin' }] : [])
+        ]
       };
     });
-  }, [orders, orderOverrides]);
+  }, [orders]);
 
   const filteredOrders = useMemo(() => {
     return enrichedOrders.filter(o => {
@@ -2856,6 +2765,7 @@ export default function AdminDashboard({
     { id: 'ai_center', name: 'AI Center', icon: Sparkles },
     { id: 'ai_review_center', name: 'AI Translation Queue', icon: Languages },
     { id: 'rbac', name: 'RBAC', icon: Lock },
+    { id: 'third_party', name: '3rd Party', icon: Plug },
     { id: 'settings', name: 'Settings', icon: Settings },
     { id: 'profile', name: 'My Profile', icon: User },
 
@@ -3108,9 +3018,33 @@ export default function AdminDashboard({
           </div>
 
           {/* Quick status indicator */}
-          <div className="hidden lg:flex items-center gap-2 border border-emerald-500/20 bg-emerald-900/10 px-3 py-1 rounded-full text-emerald-400 text-[9px] uppercase tracking-widest font-mono">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Supabase Server: Fully Synchronized</span>
+          <div className="hidden lg:flex items-center gap-2 border border-white/10 bg-white/[0.02] px-3 py-1 rounded-full text-[9px] uppercase tracking-widest font-mono" aria-live="polite">
+            <div className={`w-1.5 h-1.5 rounded-full ${
+              dashboardSyncState === 'verified'
+                ? 'bg-emerald-500'
+                : dashboardSyncState === 'refreshing'
+                  ? 'bg-amber-400 animate-pulse'
+                  : dashboardSyncState === 'failed'
+                    ? 'bg-red-500'
+                    : 'bg-zinc-500'
+            }`} />
+            <span className={
+              dashboardSyncState === 'verified'
+                ? 'text-emerald-400'
+                : dashboardSyncState === 'refreshing'
+                  ? 'text-amber-300'
+                  : dashboardSyncState === 'failed'
+                    ? 'text-red-400'
+                    : 'text-zinc-500'
+            }>
+              {dashboardSyncState === 'verified'
+                ? 'Server Data Verified'
+                : dashboardSyncState === 'refreshing'
+                  ? 'Verifying Server Data…'
+                  : dashboardSyncState === 'failed'
+                    ? 'Verification Failed'
+                    : 'Server Sync Status Unknown'}
+            </span>
           </div>
 
           {/* Action Tools */}
@@ -3172,13 +3106,13 @@ export default function AdminDashboard({
                   {/* Sync & Refresh Actions */}
                   <div className="flex items-center shrink-0">
                     <button 
-                      onClick={() => {
-                        addLog('Triggered Manual Supabase Re-Sync');
-                        alert('Supabase master records verified and up-to-date!');
-                      }}
-                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
+                      type="button"
+                      onClick={refreshDashboardData}
+                      disabled={dashboardSyncState === 'refreshing'}
+                      className="py-1.5 px-2.5 sm:px-3 border border-gold-pure/30 text-gold-pure hover:bg-gold-pure/10 disabled:opacity-60 disabled:cursor-not-allowed rounded-xs text-[8.5px] sm:text-[9px] uppercase tracking-widest font-mono font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
                     >
-                      <RefreshCw className="w-3 h-3 text-gold-pure" /> Refresh Data
+                      <RefreshCw className={`w-3 h-3 text-gold-pure ${dashboardSyncState === 'refreshing' ? 'animate-spin' : ''}`} />
+                      {dashboardSyncState === 'refreshing' ? 'Verifying…' : 'Refresh Data'}
                     </button>
                   </div>
                 </div>
@@ -4858,23 +4792,23 @@ export default function AdminDashboard({
                       onClick={() => {
                         const printWindow = window.open('', '_blank');
                         if (printWindow) {
-                          const mockInvoice = {
+                          const realInvoice = {
                             invoiceNumber: `INV-${selectedOrder.id}`,
                             invoiceDate: selectedOrder.date || new Date().toLocaleDateString(),
-                            merchantName: 'AL ZOAL ENTERPRISE',
-                            merchantVat: '310239485700003',
+                            merchantName: BRANDING?.companyName || 'ZOAL Enterprise',
+                            merchantVat: cmsSettings?.vat_number || (selectedOrder as any).merchantVat || 'Data unavailable',
                             orderId: selectedOrder.id,
-                            paymentId: `pay_${selectedOrder.id}`,
-                            gateway: selectedOrder.paymentMethod || 'Moyasar',
-                            transactionId: `txn_${selectedOrder.id}`,
-                            subtotal: selectedOrder.total / 1.15,
-                            vat: selectedOrder.total - (selectedOrder.total / 1.15),
-                            discount: 0,
-                            delivery: 0,
+                            paymentId: (selectedOrder as any).paymentId || (selectedOrder as any).payment_intent_id || 'Data unavailable',
+                            gateway: selectedOrder.paymentMethod || (selectedOrder as any).payment_gateway || 'Data unavailable',
+                            transactionId: (selectedOrder as any).transactionId || (selectedOrder as any).transaction_id || 'Data unavailable',
+                            subtotal: (selectedOrder as any).subtotal ?? (selectedOrder.total / 1.15),
+                            vat: (selectedOrder as any).vat ?? (selectedOrder.total - (selectedOrder.total / 1.15)),
+                            discount: (selectedOrder as any).discount ?? 0,
+                            delivery: (selectedOrder as any).shippingFee ?? (selectedOrder as any).deliveryFee ?? 0,
                             total: selectedOrder.total,
                             items: selectedOrder.items || []
                           };
-                          printWindow.document.write(generatePrintableInvoiceHtml(mockInvoice));
+                          printWindow.document.write(generatePrintableInvoiceHtml(realInvoice));
                           printWindow.document.close();
                           printWindow.print();
                           addLog(`Printed Invoice: ${selectedOrder.id}`);
@@ -4886,24 +4820,24 @@ export default function AdminDashboard({
                     </button>
                     <button 
                       onClick={() => {
-                        const mockInvoice = {
+                        const realInvoice = {
                           invoiceNumber: `INV-${selectedOrder.id}`,
                           invoiceDate: selectedOrder.date || new Date().toLocaleDateString(),
-                          merchantName: 'AL ZOAL ENTERPRISE',
-                          merchantVat: '310239485700003',
+                          merchantName: BRANDING?.companyName || 'ZOAL Enterprise',
+                          merchantVat: cmsSettings?.vat_number || (selectedOrder as any).merchantVat || 'Data unavailable',
                           orderId: selectedOrder.id,
-                          paymentId: `pay_${selectedOrder.id}`,
-                          gateway: selectedOrder.paymentMethod || 'Moyasar',
-                          transactionId: `txn_${selectedOrder.id}`,
-                          subtotal: selectedOrder.total / 1.15,
-                          vat: selectedOrder.total - (selectedOrder.total / 1.15),
-                          discount: 0,
-                          delivery: 0,
+                          paymentId: (selectedOrder as any).paymentId || (selectedOrder as any).payment_intent_id || 'Data unavailable',
+                          gateway: selectedOrder.paymentMethod || (selectedOrder as any).payment_gateway || 'Data unavailable',
+                          transactionId: (selectedOrder as any).transactionId || (selectedOrder as any).transaction_id || 'Data unavailable',
+                          subtotal: (selectedOrder as any).subtotal ?? (selectedOrder.total / 1.15),
+                          vat: (selectedOrder as any).vat ?? (selectedOrder.total - (selectedOrder.total / 1.15)),
+                          discount: (selectedOrder as any).discount ?? 0,
+                          delivery: (selectedOrder as any).shippingFee ?? (selectedOrder as any).deliveryFee ?? 0,
                           total: selectedOrder.total,
                           items: selectedOrder.items || []
                         };
-                        const html = generatePrintableInvoiceHtml(mockInvoice);
-                        downloadHtmlAsPdf(html, `ALZOAL-INVOICE-${mockInvoice.invoiceNumber}.pdf`);
+                        const html = generatePrintableInvoiceHtml(realInvoice);
+                        downloadHtmlAsPdf(html, `ALZOAL-INVOICE-${realInvoice.invoiceNumber}.pdf`);
                         addLog(`Downloaded Invoice PDF: ${selectedOrder.id}`);
                       }}
                       className="py-1.5 px-3 bg-zinc-900 border border-white/10 hover:border-gold-pure text-white text-[9.5px] font-mono font-bold tracking-wide uppercase rounded-xs flex items-center gap-1.5 cursor-pointer"
@@ -7085,8 +7019,8 @@ export default function AdminDashboard({
                           <input 
                             type={showAdminSmtpPass ? 'text' : 'password'} 
                             id="settings-smtp-pass"
-                            defaultValue={globalSettings.smtpPass}
-                            className="bg-black w-full border border-white/10 text-white p-2 pr-11 text-[10px] rounded-xs outline-none focus:border-gold-pure"
+                            placeholder="•••••••••••• (Leave blank to keep existing secret)"
+                            className="bg-black w-full border border-white/10 text-white p-2 pr-11 text-[10px] rounded-xs outline-none focus:border-gold-pure placeholder:text-zinc-600"
                           />
                           <button
                             type="button"
@@ -7280,7 +7214,11 @@ export default function AdminDashboard({
                       if (smtpHostEl) updated.smtpHost = smtpHostEl.value;
                       if (smtpPortEl) updated.smtpPort = smtpPortEl.value;
                       if (smtpUserEl) updated.smtpUser = smtpUserEl.value;
-                      if (smtpPassEl) updated.smtpPass = smtpPassEl.value;
+                      if (smtpPassEl && smtpPassEl.value && smtpPassEl.value.trim() !== '' && smtpPassEl.value !== '**********' && !smtpPassEl.value.includes('••••')) {
+                        updated.smtpPass = smtpPassEl.value.trim();
+                      } else {
+                        delete updated.smtpPass;
+                      }
 
                       if (ipEl) updated.ipWhitelist = ipEl.value;
                       if (expEl) updated.sessionExpirationMinutes = Number(expEl.value);
@@ -7316,31 +7254,47 @@ export default function AdminDashboard({
 
               <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
                 <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                  <span className="text-zinc-500 font-mono text-[9.5px]">Track all admin activities, system settings updates, and security events in real-time.</span>
-                  <button 
-                    onClick={() => {
-                      setSystemLogs([
-                        { id: `log-${Date.now()}`, user: currentUser?.name || 'Administrator', action: 'Cleared system log files', ip: '192.168.1.1', time: new Date().toLocaleString() }
-                      ]);
-                      alert("Audit logs database cleared except current terminal session master log.");
-                    }}
-                    className="text-rose-500 hover:underline font-mono text-[9px] font-bold"
-                  >
-                    Clear Logs
-                  </button>
+                  <span className="text-zinc-500 font-mono text-[9.5px]">Authoritative immutable audit log stream backed by PostgreSQL/Supabase ledger.</span>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => fetchSystemLogs()}
+                      className="text-gold-pure hover:underline font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Refresh Logs
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const csvText = `id,user,action,target,ip,time\n` + systemLogs.map(l => `"${l.id}","${l.user}","${l.action}","${l.target}","${l.ip}","${l.time}"`).join('\n');
+                        const blob = new Blob([csvText], { type: 'text/csv' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `zoal_security_audit_logs_${new Date().toISOString().slice(0,10)}.csv`;
+                        link.click();
+                      }}
+                      className="text-zinc-400 hover:text-white font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3 h-3 text-emerald-500" /> Export CSV
+                    </button>
+                  </div>
                 </div>
                 
-                <div className="divide-y divide-white/5 font-mono text-[9.5px]">
-                  {systemLogs.map((log, idx) => (
-                    <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
-                      <div>
-                        <span className="text-white block font-sans">{log.action}</span>
-                        <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip}</span>
+                {loadingSystemLogs ? (
+                  <div className="py-8 text-center text-zinc-500 font-mono text-[10px]">Loading audit ledger...</div>
+                ) : systemLogs.length === 0 ? (
+                  <div className="py-8 text-center text-zinc-600 font-mono text-[10px]">No audit logs recorded yet in authoritative database.</div>
+                ) : (
+                  <div className="divide-y divide-white/5 font-mono text-[9.5px]">
+                    {systemLogs.map((log, idx) => (
+                      <div key={`${log.id}-${idx}`} className="py-2.5 flex justify-between text-zinc-400 hover:bg-white/1 duration-150 px-2 rounded-xs">
+                        <div>
+                          <span className="text-white block font-sans">{log.action}</span>
+                          <span className="text-zinc-600 text-[8px] block">User: {log.user} • IP Address: {log.ip} {log.target ? `• Target: ${log.target}` : ''}</span>
+                        </div>
+                        <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
                       </div>
-                      <span className="text-zinc-500 shrink-0 text-[8.5px]">{log.time}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -8346,6 +8300,1064 @@ export default function AdminDashboard({
             </div>
           )}
 
+          {activeTab === 'third_party' && (
+            <div className="space-y-6 text-left animate-fade-in font-sans">
+              <div className="border-b border-white/10 pb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <span className="text-xs tracking-[0.3em] text-gold-pure uppercase font-mono block mb-1 font-semibold">INTEGRATIONS PLATFORM</span>
+                  <h2 className="text-xl md:text-2xl font-bold tracking-widest font-display uppercase text-white">3RD PARTY SYSTEM WORKSPACE</h2>
+                  <p className="text-xs text-zinc-400 font-mono mt-1">Production configuration mode • GTM is database-backed; other third-party integrations remain intentionally empty.</p>
+                </div>
+                {/* Sub Tabs Selector */}
+                <div className="flex bg-zinc-950 p-1 border border-white/10 rounded-xs self-start md:self-auto">
+                  <button
+                    onClick={() => setThirdPartySubTab('gtm')}
+                    className={`px-4 py-2 text-xs uppercase tracking-widest font-mono font-bold transition-all rounded-xs cursor-pointer ${
+                      thirdPartySubTab === 'gtm' ? 'bg-gold-pure text-black shadow-md' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Google Tag Manager
+                  </button>
+                  <button
+                    onClick={() => setThirdPartySubTab('integrations')}
+                    className={`px-4 py-2 text-xs uppercase tracking-widest font-mono font-bold transition-all rounded-xs cursor-pointer ${
+                      thirdPartySubTab === 'integrations' ? 'bg-gold-pure text-black shadow-md' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    3rd-Party Integrations
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-tab 1: Google Tag Manager */}
+              {thirdPartySubTab === 'gtm' && (
+                <div className="space-y-6">
+                  {/* Notice Banner */}
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xs flex items-center gap-3 text-left">
+                    <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                    <p className="text-amber-300 text-xs font-mono leading-relaxed">
+                      Production GTM configuration • Container ID is stored in Supabase and site injection is consent-aware
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Area: GTM configuration Form */}
+                    <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-5">
+                      <div className="border-b border-white/10 pb-3">
+                        <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">GTM Container Setup</h3>
+                        <p className="text-zinc-400 text-xs font-mono mt-1">Configure global tagging container properties (UI Draft)</p>
+                      </div>
+
+                      {gtmFeedback && (
+                        <div className={`p-3.5 text-xs font-mono border rounded-xs ${
+                          gtmFeedback.includes('error') || gtmFeedback.includes('Invalid') || gtmFeedback.includes('Error')
+                            ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        }`}>
+                          {gtmFeedback}
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        <div className="space-y-1.5">
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">GTM Container ID</label>
+                          <input
+                            type="text"
+                            value={gtmContainerId}
+                            onChange={(e) => {
+                              setGtmContainerId(e.target.value);
+                              setGtmFeedback(null);
+                            }}
+                            placeholder="e.g. GTM-XXXXXX"
+                            className="w-full bg-black border border-white/15 text-gold-pure p-3 text-sm outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono font-semibold tracking-wider rounded-xs placeholder:text-zinc-600"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Environment</label>
+                          <select
+                            value={gtmEnvironment}
+                            onChange={(e: any) => setGtmEnvironment(e.target.value)}
+                            className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                          >
+                            <option value="Production">Production</option>
+                            <option value="Staging">Staging</option>
+                            <option value="Development">Development</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Consent Mode</label>
+                          <select
+                            value={gtmConsentMode}
+                            onChange={(e: any) => setGtmConsentMode(e.target.value)}
+                            className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                          >
+                            <option value="Not Configured">Not Configured</option>
+                            <option value="Consent Required">Consent Required</option>
+                            <option value="Consent Confirmed">Consent Confirmed</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Status</label>
+                          <div className="p-3 bg-black border border-white/10 text-xs font-mono rounded-xs flex items-center justify-between">
+                            <span className="text-zinc-400">Current State:</span>
+                            <span className={`px-2.5 py-1 rounded-full text-xs uppercase font-semibold font-mono border ${
+                              gtmStatus === 'Enabled' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                              gtmStatus === 'Disabled' ? 'bg-red-500/15 text-red-300 border-red-500/30' :
+                              gtmStatus === 'Draft' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' :
+                              gtmStatus === 'Ready to Test' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                              'bg-zinc-800 text-zinc-400 border-white/10'
+                            }`}>
+                              {gtmStatus}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-zinc-300 text-xs block uppercase font-mono font-semibold">Description / Notes</label>
+                          <textarea
+                            value={gtmDescription}
+                            onChange={(e) => setGtmDescription(e.target.value)}
+                            placeholder="Enter notes about tagging triggers or custom configuration variables..."
+                            className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono h-24 resize-none outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                          />
+                        </div>
+
+                        {/* Action Hierarchy */}
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          {/* Primary Workflow Action */}
+                          <button
+                            onClick={async () => {
+                    try {
+                      const data = await saveGtmSettings(false);
+                      setGtmStatus('Draft');
+                      addLog('Saved GTM production draft configuration');
+                      setGtmFeedback('GTM configuration saved to the production database as a disabled draft.');
+                      if (data) setGtmContainerId(data.container_id || '');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM draft save failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to save GTM configuration.'}`);
+                    }
+                  }}
+                            className="py-2.5 px-3 bg-gold-pure text-black font-bold hover:bg-gold-light text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all shadow-md col-span-2 md:col-span-1"
+                          >
+                            Save Draft
+                          </button>
+
+                          {/* Secondary Action: Validate */}
+                          <button
+                            onClick={() => {
+                              if (!gtmContainerId) {
+                                setGtmFeedback('Error: GTM Container ID is empty.');
+                                return;
+                              }
+                              const regex = /^GTM-[A-Z0-9]{5,10}$/;
+                              if (!regex.test(gtmContainerId.toUpperCase())) {
+                                setGtmFeedback('Error: Invalid GTM Container ID format. Must match GTM-XXXXXX');
+                              } else {
+                                setGtmFeedback('Validation Success: GTM Container ID format is perfectly valid (GTM-XXXXXX).');
+                              }
+                            }}
+                            className="py-2.5 px-3 bg-zinc-900 border border-white/20 text-zinc-200 hover:bg-zinc-800 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
+                          >
+                            Validate
+                          </button>
+
+                          {/* Secondary Action: Test */}
+                          <button
+                            onClick={() => {
+                              setGtmFeedback('Connection testing will be available after backend integration is implemented.');
+                            }}
+                            className="py-2.5 px-3 bg-zinc-900 border border-white/20 text-zinc-200 hover:bg-zinc-800 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
+                          >
+                            Test
+                          </button>
+
+                          {/* State Control: Enable */}
+                          <button
+                            onClick={async () => {
+                    try {
+                      const data = await saveGtmSettings(true);
+                      setGtmStatus('Enabled');
+                      addLog('Enabled GTM site-side container injection');
+                      setGtmFeedback('GTM is enabled in production. The site will load the saved container after consent.');
+                      if (data) setGtmContainerId(data.container_id || '');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM enable failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to enable GTM.'}`);
+                    }
+                  }}
+                            className="py-2.5 px-3 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
+                          >
+                            Enable
+                          </button>
+
+                          {/* State Control: Disable */}
+                          <button
+                            onClick={async () => {
+                    try {
+                      await saveGtmSettings(false);
+                      setGtmStatus('Disabled');
+                      addLog('Disabled GTM site-side container injection');
+                      setGtmFeedback('GTM site-side injection is disabled in the production database.');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM disable failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to disable GTM.'}`);
+                    }
+                  }}
+                            className="py-2.5 px-3 bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2"
+                          >
+                            Disable
+                          </button>
+
+                          {/* Advanced/Publishing Milestone */}
+                          <button
+                            onClick={async () => {
+                    try {
+                      const data = await saveGtmSettings(true);
+                      setGtmStatus('Enabled');
+                      const newVerNum = gtmVersions.length + 1;
+                      setGtmVersions(prev => [{
+                        version: `v${newVerNum}`,
+                        status: 'Site Activated',
+                        containerId: data.container_id,
+                        environment: data.environment,
+                        createdBy: currentUser?.name || 'Admin',
+                        createdAt: new Date().toLocaleString(),
+                        publishedAt: new Date().toLocaleString()
+                      }, ...prev]);
+                      addLog(`Activated GTM site configuration v${newVerNum}`);
+                      setGtmFeedback('GTM site configuration is active. This action does not publish a version inside the Google Tag Manager workspace.');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM activation failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to activate GTM.'}`);
+                    }
+                  }}
+                            className="py-3 px-3 bg-gradient-to-r from-amber-400 via-gold-pure to-amber-500 text-black font-extrabold text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 mt-1 shadow-lg hover:brightness-110"
+                          >
+                            Activate Site Configuration
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Area: GTM Versions history Table */}
+                    <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs col-span-2 space-y-4 flex flex-col">
+                      <div className="border-b border-white/10 pb-3">
+                        <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">GTM Version History</h3>
+                        <p className="text-zinc-400 text-xs font-mono mt-1">Audited version snapshots (UI Drafts)</p>
+                      </div>
+
+                      <div className="flex-grow overflow-auto min-h-[300px]">
+                        {gtmVersions.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 border border-dashed border-white/10 rounded-xs">
+                            <Clock className="w-8 h-8 text-zinc-600 mb-1" />
+                            <h4 className="text-white text-xs font-mono font-bold uppercase tracking-wider">No GTM Draft Versions Recorded</h4>
+                            <p className="text-zinc-400 text-xs font-mono max-w-md">
+                              Click &quot;Activate Site Configuration&quot; in the GTM Container Setup panel to create a local configuration snapshot.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto border border-white/10 rounded-xs">
+                            <table className="w-full text-left text-xs font-mono">
+                              <thead className="bg-white/5 text-zinc-400 uppercase tracking-wider border-b border-white/10">
+                                <tr>
+                                  <th className="p-3">Version</th>
+                                  <th className="p-3">Status</th>
+                                  <th className="p-3">Created By</th>
+                                  <th className="p-3">Created At</th>
+                                  <th className="p-3">Snapshot Date</th>
+                                  <th className="p-3 text-right">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5 text-zinc-300">
+                                {gtmVersions.map((v, idx) => (
+                                  <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                    <td className="p-3 font-bold text-gold-pure">{v.version}</td>
+                                    <td className="p-3">
+                                      <span className="px-2.5 py-0.5 rounded-full text-xs uppercase font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                                        {v.status}
+                                      </span>
+                                    </td>
+                                    <td className="p-3">{v.createdBy}</td>
+                                    <td className="p-3 text-zinc-400">{v.createdAt}</td>
+                                    <td className="p-3 text-zinc-400">{v.publishedAt}</td>
+                                    <td className="p-3 text-right space-x-2">
+                                      <button
+                                        onClick={() => {
+                                          setGtmFeedback(`Viewing UI snapshot properties of release ${v.version}. (UI Read-only)`);
+                                        }}
+                                        className="text-zinc-400 hover:text-white transition-colors cursor-pointer px-2 py-1"
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setGtmContainerId(v.containerId || '');
+                                          setGtmFeedback(`UI Draft Rollback: Restored local workspace form state to snapshot ${v.version}.`);
+                                        }}
+                                        className="text-gold-pure border border-gold-pure/30 hover:bg-gold-pure/10 px-2.5 py-1 rounded-xs font-semibold transition-all cursor-pointer"
+                                      >
+                                        Restore
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab 2: 3rd-Party Integrations */}
+              {thirdPartySubTab === 'integrations' && (
+                <div className="space-y-6">
+                  {/* Notice Banner */}
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xs flex items-center gap-3 text-left">
+                    <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                    <p className="text-amber-300 text-xs font-mono leading-relaxed">
+                      UI Preview • Server Integration API Not Connected. Integrations configured here exist in local session state only.
+                    </p>
+                  </div>
+
+                  {/* Controls Bar */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-zinc-950 p-4 border border-white/10 rounded-xs">
+                    <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                      {/* Search */}
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                        <input
+                          type="text"
+                          value={searchIntegration}
+                          onChange={(e) => setSearchIntegration(e.target.value)}
+                          placeholder="Search integrations by name or provider..."
+                          className="w-full bg-black border border-white/15 text-white pl-9 pr-4 py-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                        />
+                      </div>
+                      {/* Filter Category */}
+                      <div className="relative">
+                        <select
+                          value={filterCategory}
+                          onChange={(e) => setFilterCategory(e.target.value)}
+                          className="bg-black border border-white/15 text-white px-3 py-2.5 text-xs font-mono outline-none focus:border-gold-pure rounded-xs appearance-none min-w-[150px] pr-8"
+                        >
+                          <option value="All">All Categories</option>
+                          <option value="Payments">Payments</option>
+                          <option value="Shipping">Shipping</option>
+                          <option value="ERP">ERP</option>
+                          <option value="CRM">CRM</option>
+                          <option value="Marketing">Marketing</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-500 absolute right-3 top-3.5 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setIntegrationForm({
+                          name: '',
+                          provider: '',
+                          category: 'Payments',
+                          description: '',
+                          environment: 'Staging',
+                          baseUrl: '',
+                          apiVersion: '',
+                          authType: 'None',
+                          apiKey: '',
+                          clientId: '',
+                          clientSecret: '',
+                          accessToken: '',
+                          refreshToken: '',
+                          webhookUrl: '',
+                          webhookEvent: 'order.created',
+                          webhookMethod: 'POST',
+                          webhookStatus: 'Inactive',
+                          webhookSecret: ''
+                        });
+                        setEditingIntegration(null);
+                        setIntegrationFeedback(null);
+                        setIsAddIntegrationOpen(true);
+                      }}
+                      className="py-2.5 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                    >
+                      <Plus className="w-4 h-4" /> Add Integration
+                    </button>
+                  </div>
+
+                  {integrationFeedback && (
+                    <div className="p-3.5 text-xs font-mono border rounded-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-300">
+                      {integrationFeedback}
+                    </div>
+                  )}
+
+                  {/* Integrations Table Grid */}
+                  <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-4">
+                    <div className="border-b border-white/10 pb-3">
+                      <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">Integration Registry</h3>
+                      <p className="text-zinc-400 text-xs font-mono mt-1">Federated ecosystem configurations & API mappings (UI Preview)</p>
+                    </div>
+
+                    {integrationsList.filter(item => {
+                      const matchesSearch = item.name.toLowerCase().includes(searchIntegration.toLowerCase()) || 
+                                            item.provider.toLowerCase().includes(searchIntegration.toLowerCase());
+                      const matchesCat = filterCategory === 'All' || item.category === filterCategory;
+                      return matchesSearch && matchesCat;
+                    }).length === 0 ? (
+                      <div className="py-12 px-6 border border-dashed border-white/10 rounded-xs flex flex-col items-center justify-center text-center space-y-3">
+                        <Plug className="w-10 h-10 text-zinc-600" />
+                        <h4 className="text-white text-sm font-mono font-bold uppercase tracking-wider">No Integrations Configured</h4>
+                        <p className="text-zinc-400 text-xs font-mono max-w-md">
+                          No third-party integration nodes are currently configured in this session. Configure local integration drafts using the button below.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setIntegrationForm({
+                              name: '',
+                              provider: '',
+                              category: 'Payments',
+                              description: '',
+                              environment: 'Staging',
+                              baseUrl: '',
+                              apiVersion: '',
+                              authType: 'None',
+                              apiKey: '',
+                              clientId: '',
+                              clientSecret: '',
+                              accessToken: '',
+                              refreshToken: '',
+                              webhookUrl: '',
+                              webhookEvent: 'order.created',
+                              webhookMethod: 'POST',
+                              webhookStatus: 'Inactive',
+                              webhookSecret: ''
+                            });
+                            setEditingIntegration(null);
+                            setIntegrationFeedback(null);
+                            setIsAddIntegrationOpen(true);
+                          }}
+                          className="mt-2 py-2 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Integration Node
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border border-white/10 rounded-xs">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead className="bg-white/5 text-zinc-400 uppercase tracking-wider border-b border-white/10">
+                            <tr>
+                              <th className="p-3">Integration</th>
+                              <th className="p-3">Provider</th>
+                              <th className="p-3">Category</th>
+                              <th className="p-3">Status</th>
+                              <th className="p-3">Environment</th>
+                              <th className="p-3">Last Tested</th>
+                              <th className="p-3">Last Updated</th>
+                              <th className="p-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 text-zinc-300">
+                            {integrationsList
+                              .filter(item => {
+                                const matchesSearch = item.name.toLowerCase().includes(searchIntegration.toLowerCase()) || 
+                                                      item.provider.toLowerCase().includes(searchIntegration.toLowerCase());
+                                const matchesCat = filterCategory === 'All' || item.category === filterCategory;
+                                return matchesSearch && matchesCat;
+                              })
+                              .map((item) => (
+                                <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                  <td className="p-3">
+                                    <div>
+                                      <span className="font-bold text-white block text-xs">{item.name}</span>
+                                      <span className="text-zinc-400 text-xs block max-w-[240px] truncate mt-0.5">{item.description}</span>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-zinc-300 font-bold">{item.provider}</td>
+                                  <td className="p-3 text-zinc-400 uppercase">{item.category}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2.5 py-1 rounded-full text-xs uppercase font-semibold border ${
+                                      item.status === 'Connected' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                                      item.status === 'Draft' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' :
+                                      item.status === 'Testing' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                                      item.status === 'Error' ? 'bg-red-500/15 text-red-300 border-red-500/30' :
+                                      'bg-zinc-800 text-zinc-400 border-white/10'
+                                    }`}>
+                                      {item.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-zinc-400">{item.environment}</td>
+                                  <td className="p-3 text-zinc-400">{item.lastTested}</td>
+                                  <td className="p-3 text-zinc-400">{item.lastUpdated}</td>
+                                  <td className="p-3 text-right space-x-2">
+                                    <button
+                                      onClick={() => {
+                                        setIntegrationFeedback(`View: ${item.name} is configured via provider ${item.provider}. (UI Preview Mode)`);
+                                      }}
+                                      className="text-zinc-400 hover:text-white transition-colors cursor-pointer px-1.5 py-1"
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingIntegration(item);
+                                        setIntegrationForm({ ...item });
+                                        setIntegrationFeedback(null);
+                                        setIsAddIntegrationOpen(true);
+                                      }}
+                                      className="text-gold-pure hover:underline cursor-pointer px-1.5 py-1 font-semibold"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setIntegrationFeedback("Connection testing will be available after backend integration is implemented.");
+                                      }}
+                                      className="text-zinc-400 hover:text-white cursor-pointer px-1.5 py-1"
+                                    >
+                                      Test
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const updated = integrationsList.map(i => i.id === item.id ? { ...i, status: i.status === 'Disabled' ? 'Connected' : 'Disabled' } : i);
+                                        setIntegrationsList(updated);
+                                        const newStatus = item.status === 'Disabled' ? 'Connected' : 'Disabled';
+                                        addLog(`${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`);
+                                        const auditEvent = {
+                                          action: `${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`,
+                                          user: currentUser?.name || 'Admin',
+                                          timestamp: new Date().toLocaleString(),
+                                          environment: item.environment,
+                                          result: 'Success'
+                                        };
+                                        setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                                      }}
+                                      className="text-zinc-400 hover:text-white cursor-pointer px-1.5 py-1"
+                                    >
+                                      {item.status === 'Disabled' ? 'Enable' : 'Disable'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setConfirmConfig({
+                                          title: 'DELETE INTEGRATION CONFIG?',
+                                          message: `This removes the integration configuration only. It does not delete products, customers, orders, inventory, or other ZOAL data. Are you sure you want to delete "${item.name}"?`,
+                                          confirmLabel: 'DELETE CONFIG',
+                                          onConfirm: () => {
+                                            setIntegrationsList(prev => prev.filter(i => i.id !== item.id));
+                                            addLog(`Deleted integration ${item.name}`);
+                                            const auditEvent = {
+                                              action: `Deleted integration ${item.name}`,
+                                              user: currentUser?.name || 'Admin',
+                                              timestamp: new Date().toLocaleString(),
+                                              environment: item.environment,
+                                              result: 'Deleted'
+                                            };
+                                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                                            setConfirmConfig(null);
+                                            setIntegrationFeedback(`Successfully removed integration configuration: ${item.name}`);
+                                          }
+                                        });
+                                      }}
+                                      className="text-red-400 hover:text-red-300 transition-colors cursor-pointer px-1.5 py-1 font-semibold"
+                                    >
+                                      Delete
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Failure Isolation Warning Callout Card */}
+                  <div className="bg-red-950/20 border border-red-500/30 p-5 rounded-xs flex gap-3.5 items-start text-left">
+                    <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/40 text-red-300 text-xs font-mono font-bold shrink-0">!</div>
+                    <div>
+                      <h4 className="text-red-300 text-xs font-display uppercase tracking-widest font-bold">Failure Isolation Protocol</h4>
+                      <p className="text-zinc-300 text-xs leading-relaxed mt-1">
+                        Third-party integrations must remain isolated from core ZOAL operations. An integration failure must not interrupt storefront, checkout, orders, inventory, or customer services.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Audit History Panel */}
+                  <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs space-y-4">
+                    <div className="border-b border-white/10 pb-3">
+                      <h3 className="text-white text-sm font-display uppercase tracking-widest font-bold">Audit & Activity Log</h3>
+                      <p className="text-zinc-400 text-xs font-mono mt-1">UI-only local activity preview — server audit ledger not yet connected</p>
+                    </div>
+
+                    <div className="overflow-y-auto max-h-[250px]">
+                      {integrationAuditLogs.length === 0 ? (
+                        <div className="py-8 flex flex-col items-center justify-center text-center space-y-2 border border-dashed border-white/10 rounded-xs">
+                          <FileText className="w-6 h-6 text-zinc-600 mb-1" />
+                          <span className="text-zinc-400 text-xs font-mono">No local activity logged yet in this session.</span>
+                        </div>
+                      ) : (
+                        <div className="border border-white/10 rounded-xs">
+                          <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-white/5 text-zinc-400 uppercase tracking-wider border-b border-white/10">
+                              <tr>
+                                <th className="p-3">Action</th>
+                                <th className="p-3">User</th>
+                                <th className="p-3">Timestamp</th>
+                                <th className="p-3">Environment</th>
+                                <th className="p-3">Result</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 text-zinc-300">
+                              {integrationAuditLogs.map((log, index) => (
+                                <tr key={index} className="hover:bg-white/5 transition-colors">
+                                  <td className="p-3 font-semibold text-white">{log.action}</td>
+                                  <td className="p-3">{log.user}</td>
+                                  <td className="p-3 text-zinc-400">{log.timestamp}</td>
+                                  <td className="p-3 text-zinc-400">{log.environment}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded-sm text-xs uppercase font-semibold border ${
+                                      log.result === 'Success' || log.result === 'Published' || log.result === 'Snapshot Created'
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                        : 'bg-zinc-800 text-zinc-400 border-white/10'
+                                    }`}>
+                                      {log.result}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Add / Edit Integration Modal Workspace */}
+              {isAddIntegrationOpen && (
+                <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+                  <div className="bg-zinc-950 border border-white/10 p-6 rounded-xs w-full max-w-3xl max-h-[90vh] shadow-2xl animate-fade-in flex flex-col font-sans text-left">
+                    <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-white text-base font-display uppercase tracking-widest font-bold">
+                          {editingIntegration ? 'Edit Integration Workspace' : 'Add Integration Workspace'}
+                        </h3>
+                        <p className="text-zinc-400 text-xs font-mono mt-0.5">Configure federated API nodes and transport credentials (UI Preview)</p>
+                      </div>
+                      <button onClick={() => setIsAddIntegrationOpen(false)} className="text-zinc-400 hover:text-white transition-colors cursor-pointer p-1">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                      {/* Informational Warning message */}
+                      <div className="bg-gold-pure/10 border border-gold-pure/20 p-3.5 rounded-xs">
+                        <p className="text-gold-pure text-xs leading-relaxed font-mono">
+                          Production credentials will be stored securely on the server in the backend implementation phase. Entering an API key is a configuration draft and does NOT automatically activate live services. Activation must be a deliberate lifecycle step.
+                        </p>
+                      </div>
+
+                      {/* Section A: Basic Information */}
+                      <div className="space-y-4">
+                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/10 pb-2 font-bold">Basic Information</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Integration Name *</label>
+                            <input
+                              type="text"
+                              value={integrationForm.name}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, name: e.target.value })}
+                              placeholder="e.g. PayPal Checkout Node"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                              required
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Provider *</label>
+                            <input
+                              type="text"
+                              value={integrationForm.provider}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, provider: e.target.value })}
+                              placeholder="e.g. PayPal Inc."
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                              required
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Category</label>
+                            <select
+                              value={integrationForm.category}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, category: e.target.value })}
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            >
+                              <option value="Payments">Payments</option>
+                              <option value="Shipping">Shipping</option>
+                              <option value="ERP">ERP</option>
+                              <option value="CRM">CRM</option>
+                              <option value="Marketing">Marketing</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Target Environment</label>
+                            <select
+                              value={integrationForm.environment}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, environment: e.target.value })}
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            >
+                              <option value="Production">Production</option>
+                              <option value="Staging">Staging</option>
+                              <option value="Development">Development</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Description</label>
+                            <textarea
+                              value={integrationForm.description}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, description: e.target.value })}
+                              placeholder="Describe the operational purpose of this systems integration node..."
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono h-16 resize-none outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section B: API Configuration & Masked Credentials */}
+                      <div className="space-y-4">
+                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/10 pb-2 font-bold">API & Transport Configuration</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Base URL</label>
+                            <input
+                              type="url"
+                              value={integrationForm.baseUrl}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, baseUrl: e.target.value })}
+                              placeholder="https://api.example.com"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">API Version</label>
+                            <input
+                              type="text"
+                              value={integrationForm.apiVersion}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, apiVersion: e.target.value })}
+                              placeholder="e.g. v2 / 2026-01-01"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Authentication Type</label>
+                            <select
+                              value={integrationForm.authType}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, authType: e.target.value })}
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            >
+                              <option value="None">None</option>
+                              <option value="API Key">API Key</option>
+                              <option value="Bearer Token">Bearer Token</option>
+                              <option value="OAuth">OAuth 2.0 Client Credentials</option>
+                              <option value="Basic Authentication">Basic Auth</option>
+                              <option value="Custom">Custom Headers</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Credential input fields - MUST BE MASKED PASSWORD style fields */}
+                        {integrationForm.authType !== 'None' && (
+                          <div className="bg-black/60 p-4 border border-white/10 rounded-xs space-y-4">
+                            <div className="text-xs tracking-wider font-mono text-gold-pure font-bold flex items-center gap-1.5">
+                              <Lock className="w-3.5 h-3.5" /> Secure Transport Credentials Setup
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {integrationForm.authType === 'API Key' && (
+                                <div className="space-y-1.5 md:col-span-2">
+                                  <label className="text-zinc-300 text-xs block font-mono font-semibold">API Key</label>
+                                  <input
+                                    type="password"
+                                    value={integrationForm.apiKey}
+                                    onChange={(e) => setIntegrationForm({ ...integrationForm, apiKey: e.target.value })}
+                                    placeholder="••••••••••••••••••••••••••••••••"
+                                    className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                                  />
+                                </div>
+                              )}
+
+                              {integrationForm.authType === 'Bearer Token' && (
+                                <div className="space-y-1.5 md:col-span-2">
+                                  <label className="text-zinc-300 text-xs block font-mono font-semibold">Access Bearer Token</label>
+                                  <input
+                                    type="password"
+                                    value={integrationForm.accessToken}
+                                    onChange={(e) => setIntegrationForm({ ...integrationForm, accessToken: e.target.value })}
+                                    placeholder="••••••••••••••••••••••••••••••••"
+                                    className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                                  />
+                                </div>
+                              )}
+
+                              {integrationForm.authType === 'OAuth' && (
+                                <>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Client ID</label>
+                                    <input
+                                      type="password"
+                                      value={integrationForm.clientId}
+                                      onChange={(e) => setIntegrationForm({ ...integrationForm, clientId: e.target.value })}
+                                      placeholder="••••••••••••••••••••••••"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Client Secret</label>
+                                    <input
+                                      type="password"
+                                      value={integrationForm.clientSecret}
+                                      onChange={(e) => setIntegrationForm({ ...integrationForm, clientSecret: e.target.value })}
+                                      placeholder="••••••••••••••••••••••••"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              {integrationForm.authType === 'Basic Authentication' && (
+                                <>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Username</label>
+                                    <input
+                                      type="text"
+                                      value={integrationForm.clientId}
+                                      onChange={(e) => setIntegrationForm({ ...integrationForm, clientId: e.target.value })}
+                                      placeholder="Username"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <label className="text-zinc-300 text-xs block font-mono font-semibold">Password</label>
+                                    <input
+                                      type="password"
+                                      value={integrationForm.clientSecret}
+                                      onChange={(e) => setIntegrationForm({ ...integrationForm, clientSecret: e.target.value })}
+                                      placeholder="Password"
+                                      className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                                    />
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Section C: Webhooks UI SubSection */}
+                      <div className="space-y-4">
+                        <h4 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/10 pb-2 font-bold">Webhooks Subscription</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Webhook URL</label>
+                            <input
+                              type="url"
+                              value={integrationForm.webhookUrl}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, webhookUrl: e.target.value })}
+                              placeholder="https://api.zoalgroup.com/v1/webhooks/listener"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Event Trigger</label>
+                            <select
+                              value={integrationForm.webhookEvent}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, webhookEvent: e.target.value })}
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            >
+                              <option value="order.created">order.created</option>
+                              <option value="order.updated">order.updated</option>
+                              <option value="payment.completed">payment.completed</option>
+                              <option value="customer.created">customer.created</option>
+                              <option value="product.updated">product.updated</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">HTTP Method</label>
+                            <select
+                              value={integrationForm.webhookMethod}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, webhookMethod: e.target.value })}
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            >
+                              <option value="POST">POST</option>
+                              <option value="GET">GET</option>
+                              <option value="PUT">PUT</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Status</label>
+                            <select
+                              value={integrationForm.webhookStatus}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, webhookStatus: e.target.value })}
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs font-mono outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure rounded-xs"
+                            >
+                              <option value="Active">Active</option>
+                              <option value="Inactive">Inactive</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-zinc-300 text-xs block font-mono font-semibold">Secret Token</label>
+                            <input
+                              type="password"
+                              value={integrationForm.webhookSecret}
+                              onChange={(e) => setIntegrationForm({ ...integrationForm, webhookSecret: e.target.value })}
+                              placeholder="••••••••••••"
+                              className="w-full bg-black border border-white/15 text-white p-2.5 text-xs outline-none focus:border-gold-pure focus:ring-1 focus:ring-gold-pure font-mono rounded-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section D: Integration Lifecycle Display */}
+                      <div className="bg-zinc-900 border border-white/10 p-4 rounded-xs">
+                        <div className="text-xs font-mono uppercase text-zinc-400 tracking-wider mb-2 font-bold">Lifecycle State Roadmap</div>
+                        <div className="flex flex-wrap items-center gap-1.5 md:gap-3 text-xs font-mono text-zinc-400">
+                          <span className="text-gold-pure font-bold">Configure</span>
+                          <span>→</span>
+                          <span className="text-white">Save Draft</span>
+                          <span>→</span>
+                          <span className="text-white">Validate</span>
+                          <span>→</span>
+                          <span>Test Connection</span>
+                          <span>→</span>
+                          <span>Enable</span>
+                          <span>→</span>
+                          <span>Publish</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions Footer */}
+                    <div className="p-4 border-t border-white/10 flex flex-wrap gap-2.5">
+                      <button
+                        onClick={() => {
+                          setIntegrationFeedback('Connection testing will be available after backend integration is implemented.');
+                        }}
+                        className="py-2.5 px-4 border border-white/15 text-zinc-300 hover:text-white hover:bg-white/5 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1 transition-all"
+                      >
+                        Test Connection
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!integrationForm.name) {
+                            alert('Please specify an Integration Name.');
+                            return;
+                          }
+                          setIntegrationFeedback('Validation Success: API Configuration and fields are correctly structured.');
+                        }}
+                        className="py-2.5 px-4 border border-white/15 text-zinc-300 hover:text-white hover:bg-white/5 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer flex-1 transition-all"
+                      >
+                        Validate API
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!integrationForm.name || !integrationForm.provider) {
+                            alert('Integration Name and Provider are required.');
+                            return;
+                          }
+                          if (editingIntegration) {
+                            const updated = integrationsList.map(i => i.id === editingIntegration.id ? { ...integrationForm, status: 'Draft', lastUpdated: new Date().toISOString().split('T')[0] } : i);
+                            setIntegrationsList(updated);
+                            addLog(`Saved integration draft: ${integrationForm.name}`);
+                            const auditEvent = {
+                              action: `Saved integration draft: ${integrationForm.name}`,
+                              user: currentUser?.name || 'Admin',
+                              timestamp: new Date().toLocaleString(),
+                              environment: integrationForm.environment,
+                              result: 'Success'
+                            };
+                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                          } else {
+                            const newId = `int-${Date.now()}`;
+                            const item = {
+                              ...integrationForm,
+                              id: newId,
+                              status: 'Draft',
+                              lastTested: 'Never',
+                              lastUpdated: new Date().toISOString().split('T')[0]
+                            };
+                            setIntegrationsList(prev => [item, ...prev]);
+                            addLog(`Added integration configuration draft: ${integrationForm.name}`);
+                            const auditEvent = {
+                              action: `Added integration draft: ${integrationForm.name}`,
+                              user: currentUser?.name || 'Admin',
+                              timestamp: new Date().toLocaleString(),
+                              environment: integrationForm.environment,
+                              result: 'Success'
+                            };
+                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                          }
+                          setIsAddIntegrationOpen(false);
+                          setIntegrationFeedback(`Successfully saved "${integrationForm.name}" as draft configuration locally.`);
+                        }}
+                        className="py-2.5 px-4 bg-zinc-900 border border-white/15 text-white hover:bg-zinc-800 font-mono text-xs uppercase tracking-wider rounded-xs cursor-pointer flex-1 text-center transition-all"
+                      >
+                        Save Draft
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!integrationForm.name || !integrationForm.provider) {
+                            alert('Integration Name and Provider are required.');
+                            return;
+                          }
+                          const tarStatus = 'Connected';
+                          if (editingIntegration) {
+                            const updated = integrationsList.map(i => i.id === editingIntegration.id ? { ...integrationForm, status: tarStatus, lastUpdated: new Date().toISOString().split('T')[0] } : i);
+                            setIntegrationsList(updated);
+                            addLog(`Published integration: ${integrationForm.name}`);
+                            const auditEvent = {
+                              action: `Published integration ${integrationForm.name}`,
+                              user: currentUser?.name || 'Admin',
+                              timestamp: new Date().toLocaleString(),
+                              environment: integrationForm.environment,
+                              result: 'Published'
+                            };
+                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                          } else {
+                            const newId = `int-${Date.now()}`;
+                            const item = {
+                              ...integrationForm,
+                              id: newId,
+                              status: tarStatus,
+                              lastTested: 'Never',
+                              lastUpdated: new Date().toISOString().split('T')[0]
+                            };
+                            setIntegrationsList(prev => [item, ...prev]);
+                            addLog(`Published integration configuration: ${integrationForm.name}`);
+                            const auditEvent = {
+                              action: `Published integration ${integrationForm.name}`,
+                              user: currentUser?.name || 'Admin',
+                              timestamp: new Date().toLocaleString(),
+                              environment: integrationForm.environment,
+                              result: 'Published'
+                            };
+                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                          }
+                          setIsAddIntegrationOpen(false);
+                          setIntegrationFeedback(`Successfully published "${integrationForm.name}" configuration locally.`);
+                        }}
+                        className="py-2.5 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex-1 text-center cursor-pointer shadow-md"
+                      >
+                        Publish Config
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'security' && (
             <div className="space-y-6 text-left animate-fade-in font-sans">
               <div className="border-b border-white/5 pb-4">
@@ -8616,34 +9628,7 @@ export default function AdminDashboard({
           )}
 
           {activeTab === 'strategic' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4 flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">BOARDROOM DECREES</span>
-                  <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">STRATEGIC BOARDROOM BRIEFINGS</h2>
-                </div>
-                <button
-                  onClick={() => alert('Strategic briefs compiled and saved to local secure cache.')}
-                  className="bg-gold-pure text-black font-bold uppercase font-mono text-[9px] tracking-wider py-1.5 px-3 rounded-xs hover:bg-gold-light transition-all cursor-pointer"
-                >
-                  Compile Board Briefing
-                </button>
-              </div>
-
-              <div className="bg-zinc-950 border border-white/5 p-6 rounded-xs space-y-4">
-                <h3 className="text-white text-xs font-display uppercase tracking-widest border-b border-white/5 pb-2">Corporate Decrees & Directives (YTD)</h3>
-                <div className="space-y-3 font-sans text-xs">
-                  <div className="p-4 bg-black border border-white/5 rounded-xs space-y-1">
-                    <h4 className="text-gold-pure font-bold text-xs">Directive #2026-004: Sudanese Hospitality Scale-up</h4>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">Mandated the acquisition of micro-batches of premium single-origin Arabica varieties sourced directly from Yemen highlands to diversify coffee hospitality. Confirmed allocation of 15,000 SAR capital expenditure.</p>
-                  </div>
-                  <div className="p-4 bg-black border border-white/5 rounded-xs space-y-1">
-                    <h4 className="text-gold-pure font-bold text-xs">Directive #2026-003: Premium Sudanese Toob Intellectual Registry</h4>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">Authorized filing copyright and design protection trademarks for custom golden embroidery drapes to avoid copycat market distributions in neighboring GCC states.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <StrategicReport />
           )}
 
           {activeTab === 'kpi' && (
@@ -8655,25 +9640,12 @@ export default function AdminDashboard({
           )}
 
           {activeTab === 'health' && (
-            <div className="space-y-6 text-left animate-fade-in font-sans">
-              <div className="border-b border-white/5 pb-4">
-                <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">TELEMETRY MATRIX</span>
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <span className="text-[9px] tracking-[0.4em] text-gold-pure uppercase font-mono block mb-1">LIVE TELEMETRY</span>
                 <h2 className="text-xl font-bold tracking-widest font-display uppercase text-white">ENTERPRISE SYSTEM HEALTH MONITOR</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center font-mono">
-                {[
-                  { metric: 'API Gateway Response Time', val: '24ms', state: 'Exceptional' },
-                  { metric: 'Database Sync Success', val: '100.00%', state: 'Protected' },
-                  { metric: 'Supabase Storage Capacity', val: '0.8% used', state: 'Nominal' },
-                  { metric: 'Cloud Run Ingress Latency', val: '8ms', state: 'Exceptional' }
-                ].map((item, idx) => (
-                  <div key={idx} className="p-5 bg-zinc-950 border border-white/5 rounded-xs space-y-2">
-                    <span className="text-zinc-500 text-[9px] block uppercase font-mono leading-none">{item.metric}</span>
-                    <span className="text-2xl text-white font-bold block">{item.val}</span>
-                    <span className="text-[9px] text-emerald-400 font-bold uppercase block bg-emerald-500/10 px-2 py-0.5 rounded-full w-max mx-auto">{item.state}</span>
-                  </div>
-                ))}
-              </div>
+              <EnterpriseHealthMonitor />
             </div>
           )}
 

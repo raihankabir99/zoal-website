@@ -33,6 +33,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
   // States
   const [snapshots, setSnapshots] = useState<KpiSnapshot[]>([]);
   const [targets, setTargets] = useState<KpiTarget[]>([]);
+  const [liveData, setLiveData] = useState<any>(null);
 
   // Realtime connection status
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
@@ -52,6 +53,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
   // Filtering / pagination
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [timeRange, setTimeRange] = useState('yearly');
   const itemsPerPage = 5;
 
   // Modals / forms states
@@ -66,11 +68,18 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/kpi');
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const res = await fetch(`/api/kpi?range=${timeRange}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (!res.ok) throw new Error('Failed to fetch KPI analytics engine data.');
       const data = await res.json();
       setSnapshots(data.snapshots || []);
       setTargets(data.targets || []);
+      setLiveData(data.live || null);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Error syncing with strategic KPI registry.');
@@ -106,40 +115,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     return () => {
       supabaseClient.removeChannel(snapshotsChannel);
     };
-  }, []);
-
-  // Seeding initial KPIs if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const seedTargets = [
-        { metric_name: 'Customer Acquisition Cost (CAC)', target_value: 80.00, deadline: '2026-12-31' },
-        { metric_name: 'Average Order Value (AOV)', target_value: 350.00, deadline: '2026-11-30' },
-        { metric_name: 'Order Dispatch Latency (Hrs)', target_value: 12.00, deadline: '2026-09-30' },
-        { metric_name: 'Daily Active Users (DAU)', target_value: 1200.00, deadline: '2026-10-15' }
-      ];
-
-      const seedSnapshots = [
-        { metric_name: 'Customer Acquisition Cost (CAC)', value: 48.00, period: 'Monthly' },
-        { metric_name: 'Average Order Value (AOV)', value: 295.00, period: 'Monthly' },
-        { metric_name: 'Order Dispatch Latency (Hrs)', value: 14.20, period: 'Weekly' },
-        { metric_name: 'Daily Active Users (DAU)', value: 840.00, period: 'Weekly' }
-      ];
-
-      for (const t of seedTargets) {
-        await supabaseClient.from('zoal_kpi_targets').insert(t);
-      }
-      for (const s of seedSnapshots) {
-        await supabaseClient.from('zoal_kpi_snapshots').insert(s);
-      }
-
-      await fetchKpiData();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  }, [timeRange]);
 
   // Create or update KPI Target
   const handleOpenCreate = () => {
@@ -177,11 +153,13 @@ export const EnterpriseKpiDashboard: React.FC = () => {
       }
 
       // Use backend `/api/kpi/targets` endpoint for set/upsert
+      const { data: { session: submitSession } } = await supabaseClient.auth.getSession();
+      const token = submitSession?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       const res = await fetch('/api/kpi/targets', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer demo-token'
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
@@ -202,8 +180,15 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     if (!confirm('Are you sure you want to delete this strategic target?')) return;
     try {
       setActionLoading(true);
-      const { error: err } = await supabaseClient.from('zoal_kpi_targets').delete().eq('id', id);
-      if (err) throw err;
+      const { data: { session: delSession } } = await supabaseClient.auth.getSession();
+      const token = delSession?.access_token || localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+      const res = await fetch(`/api/kpi/targets/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error('Failed to delete target from strategic registry.');
       await fetchKpiData();
     } catch (err: any) {
       console.error(err);
@@ -213,18 +198,46 @@ export const EnterpriseKpiDashboard: React.FC = () => {
     }
   };
 
-  // KPI Calculations / Comparisons
+  // KPI Calculations / Comparisons (using authoritative live backend KPI values)
   const kpiComparisons = useMemo(() => {
     return targets.map(t => {
-      const snap = snapshots.find(s => s.metric_name === t.metric_name);
-      const value = snap ? snap.value : 0;
+      let value = -1;
+      if (liveData) {
+        switch (t.metric_name) {
+          case 'Revenue':
+            value = liveData.totalRevenue ?? -1;
+            break;
+          case 'Orders':
+            value = liveData.orderCount ?? -1;
+            break;
+          case 'AOV':
+            value = liveData.aov ?? -1;
+            break;
+          case 'Customers':
+            value = liveData.customerCount ?? -1;
+            break;
+          case 'Profit':
+            value = liveData.profit ?? -1;
+            break;
+          case 'Margin':
+            value = liveData.margin ?? -1;
+            break;
+          case 'CAC':
+          case 'DAU':
+          case 'Latency':
+          case 'Refund Rate':
+          default:
+            value = -1;
+            break;
+        }
+      }
       
       // Calculate progress percentage
       // For CAC or Latency, lower is better, so calculate inverse
       let progress = 0;
-      const isLowerBetter = t.metric_name.toLowerCase().includes('cac') || t.metric_name.toLowerCase().includes('latency');
+      const isLowerBetter = t.metric_name === 'CAC' || t.metric_name === 'Latency';
       
-      if (t.target_value > 0) {
+      if (t.target_value > 0 && value !== -1) {
         if (isLowerBetter) {
           progress = value <= t.target_value ? 100 : Math.max(0, Math.round((t.target_value / value) * 100));
         } else {
@@ -239,7 +252,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
         isLowerBetter
       };
     });
-  }, [targets, snapshots]);
+  }, [targets, liveData]);
 
   // Filters and pagination
   const filteredKpis = useMemo(() => {
@@ -281,6 +294,17 @@ export const EnterpriseKpiDashboard: React.FC = () => {
           </h2>
         </div>
         <div className="flex items-center gap-3">
+          <select 
+            value={timeRange} 
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="bg-zinc-950 border border-white/10 text-zinc-400 text-[10px] font-mono uppercase px-2 py-2 rounded-xs outline-none cursor-pointer hover:border-gold-pure/30 transition-colors"
+          >
+            <option value="today">Today</option>
+            <option value="week">Past Week</option>
+            <option value="month">Past Month</option>
+            <option value="quarter">Past Quarter</option>
+            <option value="yearly">Past Year</option>
+          </select>
           <div className="flex items-center gap-2 px-2.5 py-1 bg-black/60 border border-white/10 rounded-full text-[9px] font-mono uppercase tracking-widest">
             <span className={`w-2 h-2 rounded-full ${!isOnline ? 'bg-red-500 animate-ping' : connectionStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
             <span className="text-zinc-300">
@@ -328,21 +352,14 @@ export const EnterpriseKpiDashboard: React.FC = () => {
           ))}
         </div>
       ) : (
-        <>
-          {targets.length === 0 ? (
+        <div className="space-y-6">
+          {targets.length === 0 && snapshots.length === 0 ? (
             <div className="bg-zinc-950 border border-white/5 p-12 text-center rounded-xs space-y-4">
               <Award className="w-12 h-12 text-gold-pure/40 mx-auto" />
               <h3 className="text-white font-bold uppercase tracking-widest font-display text-sm font-sans">Strategic KPI Trackers Empty</h3>
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
-                No active target registers found in Supabase. Autogenerate foundational corporate compliance KPIs to map immediate client conversion progress.
+                No active target registers or live data found in the enterprise engine. Configure strategic targets to begin monitoring business performance.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Seed Foundations
-              </button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -361,8 +378,8 @@ export const EnterpriseKpiDashboard: React.FC = () => {
                             <span className="text-[9px] text-zinc-500 block mt-0.5">Target: {k.target_value} {k.isLowerBetter ? '(Lower is better)' : ''}</span>
                           </div>
                           <div className="text-right font-mono text-[11px]">
-                            <span className="text-gold-pure font-bold block">Current: {k.current_value}</span>
-                            <span className="text-zinc-500 block text-[9px]">Achieved: {k.progress}%</span>
+                            <span className="text-gold-pure font-bold block">Current: {k.current_value === -1 ? 'N/A' : k.current_value}</span>
+                            <span className="text-zinc-500 block text-[9px]">Achieved: {k.current_value === -1 ? '0' : k.progress}%</span>
                           </div>
                         </div>
                         <div className="w-full bg-black border border-white/5 h-2 rounded-full overflow-hidden">
@@ -427,7 +444,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
                       {paginatedKpis.map(k => (
                         <tr key={k.id} className="border-b border-white/5 hover:bg-white/1 font-sans">
                           <td className="py-3 px-4 text-white font-bold">{k.metric_name}</td>
-                          <td className="py-3 px-4 font-mono text-gold-pure font-bold">{k.current_value || '0.00'}</td>
+                          <td className="py-3 px-4 font-mono text-gold-pure font-bold">{k.current_value === -1 ? 'N/A' : k.current_value}</td>
                           <td className="py-3 px-4 font-mono text-zinc-300">{k.target_value}</td>
                           <td className="py-3 px-4">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
@@ -435,7 +452,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
                                 : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                             }`}>
-                              {k.progress}% Achieved
+                              {k.current_value === -1 ? 'Incalculable' : `${k.progress}% Achieved`}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-mono text-zinc-500">{k.deadline || 'Continuous'}</td>
@@ -475,7 +492,7 @@ export const EnterpriseKpiDashboard: React.FC = () => {
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Target Setup Modal */}
@@ -494,14 +511,24 @@ export const EnterpriseKpiDashboard: React.FC = () => {
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
                   <label className="text-zinc-500 text-[9px] uppercase font-mono tracking-wider block mb-1">Metric Name</label>
-                  <input 
-                    type="text" 
+                  <select 
                     required
-                    placeholder="e.g. Average Order Value (AOV)"
                     value={formMetric}
                     onChange={(e) => setFormMetric(e.target.value)}
                     className="w-full bg-black border border-white/5 focus:border-gold-pure/40 text-white p-2 rounded-xs text-xs outline-none"
-                  />
+                  >
+                    <option value="" disabled>Select Metric</option>
+                    <option value="Revenue">Revenue</option>
+                    <option value="Orders">Orders</option>
+                    <option value="AOV">Average Order Value (AOV)</option>
+                    <option value="Customers">Customers</option>
+                    <option value="CAC">Customer Acquisition Cost (CAC)</option>
+                    <option value="DAU">Daily Active Users (DAU)</option>
+                    <option value="Latency">Latency</option>
+                    <option value="Profit">Profit</option>
+                    <option value="Margin">Margin</option>
+                    <option value="Refund Rate">Refund Rate</option>
+                  </select>
                 </div>
 
                 <div>

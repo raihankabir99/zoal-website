@@ -11,6 +11,7 @@ interface ScrollZoomImageProps {
   referrerPolicy?: "no-referrer" | "origin" | "unsafe-url";
   category?: BusinessCategory;
   priority?: boolean;
+  disableFallback?: boolean;
 }
 
 export default function ScrollZoomImage({
@@ -20,7 +21,8 @@ export default function ScrollZoomImage({
   containerClassName = "w-full h-full overflow-hidden relative",
   referrerPolicy,
   category,
-  priority = false
+  priority = false,
+  disableFallback = false
 }: ScrollZoomImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +82,7 @@ export default function ScrollZoomImage({
            category={category}
            priority={priority}
            referrerPolicy={referrerPolicy}
+           disableFallback={disableFallback}
          />
        </motion.div>
     </div>

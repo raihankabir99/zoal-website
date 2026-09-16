@@ -103,75 +103,25 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
     };
   }, []);
 
-  // Seed initial briefings if empty
-  const handleAutoSeed = async () => {
-    try {
-      setActionLoading(true);
-      const seedData = [
-        {
-          briefing_type: 'Daily',
-          risks: '- **Riyadh Courier Congestion**: Minor dispatch bottlenecks on Al-Shati couriers.\n- **Saffron Coffee Sourcing**: Supply chain friction from Yemen mountain passes.',
-          recommendations: '- **Reallocate couriers**: Direct Riyadh backup staff to high-density lounge areas.\n- **Pre-purchase micro-lots**: Reserve coffee varieties in 30kg batches to bypass future delays.',
-          revenue_summary: { title: 'Boutique Revenue Spike', highlight: 'Bakeries up 14% WoW', text: 'Daily sales aggregated at 18,200 SAR with high boutique retention.' },
-          inventory_summary: { title: 'Dammam Depot nominal', highlight: 'Saffron Specialty at 20%', text: 'Stock of Yemen beans stands at critical 5kg threshold in Riyadh.' },
-          customer_summary: { title: 'High-Touch Elite registers', highlight: 'Loyalty index 8.4/10', text: 'VIP registrations increased by 22 after grand launch ceremonies.' }
-        },
-        {
-          briefing_type: 'Weekly',
-          risks: '- **VAT audits approaching**: ZATCA integration requires audit locks.\n- **Textile raw shipping latency**: Cotton imports from Sudanese ports experiencing customs delays.',
-          recommendations: '- **Run full compliance audits**: Lock CRM transactions ahead of tax registries submissions.\n- **Pre-embroider standard borders**: Keep standard size Sudanese Toobs prepared in Dammam for express ship.',
-          revenue_summary: { title: 'Weekly Revenue High', highlight: '125,000 SAR aggregated', text: 'Saffron mocktails and premium hand-embroidered gowns drove 62% of revenue.' },
-          inventory_summary: { title: 'Customs queue warnings', highlight: 'Toob drapes at 15%', text: 'Dammam warehouse stock must be replenished with silk threads.' },
-          customer_summary: { title: 'VIP Loyalty Program success', highlight: '500+ Active subscribers', text: 'Exclusive launch coupon ZOALGOLD saw high conversions among Riyadh collectors.' }
-        }
-      ];
-
-      for (const b of seedData) {
-        await supabaseClient.from('zoal_ai_briefings').insert(b);
-      }
-      await fetchBriefings();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // AI Generation trigger (Smarter simulation that compiles real stats!)
+  // AI Generation trigger calling protected server API endpoint
   const handleTriggerAiGeneration = async () => {
     try {
       setActionLoading(true);
       setError(null);
 
-      // Simulating a fresh dynamic AI compilation
-      const dynamicBriefing = {
-        briefing_type: 'Daily',
-        risks: `- **Logistics gateway latency**: Saudi ZATCA portal experiencing minor API lags during VAT calculations.\n- **High-demand stock warning**: Sudanese Ghoriba cookies are moving 40% faster than restocked levels.`,
-        recommendations: `- **Activate Riyadh express gates**: Route backup local couriers directly to bypass central hub bottlenecks.\n- **Sourcing allocation shift**: Shift 15% bakery ingredients allocation to Hofuf local stone-ovens.`,
-        revenue_summary: {
-          title: 'Daily Synthesis Model',
-          highlight: 'Revenue optimized at 24.5%',
-          text: 'Consolidated Saudia boutique sales projected to touch 145,000 SAR.'
-        },
-        inventory_summary: {
-          title: 'Depot Stock Allocation',
-          highlight: 'Nominal threshold at 84%',
-          text: 'Fulfillment queue stands at exceptional 14.2 hours dispatch lag.'
-        },
-        customer_summary: {
-          title: 'Client Segment Analysis',
-          highlight: 'Net Promoter Index 9.2',
-          text: 'Custom silk gown inquiries reached peak density among Khobar VIPs.'
-        }
-      };
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 
-      const { data, error: err } = await supabaseClient
-        .from('zoal_ai_briefings')
-        .insert(dynamicBriefing)
-        .select()
-        .single();
+      const res = await fetch('/api/ai/briefings/generate', {
+        method: 'POST',
+        headers
+      });
 
-      if (err) throw err;
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to generate verified AI briefing.');
+      }
+
       await fetchBriefings();
     } catch (err: any) {
       console.error(err);
@@ -210,26 +160,36 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
       setActionLoading(true);
       setError(null);
 
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+
       const payload = {
         briefing_type: formType,
         risks: formRisks,
         recommendations: formRecommendations,
-        revenue_summary: { title: 'Boutique Performance', highlight: 'Updated Summary', text: formRevenueSummary },
-        inventory_summary: { title: 'Boutique Inventory', highlight: 'Updated Summary', text: formInventorySummary },
-        customer_summary: { title: 'Boutique Clientele', highlight: 'Updated Summary', text: formCustomerSummary }
+        revenue_summary: { title: 'Boutique Performance', highlight: 'Manual Summary', text: formRevenueSummary },
+        inventory_summary: { title: 'Boutique Inventory', highlight: 'Manual Summary', text: formInventorySummary },
+        customer_summary: { title: 'Boutique Clientele', highlight: 'Manual Summary', text: formCustomerSummary }
       };
 
+      let res;
       if (editingBriefing) {
-        const { error: err } = await supabaseClient
-          .from('zoal_ai_briefings')
-          .update(payload)
-          .eq('id', editingBriefing.id);
-        if (err) throw err;
+        res = await fetch(`/api/ai/briefings/${editingBriefing.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload)
+        });
       } else {
-        const { error: err } = await supabaseClient
-          .from('zoal_ai_briefings')
-          .insert(payload);
-        if (err) throw err;
+        res = await fetch('/api/ai/briefings', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failure saving executive briefing.');
       }
 
       setIsFormOpen(false);
@@ -246,8 +206,19 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
     if (!confirm('Are you sure you want to permanently archive this strategic summary briefing?')) return;
     try {
       setActionLoading(true);
-      const { error: err } = await supabaseClient.from('zoal_ai_briefings').delete().eq('id', id);
-      if (err) throw err;
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+
+      const res = await fetch(`/api/ai/briefings/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Deletion error.');
+      }
+
       await fetchBriefings();
     } catch (err: any) {
       console.error(err);
@@ -348,13 +319,6 @@ export const EnterpriseAiExecutiveBriefing: React.FC = () => {
               <p className="text-zinc-500 text-xs max-w-md mx-auto leading-relaxed">
                 No active strategic logs found in Supabase. Run the Cognitive live synthesis model to compile immediate risks, recommendations, and metrics.
               </p>
-              <button 
-                onClick={handleAutoSeed}
-                disabled={actionLoading}
-                className="bg-gold-pure text-black font-bold px-5 py-2 text-xs uppercase tracking-widest hover:bg-gold-pure/80 rounded-xs cursor-pointer"
-              >
-                Auto-Seed Benchmarks
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

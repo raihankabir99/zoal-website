@@ -48,9 +48,9 @@ export function EnterpriseBlogManager() {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Analytics Computations
-  const totalViews = posts.reduce((acc, p) => acc + (p.view_count || 120), 0);
-  const uniqueReaders = Math.round(totalViews * 0.76);
-  const avgReadingTime = posts.length > 0 ? (posts.reduce((acc, p) => acc + (p.reading_time || 5), 0) / posts.length).toFixed(1) : '5.2';
+  const totalViews = posts.reduce((acc, p) => acc + (p.view_count || 0), 0);
+  const uniqueReaders = 0;
+  const avgReadingTime = posts.length > 0 && posts.some(p => p.reading_time) ? (posts.reduce((acc, p) => acc + (p.reading_time || 0), 0) / posts.filter(p => p.reading_time).length).toFixed(1) : '0';
   const mostReadPosts = [...posts].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 5);
 
   const categoryMap: { [catName: string]: { count: number; views: number } } = {};
@@ -58,7 +58,7 @@ export function EnterpriseBlogManager() {
     const catName = p.zoal_blog_categories?.name || 'General Editorial';
     if (!categoryMap[catName]) categoryMap[catName] = { count: 0, views: 0 };
     categoryMap[catName].count += 1;
-    categoryMap[catName].views += (p.view_count || 120);
+    categoryMap[catName].views += (p.view_count || 0);
   });
   const topCategories = Object.entries(categoryMap)
     .map(([name, data]) => ({ name, ...data }))
@@ -248,7 +248,7 @@ export function EnterpriseBlogManager() {
       originalForm.append('bucket', 'blog-images');
       originalForm.append('path', originalPath);
       
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       
       const origRes = await fetch('/api/storage/upload', {
         method: 'POST',
@@ -1018,7 +1018,7 @@ export function EnterpriseBlogManager() {
       originalForm.append('bucket', 'blog-images');
       originalForm.append('path', originalPath);
       
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       
       const origRes = await fetch('/api/storage/upload', {
         method: 'POST',
@@ -1099,7 +1099,7 @@ export function EnterpriseBlogManager() {
       originalForm.append('bucket', 'blog-images');
       originalForm.append('path', originalPath);
       
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
       
       const origRes = await fetch('/api/storage/upload', {
         method: 'POST',
@@ -1426,12 +1426,12 @@ export function EnterpriseBlogManager() {
                       <div>
                         <h4 className="text-white font-bold text-xs line-clamp-1">{post.title}</h4>
                         <span className="text-[10px] text-zinc-500 font-mono">
-                          {post.zoal_blog_categories?.name || 'Editorial'} • {post.reading_time || 5} min read
+                          {post.zoal_blog_categories?.name || 'Editorial'} • {post.reading_time || 0} min read
                         </span>
                       </div>
                     </div>
                     <div className="text-right font-mono">
-                      <span className="text-xs text-gold-pure font-bold">{(post.view_count || 120).toLocaleString()}</span>
+                      <span className="text-xs text-gold-pure font-bold">{(post.view_count || 0).toLocaleString()}</span>
                       <span className="text-[9px] text-zinc-500 block">views</span>
                     </div>
                   </div>
@@ -1541,7 +1541,7 @@ export function EnterpriseBlogManager() {
                         }`}>{post.status.replace('_', ' ')}</span>
                         <h4 className="text-white font-bold text-xs mt-0.5 line-clamp-1">{post.title}</h4>
                         <span className="text-[10px] text-zinc-500 font-mono">
-                          {new Date(post.created_at).toLocaleDateString()} • {post.reading_time || 5} min read
+                          {new Date(post.created_at).toLocaleDateString()} • {post.reading_time || 0} min read
                         </span>
                       </div>
                       <button 
@@ -3665,9 +3665,9 @@ export function EnterpriseBlogManager() {
                   category_id: editingPost.category_id || '',
                   author_id: editingPost.author_id || '',
                   status: editingPost.status || 'draft',
-                  reading_time: editingPost.reading_time || 5,
-                  view_count: editingPost.view_count || 120,
-                  like_count: editingPost.like_count || 12,
+                  reading_time: editingPost.reading_time || 0,
+                  view_count: editingPost.view_count || 0,
+                  like_count: editingPost.like_count || 0,
                   created_at: editingPost.created_at || new Date().toISOString(),
                   updated_at: editingPost.updated_at || new Date().toISOString(),
                   published_at: editingPost.published_at || null,

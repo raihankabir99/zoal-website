@@ -5,7 +5,7 @@ import {
   MapPin, CheckCircle, Users, RefreshCw, Star, ArrowUpRight, TrendingUp, Sparkles, Bell,
   Clock, CreditCard, X, Gift, ClipboardList, Check, Mail, PackageCheck, LogOut,
   Lock, Menu, ChevronRight, ArrowLeft, Search, Filter, Trash2, Edit3, Download, FileText, Printer, CheckCircle2, AlertCircle, Loader2,
-  Database, Copy, Server, Camera, Settings, Heart, Pencil, ShoppingBag
+  Database, Copy, Server, Camera, Settings, Heart, Pencil, ShoppingBag, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -29,6 +29,8 @@ import { AddressSection } from './AddressSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import SupabaseStoragePanel from './SupabaseStoragePanel';
 import StaffDashboard from './StaffDashboard';
+import CustomerSupport from './CustomerSupport';
+import CustomerInvoices from './CustomerInvoices';
 import EnterpriseOrderManagement from './EnterpriseOrderManagement';
 
 import { useNotificationEngine } from '../lib/notificationStore';
@@ -170,6 +172,7 @@ export default function Dashboards({
         { id: 'wishlist', name: isAr ? 'كتالوج المفضلة' : 'Wishlist Catalog', icon: Bookmark },
         { id: 'reviews', name: isAr ? 'تقييمات المنتجات' : 'Product Reviews', icon: Star },
         { id: 'addresses', name: isAr ? 'العناوين المحفوظة' : 'Saved Addresses', icon: MapPin },
+        { id: 'support', name: isAr ? 'الدعم' : 'Customer Support', icon: MessageCircle },
       ]
     }
   ], [isAr]);
@@ -201,10 +204,89 @@ export default function Dashboards({
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'Pending' | 'Preparing' | 'Shipped' | 'Completed' | 'Cancelled'>('all');
   const [wishlistSearch, setWishlistSearch] = useState('');
 
-  const customerOrders = useMemo(() => {
-    if (!currentUser?.email) return [];
-    return orders.filter((o) => (o.email || '').toLowerCase() === (currentUser.email || '').toLowerCase());
-  }, [orders, currentUser]);
+  const [authoritativeCustomerOrders, setAuthoritativeCustomerOrders] = useState<Order[]>([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id || userRole !== 'customer') {
+      setAuthoritativeCustomerOrders([]);
+      return;
+    }
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) {
+      setAuthoritativeCustomerOrders([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCustomerOrdersLoading(true);
+
+    const loadCustomerOrders = async () => {
+      try {
+        const response = await fetch('/api/orders?limit=100&page=1', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !Array.isArray(payload?.data?.orders)) {
+          throw new Error(payload?.error || 'Failed to load customer orders');
+        }
+
+        const productMap = new Map((allProducts || []).map((product: any) => [String(product.id), product]));
+        const normalized = payload.data.orders.map((row: any) => {
+          const rawStatus = String(row.status || 'pending').toLowerCase();
+          const statusMap: Record<string, Order['status']> = {
+            pending: 'Pending', confirmed: 'Confirmed', processing: 'Processing', preparing: 'Preparing',
+            packed: 'Packed', ready_for_shipping: 'Ready for Shipping', shipped: 'Shipped',
+            out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed',
+            cancelled: 'Cancelled', returned: 'Returned', refund_requested: 'Refund Requested',
+            refund_approved: 'Refund Approved', refund_completed: 'Refund Completed'
+          };
+          const shippingAddress = row.order_data?.shipping_address;
+          const items = Array.isArray(row.items) ? row.items.map((item: any) => {
+            const product = productMap.get(String(item.product_id));
+            return {
+              productId: item.product_id,
+              name: product?.name || item.product_id || 'Product',
+              price: Number(item.unit_price || 0),
+              quantity: Number(item.quantity || 0),
+              image: product?.images?.[0] || product?.image || product?.image_url
+            };
+          }) : [];
+
+          return {
+            id: row.id,
+            date: row.created_at ? new Date(row.created_at).toLocaleDateString() : '—',
+            items,
+            subtotal: Number(row.subtotal || 0),
+            shipping: Number(row.shipping_cost || 0),
+            discount: Number(row.discount_amount || 0),
+            total: Number(row.total_amount || 0),
+            status: statusMap[rawStatus] || 'Pending',
+            customerName: currentUser.name || 'Customer',
+            email: currentUser.email || '',
+            phone: currentUser.phone || '',
+            address: typeof shippingAddress === 'string' ? shippingAddress : JSON.stringify(shippingAddress || ''),
+            paymentMethod: row.payment_method || 'Not provided',
+            trackingNumber: row.order_data?.tracking_number || '',
+            paymentStatus: String(row.payment_status || 'unpaid').replace(/^./, (c: string) => c.toUpperCase())
+          } as Order;
+        });
+
+        if (!cancelled) setAuthoritativeCustomerOrders(normalized);
+      } catch (error) {
+        if (!cancelled) setAuthoritativeCustomerOrders([]);
+        console.error('Failed to load authoritative customer orders:', error);
+      } finally {
+        if (!cancelled) setCustomerOrdersLoading(false);
+      }
+    };
+
+    void loadCustomerOrders();
+    return () => { cancelled = true; };
+  }, [currentUser, userRole, allProducts]);
+
+  const customerOrders = useMemo(() => authoritativeCustomerOrders, [authoritativeCustomerOrders]);
   
 
   // --- STAFF DASHBOARD INTEGRATIONS ---
@@ -277,6 +359,50 @@ export default function Dashboards({
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
+  // Load the authenticated customer's reviews from the server of record.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+    if (!token) return;
+
+    let cancelled = false;
+
+    const loadCustomerReviews = async () => {
+      try {
+        const res = await fetch('/api/reviews?mine=true&limit=100', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await res.json().catch(() => null);
+
+        if (!res.ok || !result?.success || !Array.isArray(result.data?.reviews)) {
+          throw new Error(result?.error || 'Failed to load reviews');
+        }
+
+        if (cancelled) return;
+
+        const normalized = result.data.reviews.map((review: any) => {
+          const product = allProducts.find((item: any) => item.id === review.product_id);
+          return {
+            ...review,
+            productName: product?.name || review.product_id,
+            date: review.created_at ? new Date(review.created_at).toISOString().split('T')[0] : '—'
+          };
+        });
+
+        setCustomerReviews(normalized);
+      } catch (error: any) {
+        console.error('Failed to load customer reviews:', error);
+      }
+    };
+
+    loadCustomerReviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, allProducts]);
+
   // Seeding simulated employees
   const simulatedEmployees = [
     { name: 'Raed Al-Fahad', role: 'Chief Roasting Master', branch: 'Dammam', status: 'Active' },
@@ -334,7 +460,7 @@ export default function Dashboards({
 
   // Map products of wishlist
   const userWishlistProducts = useMemo(() => {
-    return allProducts.filter((p) => wishlist.includes(p.id));
+    return (allProducts || []).filter((p) => Array.isArray(wishlist) && p?.id && wishlist.includes(p.id));
   }, [allProducts, wishlist]);
 
   if (!userRole) {
@@ -465,6 +591,7 @@ export default function Dashboards({
                        customerSubTab === 'profile' ? (isAr ? 'الملف الشخصي' : 'Profile') :
                        customerSubTab === 'reviews' ? (isAr ? 'تقييمات المنتجات' : 'Product Reviews') :
                        customerSubTab === 'invoices' ? (isAr ? 'الفواتير والإيصالات' : 'Invoices & Receipts') :
+                       customerSubTab === 'support' ? (isAr ? 'الدعم' : 'Customer Support') :
                        customerSubTab === 'settings' ? (isAr ? 'إعدادات الحساب' : 'Account Settings') : (isAr ? 'الملخص' : 'Overview')}
                     </span>
                   </div>
@@ -1610,6 +1737,13 @@ export default function Dashboards({
                     </motion.div>
                   )}
 
+                  {/* TAB 9: CUSTOMER SUPPORT */}
+                  {customerSubTab === 'support' && (
+                    <motion.div key="support-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6 text-left">
+                      <CustomerSupport currentUser={currentUser} isAr={isAr} />
+                    </motion.div>
+                  )}
+
                   {/* TAB 10: PRODUCT REVIEWS */}
                   {customerSubTab === 'reviews' && (
                     <motion.div
@@ -1678,7 +1812,7 @@ export default function Dashboards({
                         </div>
 
                         <form
-                          onSubmit={(e) => {
+                          onSubmit={async (e) => {
                             e.preventDefault();
                             const pName = (e.currentTarget.elements.namedItem('reviewProduct') as HTMLSelectElement).value;
                             const ratingVal = parseInt((e.currentTarget.elements.namedItem('reviewRating') as HTMLSelectElement).value, 10);
@@ -1694,38 +1828,80 @@ export default function Dashboards({
                               return;
                             }
 
-                            if (editingReviewId) {
-                              setCustomerReviews(prev => prev.map(r => r.id === editingReviewId ? {
-                                ...r,
-                                productName: pName,
-                                rating: ratingVal,
-                                comment: commentText,
-                                date: new Date().toISOString().split('T')[0]
-                              } : r));
+                            const selectedProduct = allProducts.find((product: any) => product.name === pName || product.id === pName);
+                            if (!selectedProduct) {
+                              dispatchNotification({
+                                type: 'system',
+                                variant: 'toast',
+                                title: isAr ? 'تنبيه' : 'Alert',
+                                message: isAr ? 'المنتج المحدد غير متاح.' : 'The selected product is unavailable.'
+                              });
+                              return;
+                            }
+
+                            const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+                            if (!token) {
+                              dispatchNotification({
+                                type: 'system',
+                                variant: 'toast',
+                                title: isAr ? 'تنبيه' : 'Alert',
+                                message: isAr ? 'يرجى تسجيل الدخول مرة أخرى.' : 'Please sign in again.'
+                              });
+                              return;
+                            }
+
+                            try {
+                              const endpoint = editingReviewId ? '/api/reviews' : '/api/reviews';
+                              const method = editingReviewId ? 'PUT' : 'POST';
+                              const body = editingReviewId
+                                ? { review_id: editingReviewId, product_id: selectedProduct.id, rating: ratingVal, comment: commentText.trim() }
+                                : { product_id: selectedProduct.id, rating: ratingVal, comment: commentText.trim() };
+
+                              const res = await fetch(endpoint, {
+                                method,
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': 'Bearer ' + token
+                                },
+                                body: JSON.stringify(body)
+                              });
+                              const result = await res.json().catch(() => null);
+
+                              if (!res.ok || !result?.success || !result?.data) {
+                                throw new Error(result?.error || 'Failed to save review');
+                              }
+
+                              const savedReview = result.data;
+                              const normalizedReview = {
+                                ...savedReview,
+                                productName: selectedProduct.name,
+                                date: savedReview.created_at ? new Date(savedReview.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                              };
+
+                              setCustomerReviews(prev =>
+                                editingReviewId
+                                  ? prev.map(review => review.id === editingReviewId ? normalizedReview : review)
+                                  : [normalizedReview, ...prev]
+                              );
                               setEditingReviewId(null);
                               dispatchNotification({
                                 type: 'system',
                                 variant: 'toast',
                                 title: isAr ? 'نجاح' : 'Success',
-                                message: isAr ? 'شكراً لك! تم تعديل تقييمك بنجاح.' : 'Thank you! Your review has been updated successfully.'
+                                message: editingReviewId
+                                  ? (isAr ? 'تم تعديل تقييمك وإرساله للمراجعة.' : 'Your review was updated and sent for moderation.')
+                                  : (isAr ? 'شكراً لك! تم إرسال تقييمك للمراجعة.' : 'Thank you! Your review was submitted for moderation.')
                               });
-                            } else {
-                              const newReview = {
-                                id: 'rev-' + Date.now(),
-                                productName: pName,
-                                rating: ratingVal,
-                                comment: commentText,
-                                date: new Date().toISOString().split('T')[0]
-                              };
-                              setCustomerReviews(prev => [newReview, ...prev]);
+                              (e.target as HTMLFormElement).reset();
+                            } catch (error: any) {
+                              console.error('Failed to save customer review:', error);
                               dispatchNotification({
                                 type: 'system',
                                 variant: 'toast',
-                                title: isAr ? 'نجاح' : 'Success',
-                                message: isAr ? 'شكراً لك! تم إرسال تقييمك بنجاح.' : 'Thank you! Your review has been submitted successfully.'
+                                title: isAr ? 'خطأ' : 'Error',
+                                message: error?.message || (isAr ? 'تعذر حفظ التقييم.' : 'Unable to save the review.')
                               });
                             }
-                            (e.target as HTMLFormElement).reset();
                           }}
                           className="space-y-4 font-sans text-xs"
                         >
@@ -1739,10 +1915,11 @@ export default function Dashboards({
                                 name="reviewProduct"
                                 className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]/50"
                               >
-                                <option value="Royal Bisht Thobe">{isAr ? 'ثوب البشت الملكي الفاخر' : 'Royal Bisht Thobe'}</option>
-                                <option value="Premium Cashmere Al-Ula Ghutra">{isAr ? 'شماغ العلا كشمير صوف ممتاز' : 'Premium Cashmere Al-Ula Ghutra'}</option>
-                                <option value="Ivory Suede Sandals">{isAr ? 'حذاء شامواه عاجي راقي' : 'Ivory Suede Sandals'}</option>
-                                <option value="AL ZOAL Pure Dehn El-Oud Concentrate">{isAr ? 'دهن عود صافي مركز من زول' : 'AL ZOAL Pure Dehn El-Oud Concentrate'}</option>
+                                {allProducts.map((product: any) => (
+                                  <option key={product.id} value={product.id}>
+                                    {product.name}
+                                  </option>
+                                ))}
                               </select>
                             </div>
 
@@ -1908,7 +2085,7 @@ export default function Dashboards({
                                     onClick={() => {
                                       setEditingReviewId(rev.id);
                                       const selProdEl = document.getElementById('reviewProductSelect') as HTMLSelectElement;
-                                      if (selProdEl) selProdEl.value = rev.productName;
+                                      if (selProdEl) selProdEl.value = rev.product_id || '';
                                       window.scrollTo({ top: 350, behavior: 'smooth' });
                                     }}
                                     className="px-3 py-1 bg-black border border-white/10 hover:border-[#D4AF37]/50 text-zinc-300 hover:text-white rounded-xs text-[10px] uppercase font-semibold transition-all cursor-pointer"
@@ -1949,414 +2126,7 @@ export default function Dashboards({
                       exit={{ opacity: 0, y: -10 }}
                       className="space-y-6 text-left"
                     >
-                      {selectedInvoice ? (
-                        /* Full-page Royal-Gold Printable Invoice Layout */
-                        <div className="bg-black border border-[#D4AF37]/30 rounded-xs p-6 md:p-8 space-y-6 font-sans relative shadow-[0_12px_40px_rgba(0,0,0,0.9)] animate-fade-in">
-                          {/* Watermark Logo */}
-                          <div className="absolute inset-0 flex items-center justify-center opacity-[0.01] pointer-events-none select-none">
-                            <span className="font-serif text-[120px] font-bold tracking-widest text-[#D4AF37]">{brandName.toUpperCase()}</span>
-                          </div>
-
-                          {/* Double Gold Border Header */}
-                          <div className="border-b-2 border-double border-[#D4AF37]/50 pb-5">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                              <div className="space-y-1">
-                                <span className="font-serif text-2xl font-bold tracking-[0.3em] text-[#D4AF37]">{brandName.toUpperCase()}</span>
-                                <span className="text-[8px] font-mono text-zinc-500 tracking-[0.4em] uppercase block">
-                                  {isAr ? 'دار الفخامة والتميز والسيادة' : 'Premium House of Excellence'}
-                                </span>
-                              </div>
-                              <div className="text-left sm:text-right font-mono space-y-0.5">
-                                <h4 className="text-[#D4AF37] font-semibold uppercase text-[11px] tracking-widest">
-                                  {isAr ? 'فاتورة ضريبية مبسطة' : 'TAX INVOICE'}
-                                </h4>
-                                <span className="text-zinc-400 block text-[9px] uppercase">
-                                  {isAr ? `رقم الفاتورة: INV-${selectedInvoice.id}` : `Invoice ID: INV-${selectedInvoice.id}`}
-                                </span>
-                                <span className="text-zinc-500 block text-[8px]">
-                                  {isAr ? 'تاريخ الفاتورة:' : 'Date:'} {selectedInvoice.date || new Date().toISOString().substring(0, 10)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Address Details Block */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-zinc-400 leading-relaxed border-b border-white/5 pb-5">
-                            <div className="space-y-1.5">
-                              <span className="text-[8.5px] uppercase font-mono tracking-widest text-zinc-500 block">
-                                {isAr ? 'من: دار زول المعتمدة' : 'From: Premium House'}
-                              </span>
-                              <p className="font-bold text-white uppercase text-[9.5px]">{settings.businessName.toUpperCase()}</p>
-                              <p>{settings.address}</p>
-                              <p className="font-mono">{isAr ? 'البريد:' : 'Email:'} {settings.email} • {isAr ? 'الهاتف:' : 'Phone:'} {settings.phone}</p>
-                              <p className="font-mono">{isAr ? 'الرقم الضريبي الموحد:' : 'VAT ID:'} 31002931500003</p>
-                            </div>
-                            <div className="space-y-1.5 sm:text-right">
-                              <span className="text-[8.5px] uppercase font-mono tracking-widest text-zinc-500 block">
-                                {isAr ? 'فاتورة إلى المستلم:' : 'Bill To Recipient:'}
-                              </span>
-                              <p className="font-bold text-white uppercase text-[9.5px]">{currentUser?.name}</p>
-                              <p>{currentUser?.address || (isAr ? 'طريق الملك فهد، الهفوف' : 'King Fahd Road, Al Hofuf')}</p>
-                              <p className="font-mono">{isAr ? 'الهاتف:' : 'Phone:'} {currentUser?.phone || settings.phone}</p>
-                              <p className="font-mono">{isAr ? 'البريد الإلكتروني:' : 'Email:'} {currentUser?.email}</p>
-                            </div>
-                          </div>
-
-                          {/* Product Detail Lines */}
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs text-left">
-                              <thead>
-                                <tr className="border-b border-white/10 text-zinc-500 uppercase font-mono text-[8px] tracking-widest">
-                                  <th className="py-2.5">{isAr ? 'وصف المنتج الفاخر' : 'Item Description'}</th>
-                                  <th className="py-2.5 text-center">{isAr ? 'سعر الوحدة (ريال)' : 'Unit price (SAR)'}</th>
-                                  <th className="py-2.5 text-center">{isAr ? 'الكمية' : 'Qty'}</th>
-                                  <th className="py-2.5 text-right">{isAr ? 'الإجمالي (ريال)' : 'Line Total (SAR)'}</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/5 font-sans">
-                                {selectedInvoice.items && selectedInvoice.items.length > 0 ? (
-                                  selectedInvoice.items.map((item: any, index: number) => (
-                                    <tr key={index} className="text-zinc-300">
-                                      <td className="py-3 font-semibold text-white uppercase text-[10px] tracking-wide">
-                                        {item.name}
-                                        {item.selectedOption && (
-                                          <span className="text-zinc-500 block text-[8px] font-mono lowercase">
-                                            {isAr ? 'الخيار المختار:' : 'Option:'} {item.selectedOption}
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="py-3 text-center font-sans text-[10.5px] tabular-nums-fix">{Number(item.price).toFixed(2)}</td>
-                                      <td className="py-3 text-center font-sans text-[10.5px] tabular-nums-fix">{item.quantity}</td>
-                                      <td className="py-3 text-right font-sans font-bold text-white text-[10.5px] tabular-nums-fix">{(Number(item.price) * item.quantity).toFixed(2)}</td>
-                                    </tr>
-                                  ))
-                                ) : (
-                                  <tr className="text-zinc-300">
-                                    <td className="py-3 font-semibold text-white uppercase text-[10px] tracking-wide">
-                                      {isAr ? 'ثوب البشت الملكي الفاخر' : 'Royal Store Bisht Thobe'}
-                                    </td>
-                                    <td className="py-3 text-center font-sans text-[10.5px] tabular-nums-fix">2450.00</td>
-                                    <td className="py-3 text-center font-sans text-[10.5px] tabular-nums-fix">1</td>
-                                    <td className="py-3 text-right font-sans font-bold text-white text-[10.5px] tabular-nums-fix">2450.00</td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-
-                          {/* Calculation Summary Footer Block */}
-                          <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-t border-white/10 pt-4 text-xs">
-                            <div className="text-zinc-500 max-w-sm space-y-1.5 leading-relaxed">
-                              <span className="text-[8px] uppercase font-mono tracking-widest text-[#D4AF37] block">
-                                {isAr ? 'إقرار شروط دار زول المعتمدة:' : 'House Declaration Terms:'}
-                              </span>
-                              <p className="text-[10px]">
-                                {isAr 
-                                  ? 'جميع الأثواب والعباءات محاكة بخيوط قصب ألمانية مذهبة أصلية نقية. يُقبل طلب تعديل المقاسات الفاخرة عبر خياط الدار الخاص فقط.' 
-                                  : 'All thobes are stitched with genuine double-gilt German metallic wire. Returns on premium fittings are accommodated via private tailors alteration consultation only.'}
-                              </p>
-                            </div>
-
-                            <div className="w-full sm:w-64 space-y-1.5 font-mono text-[10px] text-zinc-400">
-                              <div className="flex justify-between">
-                                <span className="uppercase tracking-wider">{isAr ? 'المجموع الفرعي:' : 'Subtotal:'}</span>
-                                <span className="text-white">{(selectedInvoice.subtotal || selectedInvoice.totalPrice || 2450).toFixed(2)} {isAr ? 'ريال' : 'SAR'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="uppercase tracking-wider">{isAr ? 'أجور الشحن اللوجستي:' : 'Shipping Fee:'}</span>
-                                <span className="text-white">{(selectedInvoice.shippingCost || 0).toFixed(2)} {isAr ? 'ريال' : 'SAR'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="uppercase tracking-wider">{isAr ? 'ضريبة القيمة المضافة السعودية (١٥٪):' : 'Saudi VAT (15%):'}</span>
-                                <span className="text-white">{((selectedInvoice.subtotal || selectedInvoice.totalPrice || 2450) * 0.15).toFixed(2)} {isAr ? 'ريال' : 'SAR'}</span>
-                              </div>
-                              <div className="flex justify-between border-t border-white/10 pt-1.5 text-xs text-white font-bold">
-                                <span className="uppercase tracking-widest text-[#D4AF37]">{isAr ? 'الإجمالي النهائي النهائي شامل الضريبة:' : 'GRAND TOTAL:'}</span>
-                                <span className="text-[#D4AF37] font-sans tabular-nums-fix">{(selectedInvoice.totalAmount || (selectedInvoice.totalPrice * 1.15) || 2817.5).toFixed(2)} {isAr ? 'ريال' : 'SAR'}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Printable footer metadata signature */}
-                          <div className="flex justify-between items-center border-t border-white/5 pt-4 text-[8px] font-mono text-zinc-500 uppercase tracking-widest">
-                            <span>{isAr ? 'سجل الفواتير المؤمن المعتمد' : 'Secured Invoice List'}</span>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  const printWindow = window.open('', '_blank');
-                                  if (printWindow) {
-                                    const mockInvoice = {
-                                      invoiceNumber: `INV-${selectedInvoice.id}`,
-                                      invoiceDate: selectedInvoice.date || new Date().toLocaleDateString(),
-                                      merchantName: brandName || 'AL ZOAL',
-                                      merchantVat: '310239485700003',
-                                      orderId: selectedInvoice.id,
-                                      paymentId: `pay_${selectedInvoice.id}`,
-                                      gateway: selectedInvoice.paymentMethod || 'Mada Card',
-                                      transactionId: `txn_${selectedInvoice.id}`,
-                                      subtotal: selectedInvoice.subtotal || selectedInvoice.totalPrice || 0,
-                                      vat: (selectedInvoice.subtotal || selectedInvoice.totalPrice || 0) * 0.15,
-                                      discount: 0,
-                                      delivery: selectedInvoice.shippingCost || 0,
-                                      total: selectedInvoice.totalAmount || ((selectedInvoice.subtotal || selectedInvoice.totalPrice || 0) * 1.15),
-                                      items: selectedInvoice.items || []
-                                    };
-                                    printWindow.document.write(generatePrintableInvoiceHtml(mockInvoice));
-                                    printWindow.document.close();
-                                    printWindow.print();
-                                  }
-                                }}
-                                className="px-3 py-1.5 bg-white text-black font-sans font-bold uppercase rounded-sm hover:bg-[#D4AF37] transition-all cursor-pointer flex items-center gap-2"
-                              >
-                                <Printer className="w-3 h-3" /> {isAr ? 'طباعة الفاتورة' : 'Print Invoice'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const mockInvoice = {
-                                    invoiceNumber: `INV-${selectedInvoice.id}`,
-                                    invoiceDate: selectedInvoice.date || new Date().toLocaleDateString(),
-                                    merchantName: brandName || 'AL ZOAL',
-                                    merchantVat: '310239485700003',
-                                    orderId: selectedInvoice.id,
-                                    paymentId: `pay_${selectedInvoice.id}`,
-                                    gateway: selectedInvoice.paymentMethod || 'Mada Card',
-                                    transactionId: `txn_${selectedInvoice.id}`,
-                                    subtotal: selectedInvoice.subtotal || selectedInvoice.totalPrice || 0,
-                                    vat: (selectedInvoice.subtotal || selectedInvoice.totalPrice || 0) * 0.15,
-                                    discount: 0,
-                                    delivery: selectedInvoice.shippingCost || 0,
-                                    total: selectedInvoice.totalAmount || ((selectedInvoice.subtotal || selectedInvoice.totalPrice || 0) * 1.15),
-                                    items: selectedInvoice.items || []
-                                  };
-                                  const html = generatePrintableInvoiceHtml(mockInvoice);
-                                  downloadHtmlAsPdf(html, `ALZOAL-INVOICE-${mockInvoice.invoiceNumber}.pdf`);
-                                }}
-                                className="px-3 py-1.5 bg-zinc-800 text-white font-sans font-bold uppercase rounded-sm hover:bg-[#D4AF37] hover:text-black transition-all cursor-pointer flex items-center gap-2"
-                              >
-                                <Download className="w-3 h-3" /> {isAr ? 'تحميل PDF' : 'Download PDF'}
-                              </button>
-                              <button
-                                onClick={() => setSelectedInvoice(null)}
-                                className="px-3 py-1.5 bg-zinc-900 text-zinc-300 border border-white/5 font-sans font-bold uppercase rounded-sm hover:text-white transition-all cursor-pointer"
-                              >
-                                {isAr ? 'إغلاق الفاتورة' : 'Close Invoice'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Invoices Selection List Table */
-                        <div className="bg-[#060606]/80 border border-white/10 rounded-sm p-6 space-y-6 shadow-xl">
-                          {/* Page Header */}
-                          <div className="space-y-1">
-                            <h3 className="text-white text-base font-display font-bold uppercase tracking-wider flex items-center gap-2">
-                              <FileText className="w-5 h-5 text-[#D4AF37]" /> {isAr ? 'فواتيرك' : 'Your Invoices'}
-                            </h3>
-                            <p className="text-zinc-400 text-xs font-sans leading-relaxed">
-                              {isAr 
-                                ? 'تحميل أو طباعة الفواتير لطلباتك الأخيرة.' 
-                                : 'Download or print invoices for your recent orders.'}
-                            </p>
-                          </div>
-
-                          {/* Saudi VAT Information Card */}
-                          <div className="bg-black/80 border border-[#D4AF37]/30 rounded-xs p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <div className="space-y-1">
-                              <span className="text-[#D4AF37] text-xs font-display font-bold uppercase tracking-wider block">
-                                {isAr ? 'معلومات ضريبة القيمة المضافة بالمملكة' : 'Saudi VAT Information'}
-                              </span>
-                              <p className="text-zinc-400 text-xs font-sans">
-                                {isAr 
-                                  ? '"جميع الفواتير والتعاملات المالية تشتمل على ضريبة القيمة المضافة المعتمدة بالمملكة ١٥٪ بما يطابق نظام الفوترة الإلكترونية الخاص بهيئة الزكاة والضريبة والجمارك."' 
-                                  : '"All invoices include Saudi Arabia VAT (15%) in accordance with ZATCA e-Invoicing requirements."'}
-                              </p>
-                            </div>
-                            <span className="px-2.5 py-1 rounded-xs bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1.5">
-                              ✔ {isAr ? 'متوافق مع زاتكا' : 'ZATCA Ready'}
-                            </span>
-                          </div>
-
-                          {/* Search & Filters */}
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                            <div className="space-y-1">
-                              <label className="text-[10px] text-zinc-400 font-mono uppercase tracking-widest block">
-                                {isAr ? 'البحث عن فاتورة' : 'Search Invoice'}
-                              </label>
-                              <input
-                                type="text"
-                                placeholder={isAr ? 'البحث برقم الفاتورة...' : 'Search by INV number...'}
-                                className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]/50 font-sans"
-                                onChange={(e) => {}}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] text-zinc-400 font-mono uppercase tracking-widest block">
-                                {isAr ? 'نطاق التاريخ' : 'Date Range'}
-                              </label>
-                              <select className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]/50 font-sans">
-                                <option value="all">{isAr ? 'جميع التواريخ' : 'All Dates'}</option>
-                                <option value="2026">2026</option>
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] text-zinc-400 font-mono uppercase tracking-widest block">
-                                {isAr ? 'حالة السداد' : 'Payment Status'}
-                              </label>
-                              <select className="w-full bg-black border border-white/10 rounded-xs p-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]/50 font-sans">
-                                <option value="all">{isAr ? 'جميع الحالات' : 'All Statuses'}</option>
-                                <option value="Paid">{isAr ? 'مدفوعة' : 'Paid'}</option>
-                                <option value="Pending">{isAr ? 'معلقة' : 'Pending'}</option>
-                              </select>
-                            </div>
-                            <div className="space-y-1 flex items-end">
-                              <button
-                                onClick={() => {
-                                  try {
-                                    const targetOrd = customerOrders[0] || { id: '1001', totalPrice: 2450, date: new Date().toLocaleDateString(), items: [] };
-                                    const mockInvoice = {
-                                      invoiceNumber: `INV-${targetOrd.id}`,
-                                      invoiceDate: targetOrd.date || new Date().toLocaleDateString(),
-                                      merchantName: brandName || 'AL ZOAL',
-                                      merchantVat: '310239485700003',
-                                      orderId: targetOrd.id,
-                                      paymentId: `pay_${targetOrd.id}`,
-                                      gateway: targetOrd.paymentMethod || 'Mada Card',
-                                      transactionId: `txn_${targetOrd.id}`,
-                                      subtotal: targetOrd.subtotal || targetOrd.totalPrice || 2450,
-                                      vat: (targetOrd.subtotal || targetOrd.totalPrice || 2450) * 0.15,
-                                      discount: 0,
-                                      delivery: targetOrd.shippingCost || 0,
-                                      total: targetOrd.totalAmount || ((targetOrd.subtotal || targetOrd.totalPrice || 2450) * 1.15),
-                                      items: targetOrd.items || []
-                                    };
-                                    const html = generatePrintableInvoiceHtml(mockInvoice);
-                                    downloadHtmlAsPdf(html, `ALZOAL-INVOICE-${mockInvoice.invoiceNumber}.pdf`);
-                                    dispatchNotification({
-                                      type: 'system',
-                                      variant: 'toast',
-                                      title: isAr ? 'نجاح' : 'Success',
-                                      message: isAr ? 'تم تحميل الفاتورة بنجاح.' : 'Invoice downloaded successfully.'
-                                    });
-                                  } catch (err) {
-                                    console.error(err);
-                                    dispatchNotification({
-                                      type: 'system',
-                                      variant: 'toast',
-                                      title: isAr ? 'خطأ' : 'Error',
-                                      message: isAr ? 'تعذر تحميل الفاتورة الضريبية.' : 'Unable to download invoice.'
-                                    });
-                                  }
-                                }}
-                                className="w-full py-2.5 bg-black border border-white/10 hover:border-[#D4AF37]/50 text-zinc-300 hover:text-white text-xs font-bold uppercase rounded-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                              >
-                                <Download className="w-3.5 h-3.5 text-[#D4AF37]" /> {isAr ? 'تحميل' : 'Download'}
-                              </button>
-                            </div>
-                          </div>
-
-                          {customerOrders.length === 0 ? (
-                            <div className="p-12 border border-dashed border-white/10 rounded-xs text-center space-y-4 bg-black/40">
-                              <FileText className="w-8 h-8 text-zinc-500 mx-auto animate-pulse" />
-                              <div className="space-y-1">
-                                <h4 className="text-white font-semibold text-sm uppercase font-display tracking-wider">
-                                  {isAr ? 'لا توجد فواتير بعد' : 'No Invoices Yet'}
-                                </h4>
-                                <p className="text-zinc-400 text-xs font-sans max-w-sm mx-auto">
-                                  {isAr 
-                                    ? 'بمجرد تقديم طلبك، ستظهر فاتورة ضريبة القيمة المضافة القابلة للتحميل هنا.' 
-                                    : 'Once you place an order, your downloadable VAT invoice will show up here.'}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => setCurrentPage('store')}
-                                className="px-6 py-2.5 bg-[#D4AF37] hover:bg-white text-black text-xs font-bold uppercase tracking-widest rounded-xs transition-colors cursor-pointer"
-                              >
-                                {isAr ? 'تسوق الآن' : 'Shop Now'}
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs text-left">
-                                <thead>
-                                  <tr className="border-b border-white/10 text-zinc-400 uppercase font-mono text-[10px] tracking-wider py-3">
-                                    <th className="py-3 px-3">{isAr ? 'رقم الفاتورة' : 'Invoice Number'}</th>
-                                    <th className="py-3 px-3">{isAr ? 'تاريخ الطلب' : 'Order Date'}</th>
-                                    <th className="py-3 px-3 text-right">{isAr ? 'المبلغ الإجمالي' : 'Amount'}</th>
-                                    <th className="py-3 px-3 text-right">{isAr ? 'الضريبة (١٥٪)' : 'VAT'}</th>
-                                    <th className="py-3 px-3 text-center">{isAr ? 'حالة السداد' : 'Payment Status'}</th>
-                                    <th className="py-3 px-3 text-right">{isAr ? 'الإجراءات' : 'Actions'}</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5 font-sans text-zinc-300">
-                                  {customerOrders.map((ord) => {
-                                    const amount = ord.totalPrice || 2450;
-                                    const vat = amount * 0.15;
-                                    return (
-                                      <tr key={ord.id} className="hover:bg-white/[0.02]">
-                                        <td className="py-3.5 px-3 text-white font-bold font-mono">INV-{ord.id}</td>
-                                        <td className="py-3.5 px-3 text-zinc-400 font-mono">{ord.date || new Date().toISOString().substring(0, 10)}</td>
-                                        <td className="py-3.5 px-3 text-right text-white font-bold font-mono">{amount.toFixed(2)} {isAr ? 'ريال' : 'SAR'}</td>
-                                        <td className="py-3.5 px-3 text-right text-zinc-400 font-mono">{vat.toFixed(2)} {isAr ? 'ريال' : 'SAR'}</td>
-                                        <td className="py-3.5 px-3 text-center">
-                                          <span className="px-2.5 py-1 rounded-xs bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 font-bold text-[9px] uppercase tracking-wider font-mono">
-                                            {isAr ? 'مدفوعة' : 'Paid'}
-                                          </span>
-                                        </td>
-                                        <td className="py-3.5 px-3 text-right">
-                                          <div className="flex items-center justify-end gap-2">
-                                            <button
-                                              onClick={() => {
-                                                setSelectedInvoice(ord);
-                                                dispatchNotification({
-                                                  type: 'system',
-                                                  variant: 'toast',
-                                                  title: isAr ? 'جاهز' : 'Ready',
-                                                  message: isAr ? 'الفاتورة جاهزة للعرض.' : 'Invoice is ready.'
-                                                });
-                                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                              }}
-                                              className="px-2.5 py-1.5 bg-black hover:bg-[#D4AF37] hover:text-black border border-white/10 text-zinc-300 text-[10px] font-bold uppercase rounded-xs transition-all cursor-pointer"
-                                            >
-                                              {isAr ? 'عرض الفاتورة' : 'View Invoice'}
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                dispatchNotification({
-                                                  type: 'system',
-                                                  variant: 'toast',
-                                                  title: isAr ? 'نجاح' : 'Success',
-                                                  message: isAr ? 'تم تحميل الفاتورة بنجاح.' : 'Invoice downloaded successfully.'
-                                                });
-                                              }}
-                                              className="px-2.5 py-1.5 bg-black hover:bg-white hover:text-black border border-white/10 text-zinc-300 text-[10px] font-bold uppercase rounded-xs transition-all cursor-pointer"
-                                            >
-                                              {isAr ? 'تحميل' : 'Download PDF'}
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                dispatchNotification({
-                                                  type: 'system',
-                                                  variant: 'toast',
-                                                  title: isAr ? 'جاري التحميل' : 'Loading',
-                                                  message: isAr ? 'جاري تجهيز الفاتورة للطباعة...' : 'Preparing Invoice...'
-                                                });
-                                                window.print();
-                                              }}
-                                              className="px-2.5 py-1.5 bg-black hover:bg-white hover:text-black border border-white/10 text-zinc-300 text-[10px] font-bold uppercase rounded-xs transition-all cursor-pointer"
-                                            >
-                                              {isAr ? 'طباعة' : 'Print'}
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <CustomerInvoices isAr={isAr} brandName={brandName} />
                     </motion.div>
                   )}
 

@@ -1,22 +1,21 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { BusinessCategory, Product } from './types';
-import { PRODUCTS } from './data';
 import { deleteProductFromSupabase, cleanupProductOrphans } from './lib/productSync';
 
 // Centralised registry mapping all local asset paths to their high-quality default fallbacks
 export const IMAGE_FALLBACKS: Record<string, string> = {
   // Hero and pillars
-  '/src/assets/images/pillar-coffee.jpg': 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=400',
+  '/src/assets/images/pillar-coffee.jpg': '/images/collections/coffee.jpeg',
   '/src/assets/images/pillar-bakery.jpg': '/images/collections/bakery.jpeg',
   '/src/assets/images/pillar-market.jpg': '/images/collections/market.jpeg',
   '/src/assets/images/pillar-fashion.jpg': '/images/collections/premium.jpeg',
   '/src/assets/images/pillar-thobes.jpg': '/images/collections/thobes.jpeg',
 
   // Products
-  '/src/assets/images/coffee-saffron-latte.jpg': 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/coffee-saffron-latte-detail.jpg': 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/coffee-cold-brew.jpg': 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/coffee-rose-tea.jpg': 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/coffee-saffron-latte.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/coffee-saffron-latte-detail.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/coffee-cold-brew.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/coffee-rose-tea.jpg': '/images/collections/coffee.jpeg',
   '/src/assets/images/bakery-hoboz.jpg': '/images/collections/bakery.jpeg',
   '/src/assets/images/bakery-ghoriba.jpg': '/images/collections/bakery.jpeg',
   '/src/assets/images/bakery-sambuxa.jpg': '/images/collections/bakery.jpeg',
@@ -38,33 +37,33 @@ export const IMAGE_FALLBACKS: Record<string, string> = {
   'thobes.jpg': '/images/collections/thobes.jpeg',
 
   // Branches
-  '/src/assets/images/branch-al-hofuf.jpg': 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/branch-al-hofuf.jpg': '/images/branding/zoal-logo-4.jpg',
 
   // Blog / Articles
-  '/src/assets/images/blog-saffron-ritual.jpg': 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/blog-baking-physics.jpg': 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/blog-woven-legacies.jpg': 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/blog-saffron-ritual.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/blog-baking-physics.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/blog-woven-legacies.jpg': '/images/collections/premium.jpeg',
 
   // Scrolltelling / Stages
-  '/src/assets/images/scroll-coffee-stage-0.jpg': 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-coffee-stage-1.jpg': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-coffee-stage-2.jpg': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-coffee-stage-3.jpg': 'https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-bakery.jpg': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=400',
-  '/src/assets/images/scroll-market.jpg': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200',
-  '/src/assets/images/scroll-fashion.jpg': 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=1200',
+  '/src/assets/images/scroll-coffee-stage-0.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-coffee-stage-1.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-coffee-stage-2.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-coffee-stage-3.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/scroll-bakery.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/scroll-market.jpg': '/images/collections/market.jpeg',
+  '/src/assets/images/scroll-fashion.jpg': '/images/collections/premium.jpeg',
 
   // Portfolio items
-  '/src/assets/images/gallery-coffee.jpg': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-bakery.jpg': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-fashion.jpg': 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-croissant.jpg': 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-canning.jpg': 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-beans-bag.jpg': 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=800',
-  '/src/assets/images/gallery-market.jpg': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
+  '/src/assets/images/gallery-coffee.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/gallery-bakery.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/gallery-fashion.jpg': '/images/collections/premium.jpeg',
+  '/src/assets/images/gallery-croissant.jpg': '/images/collections/bakery.jpeg',
+  '/src/assets/images/gallery-canning.jpg': '/images/collections/market.jpeg',
+  '/src/assets/images/gallery-beans-bag.jpg': '/images/collections/coffee.jpeg',
+  '/src/assets/images/gallery-market.jpg': '/images/collections/market.jpeg',
 };
 
-export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q0QUYzNyIgbGV0dGVyLXNwYWNpbmc9IjIiPlpPQUwgQVJUSVNBTkFMPC90ZXh0Pjwvc3ZnPg==';
+export const ABSOLUTE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzBhMGEwYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q0QUYzNyIgbGV0dGVyLXNwYWNpbmc9IjIiPlpPQUwgQVJUSVNBTEFMPC90ZXh0Pjwvc3ZnPg==';
 
 export function cleanUrlString(raw?: string | null): string {
   if (!raw || typeof raw !== 'string') return '';
@@ -222,11 +221,28 @@ export function normalizeProductImages<T extends Partial<Product>>(product: T): 
 
 export function resolveProductImage(
   product?: Partial<Product> | null,
-  categoryOverride?: BusinessCategory
+  categoryOverride?: BusinessCategory,
+  allowFallback: boolean = true
 ): string {
   if (!product) {
     const category = categoryOverride ? normalizeCategory(categoryOverride) : 'coffee';
-    return getCategoryFallback(category);
+    return allowFallback ? getCategoryFallback(category) : ABSOLUTE_PLACEHOLDER;
+  }
+
+  if (!allowFallback) {
+    const strictCandidates = [
+      ...(Array.isArray(product.images) ? product.images : []),
+      ...(Array.isArray(product.image_urls) ? product.image_urls : []),
+      product.image,
+      product.image_url
+    ].map(cleanUrlString).filter(Boolean);
+    const strictImage = strictCandidates.find((url) =>
+      !url.startsWith('/images/collections/') &&
+      !url.startsWith('/images/about/') &&
+      !url.includes('images.unsplash.com') &&
+      (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/'))
+    );
+    return strictImage || ABSOLUTE_PLACEHOLDER;
   }
 
   const category = categoryOverride ? normalizeCategory(categoryOverride) : normalizeCategory(product.category);
@@ -299,6 +315,7 @@ interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   priority?: boolean;
   isHero?: boolean;
   product?: Partial<Product> | null;
+  disableFallback?: boolean;
 }
 
 function optimizeImageUrl(url: string): string {
@@ -682,19 +699,23 @@ export const SafeImage = React.memo(function SafeImage({
   priority,
   isHero,
   product,
+  disableFallback = false,
   ...props
 }: SafeImageProps) {
-  // Sync-state derivation to handle prop changes seamlessly
-  const [prevSrc, setPrevSrc] = useState<string | undefined>(src);
-  const [prevProduct, setPrevProduct] = useState<Partial<Product> | null | undefined>(product);
-  const [prevCategory, setPrevCategory] = useState<BusinessCategory | undefined>(category);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   
   // Authoritative target URL determination
   const computeTarget = () => {
     if (product) {
-      return resolveProductImage(product, category);
+      return resolveProductImage(product, category, !disableFallback);
+    }
+    if (disableFallback) {
+      const candidate = cleanUrlString(src);
+      if (candidate && !candidate.startsWith('/images/collections/') && !candidate.startsWith('/images/about/') && !candidate.includes('images.unsplash.com') && isValidCustomUrl(candidate)) {
+        return candidate;
+      }
+      return ABSOLUTE_PLACEHOLDER;
     }
     if (isHero) {
       return src && src.trim() !== '' ? src : '/local/images/hero-placeholder.webp';
@@ -722,11 +743,8 @@ export const SafeImage = React.memo(function SafeImage({
   const [retryKey, setRetryKey] = useState<number>(0);
   const [renderSkeleton, setRenderSkeleton] = useState<boolean>(false);
 
-  // Reset state on prop changes
-  if (src !== prevSrc || product !== prevProduct) {
-    setPrevSrc(src);
-    setPrevProduct(product);
-    setPrevCategory(category);
+  // Reset state on prop changes safely using useEffect
+  useEffect(() => {
     const newTarget = computeTarget();
     const newOptimized = optimizeImageUrl(newTarget);
     const isNewCached = isCachedInstantly(newOptimized) || isCachedInstantly(newTarget) || isCachedInstantly(src || '');
@@ -737,9 +755,7 @@ export const SafeImage = React.memo(function SafeImage({
     setIsLoading(!priority && !isNewCached);
     setRenderSkeleton(false);
     setShowPlaceholder(false);
-  } else if (category !== prevCategory) {
-    setPrevCategory(category);
-  }
+  }, [src, product?.id, (product?.images && product.images[0]), category, priority, isHero]);
 
   // Ref-based instant layout-effect cache check before DOM paint
   useLayoutEffect(() => {
@@ -822,6 +838,13 @@ export const SafeImage = React.memo(function SafeImage({
   };
 
   const handleError = () => {
+    if (disableFallback) {
+      setLoadPhase('placeholder');
+      setShowPlaceholder(true);
+      setIsLoading(false);
+      return;
+    }
+
     if (isHero) {
       console.warn(`[Audit] SafeImage Hero load failed. src: ${src}`);
       setLoadPhase('placeholder');
@@ -1053,35 +1076,9 @@ export function uploadImageToStore(url: string, category: BusinessCategory, titl
   stored.unshift(newAsset);
   localStorage.setItem('zoal_global_image_pool', JSON.stringify(stored));
 
-  // 2. Automatically generate corresponding custom Product inside Store section to maintain absolute reusability
-  let customProducts: Product[] = [];
-  try {
-    const raw = localStorage.getItem('zoal_custom_products');
-    if (raw) customProducts = JSON.parse(raw);
-  } catch (e) {}
-
-  const newCustomProduct: Product = {
-    id: `custom-prod-${cleanId}`,
-    name: titleText,
-    description: `An exclusive addition to our ${category} menu. Premium handcrafted collection.`,
-    subDescription: 'Premium Merchant Asset Curation',
-    price: 150 + Math.floor(Math.random() * 200), // realistic premium pricing
-    category,
-    images: [url],
-    specifications: {
-      'Sourcing': 'Hand-selected boutique import',
-      'Integrity Assurance': 'Verified by ZOAL',
-      'Format': 'Premium custom order'
-    },
-    story: `This exclusive asset was added directly to our unified digital collection. Available dynamically as a premium order option across both our digital interfaces and flagship hospitality lounges.`,
-    rating: 5.0,
-    reviews: [],
-    inventory: 25,
-    popular: true
-  };
-
-  customProducts.unshift(newCustomProduct);
-  localStorage.setItem('zoal_custom_products', JSON.stringify(customProducts));
+  // Image uploads remain media assets only.
+  // Customer-facing products must be created through the authoritative
+  // Product API -> Supabase flow; never fabricate products in localStorage.
 
   notifyPoolListeners();
   return newAsset;
@@ -1128,16 +1125,10 @@ export function useGlobalImages(categoryFilter?: BusinessCategory) {
  * Reactive hook merging static and custom products continuously
  */
 export function useGlobalProducts(): Product[] {
-  const [customProducts, setCustomProducts] = useState<Product[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_custom_products');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return PRODUCTS;
-  });
+  // Customer-facing catalog starts empty and is populated only by the live Product API.
+  // Never hydrate storefront products from legacy localStorage snapshots.
+  // Customer-facing catalog state is populated only from authoritative Product API responses.
+  const [customProducts, setCustomProducts] = useState<Product[]>([]);
   const [inventoryOverrides, setInventoryOverrides] = useState<Record<string, number>>(() => {
     try {
       const raw = localStorage.getItem('zoal_product_inventories');
@@ -1159,17 +1150,8 @@ export function useGlobalProducts(): Product[] {
 
   useEffect(() => {
     const readProductsAndOverrides = () => {
-      try {
-        const raw = localStorage.getItem('zoal_custom_products');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          setCustomProducts(Array.isArray(parsed) ? parsed : PRODUCTS);
-        } else {
-          setCustomProducts(PRODUCTS);
-        }
-      } catch (e) {
-        setCustomProducts(PRODUCTS);
-      }
+      // Product catalog state is updated only by the server-response event below.
+      // This listener handles inventory/field metadata changes without reading product records from localStorage.
 
       try {
         const rawOverrides = localStorage.getItem('zoal_product_inventories');
@@ -1205,12 +1187,18 @@ export function useGlobalProducts(): Product[] {
       }
     };
 
+    const handleAuthoritativeProducts = (event: Event) => {
+      const detail = (event as CustomEvent<Product[]>).detail;
+      setCustomProducts(Array.isArray(detail) ? detail : []);
+    };
+
     poolChangeListeners.add(readProductsAndOverrides);
     window.addEventListener('storage', readProductsAndOverrides);
+    window.addEventListener('zoal-products-updated', handleAuthoritativeProducts);
     
-    // Dynamically trigger Supabase fetch on hook mount to keep state perfectly synchronized
+    // Trigger a fresh server fetch on hook mount. The resulting response populates state directly.
     import('./lib/productSync').then(mod => {
-      mod.triggerProductFetch();
+      mod.triggerProductFetch(true);
     }).catch(err => {
       console.error('Failed to load productSync module on mount:', err);
     });
@@ -1218,39 +1206,13 @@ export function useGlobalProducts(): Product[] {
     return () => {
       poolChangeListeners.delete(readProductsAndOverrides);
       window.removeEventListener('storage', readProductsAndOverrides);
+      window.removeEventListener('zoal-products-updated', handleAuthoritativeProducts);
     };
   }, []);
 
   const mergedProducts = React.useMemo(() => {
-    let sourceProducts: Product[];
-
-    // Check if we have active products returned from the API / customProducts cache
-    const hasCache = (() => {
-      try {
-        const raw = localStorage.getItem('zoal_custom_products');
-        return !!raw;
-      } catch {
-        return false;
-      }
-    })();
-
-    // DEPRECATED old merge logic:
-    // const baseProducts = [...PRODUCTS];
-    // const staticIds = new Set(PRODUCTS.map(p => p.id));
-    // const customOnly = customProducts.filter(p => p && p.id && !staticIds.has(p.id));
-    // const combined = [...baseProducts, ...customOnly].filter(p => p && p.id && !deletedStaticIds.includes(p.id));
-    
-    if (hasCache && customProducts !== PRODUCTS && customProducts.length > 0) {
-      // If the API/cache contains fetched products, use ONLY the API products.
-      // Never merge the static PRODUCTS array back in. This prevents deleted products from reappearing.
-      sourceProducts = customProducts;
-    } else {
-      // Fallback to static PRODUCTS only as the initial seed / database empty fallback
-      sourceProducts = [...PRODUCTS];
-    }
-    
-    // Combine them, filtering out any deleted static products
-    const combined = sourceProducts.filter(p => p && p.id && !deletedStaticIds.includes(p.id));
+    // Return only products loaded from customProducts (the authoritative API cache)
+    const combined = customProducts.filter(p => p && p.id);
     
     const seenIds = new Set<string>();
     const uniqueList: Product[] = [];
@@ -1281,16 +1243,20 @@ export function useGlobalProducts(): Product[] {
       if (p.name_en && !p.nameEn) normalizedProduct.nameEn = p.name_en;
       if (p.name_ar && !p.nameAr) normalizedProduct.nameAr = p.name_ar;
 
+      // Product image fields remain authoritative from the server catalog.
+      // Local overrides may not replace customer-facing image fields.
       let resolved = normalizeProductImages(normalizedProduct);
       if (p.id in productOverrides) {
-        resolved = { ...resolved, ...productOverrides[p.id] };
+        const { images, image_urls, image, image_url, imageUrl, thumbnail, ...safeOverrides } = productOverrides[p.id] || {};
+        void images; void image_urls; void image; void image_url; void imageUrl; void thumbnail;
+        resolved = { ...resolved, ...safeOverrides };
       }
       if (p.id in inventoryOverrides) {
         resolved = { ...resolved, inventory: inventoryOverrides[p.id] };
       }
       return normalizeProductImages(resolved) as Product;
     });
-  }, [customProducts, deletedStaticIds, productOverrides, inventoryOverrides]);
+  }, [customProducts, productOverrides, inventoryOverrides]);
 
   return mergedProducts;
 }

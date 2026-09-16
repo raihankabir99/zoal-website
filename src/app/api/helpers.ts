@@ -60,11 +60,13 @@ export function apiError(message: string, status = 500, details?: any) {
 
 /**
  * RBAC Verification Helper
- * Verifies Authorization header token and checks if user matches required roles.
+ * Supports both the legacy zoal_sessions token and a Supabase Auth access token.
+ * This keeps existing custom-auth sessions working while allowing Supabase OAuth/OTP sessions
+ * to authenticate against the same server-side RBAC checks.
  */
 export async function verifyAuthAndRole(
   req: NextRequest,
-  allowedRoles: ('customer' | 'staff' | 'admin')[]
+  allowedRoles: ('customer' | 'staff' | 'admin' | 'owner' | 'manager')[]
 ): Promise<{ user: any; error?: NextResponse }> {
   const authHeader = req.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -72,26 +74,49 @@ export async function verifyAuthAndRole(
   }
 
   const token = authHeader.split(' ')[1];
+  if (!token) {
+    return { user: null, error: apiError('Authentication token is required', 401) };
+  }
 
-  // Fetch session and associated user role in zoal_sessions / zoal_users
-  const { data: session, error: sessionErr } = await supabase
+  // First preserve the existing custom-session authentication path.
+  const { data: legacySession } = await supabase
     .from('zoal_sessions')
     .select('user_id, expires_at')
     .eq('token', token)
-    .single();
+    .maybeSingle();
 
-  if (sessionErr || !session) {
-    return { user: null, error: apiError('Invalid or expired authentication token', 401) };
+  if (legacySession) {
+    if (new Date(legacySession.expires_at) < new Date()) {
+      return { user: null, error: apiError('Authentication session has expired', 401) };
+    }
+
+    const { data: user, error: userErr } = await supabase
+      .from('zoal_users')
+      .select('id, first_name, last_name, email, phone, role')
+      .eq('id', legacySession.user_id)
+      .single();
+
+    if (userErr || !user) {
+      return { user: null, error: apiError('User record not found', 404) };
+    }
+
+    if (!allowedRoles.includes(user.role as any)) {
+      return { user: null, error: apiError('Forbidden: Insufficient privileges for this operation', 403) };
+    }
+
+    return { user };
   }
 
-  if (new Date(session.expires_at) < new Date()) {
-    return { user: null, error: apiError('Authentication session has expired', 401) };
+  // Then support native Supabase Auth access tokens used by OAuth/OTP sessions.
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    return { user: null, error: apiError('Invalid or expired authentication token', 401) };
   }
 
   const { data: user, error: userErr } = await supabase
     .from('zoal_users')
     .select('id, first_name, last_name, email, phone, role')
-    .eq('id', session.user_id)
+    .eq('id', authData.user.id)
     .single();
 
   if (userErr || !user) {

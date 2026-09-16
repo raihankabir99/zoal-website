@@ -90,7 +90,13 @@ class EnterpriseTelemetry {
   }
 
   public getRecentEvents(limit: number = 50) {
-    return this.events.slice(-limit);
+    return this.events.slice(-limit).map(({ timestamp, type, name, durationMs, status }) => ({
+      timestamp,
+      type,
+      name,
+      durationMs,
+      status,
+    }));
   }
 }
 

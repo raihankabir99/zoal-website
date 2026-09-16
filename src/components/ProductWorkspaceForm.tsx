@@ -8,6 +8,7 @@ import {
 import { BusinessCategory, ProductVariant, Review, Question } from '../types';
 import { ProductSeoSuite } from './ProductSeoSuite';
 import { SafeImage } from '../imageRegistry';
+import { supabaseClient } from '../lib/supabaseClient';
 
 interface ProductWorkspaceFormProps {
   formState: any;
@@ -82,15 +83,68 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
   const handleEnterpriseFileUpload = async (files: FileList | File[], target: 'gallery' | '360' | 'thumbnail' | 'video') => {
     if (!files || files.length === 0) return;
 
-    setUploadingStatus('Compressing & generating WebP container...');
+    const fileList = Array.from(files);
+
+    // Validate file existence and file types
+    for (const file of fileList) {
+      if (!file) {
+        setUploadingStatus('❌ Upload failed: Selected file is invalid.');
+        setTimeout(() => setUploadingStatus(null), 4000);
+        return;
+      }
+      if (target === 'video') {
+        if (file.type && !file.type.startsWith('video/')) {
+          setUploadingStatus('❌ Upload failed: Selected file must be a video.');
+          setTimeout(() => setUploadingStatus(null), 4000);
+          return;
+        }
+      } else {
+        if (file.type && !file.type.startsWith('image/')) {
+          setUploadingStatus('❌ Upload failed: Selected file must be an image.');
+          setTimeout(() => setUploadingStatus(null), 4000);
+          return;
+        }
+      }
+    }
+
+    // Retrieve active session or storage access token
+    let accessToken = '';
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session?.access_token) {
+        accessToken = session.access_token;
+      }
+    } catch (err) {
+      console.warn('Failed to retrieve Supabase session:', err);
+    }
+
+    if (!accessToken) {
+      accessToken = localStorage.getItem('zoal_auth_token') ||
+                    sessionStorage.getItem('zoal_auth_token') ||
+                    localStorage.getItem('zoal_token') ||
+                    localStorage.getItem('token') ||
+                    sessionStorage.getItem('token') || '';
+    }
+
+    if (target === 'video') {
+      setUploadingStatus('Preparing video for upload...');
+    } else {
+      setUploadingStatus('Compressing & generating WebP container...');
+    }
     setUploadProgress(20);
 
     try {
-      const fileList = Array.from(files);
+      let successfulUploadsCount = 0;
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
-        setUploadingStatus(`Processing ${file.name} (${i + 1}/${fileList.length})...`);
+        if (target === 'video') {
+          setUploadingStatus(`Preparing ${file.name} (${i + 1}/${fileList.length})...`);
+        } else {
+          setUploadingStatus(`Processing ${file.name} (${i + 1}/${fileList.length})...`);
+        }
         
+        const isVideo = target === 'video' || (file.type && file.type.startsWith('video/'));
+
         let bucket = 'products';
         let folderPath = 'products';
         if (target === 'thumbnail') {
@@ -99,56 +153,67 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           folderPath = 'products/gallery';
         } else if (target === '360') {
           folderPath = 'products/360';
+        } else if (target === 'video' || isVideo) {
+          folderPath = 'products/videos';
         }
 
-        const webpBlob = await compressAndConvertWebp(file);
+        let uploadBlob: Blob = file;
+        let fileExt = file.name.split('.').pop() || (isVideo ? 'mp4' : 'webp');
+
+        if (!isVideo) {
+          setUploadingStatus(`Compressing & converting ${file.name} to WebP...`);
+          uploadBlob = await compressAndConvertWebp(file);
+          fileExt = 'webp';
+        }
+
         const timestamp = Date.now();
         const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         const nameWithoutExt = sanitizedName.substring(0, sanitizedName.lastIndexOf('.')) || sanitizedName;
-        const filePath = `${folderPath}/${timestamp}_${nameWithoutExt}.webp`;
+        const filePath = `${folderPath}/${timestamp}_${sanitizedName}`;
 
         setUploadProgress(60);
-        setUploadingStatus(`Uploading to Supabase Storage (${filePath})...`);
+        setUploadingStatus(`Uploading to Supabase Storage (${file.name})...`);
 
         const formData = new FormData();
-        formData.append('file', webpBlob, `${nameWithoutExt}.webp`);
+        formData.append('file', uploadBlob, isVideo ? sanitizedName : `${nameWithoutExt}.webp`);
         formData.append('bucket', bucket);
         formData.append('path', filePath);
 
-        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
         let publicUrl = '';
+        let uploadErrorMsg = '';
 
         try {
           const res = await fetch('/api/storage/upload', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${accessToken}`
             },
             body: formData
           });
 
           if (res.ok) {
-            const data = await res.json();
-            if (data.url) {
+            const data = await res.json().catch(() => ({}));
+            if (data && data.url) {
               publicUrl = data.url;
+            } else {
+              uploadErrorMsg = 'Storage URL missing in response.';
             }
+          } else if (res.status === 401 || res.status === 403) {
+            uploadErrorMsg = 'Unauthorized request.';
           } else {
             const errData = await res.json().catch(() => ({}));
-            console.warn('Backend storage upload returned status:', res.status, errData);
+            uploadErrorMsg = errData.error || `Server responded with status ${res.status}.`;
           }
         } catch (fetchErr) {
-          console.warn('Storage upload network request failed:', fetchErr);
+          uploadErrorMsg = 'Storage request could not be completed.';
         }
 
-        // Fallback to Data URL if storage upload failed or returned empty URL
+        // Safeguard: Throw clear error on storage upload failure instead of corrupting formState with megabytes of Base64
         if (!publicUrl) {
-          publicUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(webpBlob);
-          });
+          throw new Error(uploadErrorMsg || `Storage upload failed for ${file.name}. Please ensure storage server is available.`);
         }
 
+        successfulUploadsCount++;
         setUploadProgress(100);
 
         if (target === 'thumbnail') {
@@ -182,8 +247,15 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
           }));
         }
       }
-      setUploadingStatus('✓ Enterprise upload & WebP compression completed successfully!');
-      setTimeout(() => setUploadingStatus(null), 3500);
+
+      if (successfulUploadsCount > 0) {
+        if (target === 'video') {
+          setUploadingStatus('✓ Enterprise video upload completed successfully!');
+        } else {
+          setUploadingStatus('✓ Enterprise upload & WebP compression completed successfully!');
+        }
+        setTimeout(() => setUploadingStatus(null), 3500);
+      }
     } catch (err: any) {
       console.error('Enterprise upload error:', err);
       setUploadingStatus(`❌ Upload error: ${err.message || 'Unknown error'}`);
@@ -1264,7 +1336,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
 
             <div className="space-y-3">
               <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono block">Registered Options</span>
-              {formState.variantsList.length === 0 ? (
+              {(formState.variantsList || []).length === 0 ? (
                 <div className="text-center p-6 bg-black/40 border border-dashed border-white/5 rounded-xs text-zinc-500 font-sans">
                   No options defined. Use the builder below to add options like Size, roast grind, weight etc.
                 </div>
@@ -1384,7 +1456,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
             </h4>
 
             <div className="space-y-3 font-sans">
-              {Object.keys(formState.specifications).length === 0 ? (
+              {Object.keys(formState.specifications || {}).length === 0 ? (
                 <div className="text-center p-6 bg-black/40 border border-dashed border-white/5 rounded-xs text-zinc-500">
                   No specifications defined. Use the builder below to add custom fields.
                 </div>
@@ -2652,7 +2724,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
             </h4>
 
             <div className="space-y-3">
-              {formState.questions.length === 0 ? (
+              {(formState.questions || []).length === 0 ? (
                 <div className="text-center p-6 bg-black/40 border border-dashed border-white/5 rounded-xs text-zinc-500 font-sans">
                   No client inquiries listed. Generate a sample question using the button above to respond.
                 </div>

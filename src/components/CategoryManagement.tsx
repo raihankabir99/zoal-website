@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Plus, Search, Filter, ArrowUpDown, ChevronRight, ChevronDown, FolderTree, 
   Trash2, Edit, Copy, Move, Merge, RotateCcw, Archive, Check, X, Globe, 
@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Product } from '../types';
 import { SafeImage } from '../imageRegistry';
+import { categoryApi, CategoryApiRecord } from '../lib/categoryApi';
 
 // Category interface representing enterprise taxonomy
 export interface Category {
@@ -104,6 +105,27 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   allProducts,
   addLog
 }) => {
+  const [categorySyncError, setCategorySyncError] = useState<string | null>(null);
+  const [isCategorySyncing, setIsCategorySyncing] = useState(true);
+
+  const refreshCategoriesFromServer = useCallback(async () => {
+    setIsCategorySyncing(true);
+    setCategorySyncError(null);
+    try {
+      const records = await categoryApi.list();
+      setCategories(records);
+    } catch (error: any) {
+      console.error('Failed to load authoritative categories:', error);
+      setCategorySyncError(error?.message || 'Unable to load categories from server');
+    } finally {
+      setIsCategorySyncing(false);
+    }
+  }, [setCategories]);
+
+  useEffect(() => {
+    refreshCategoriesFromServer();
+  }, [refreshCategoriesFromServer]);
+
   // Views configuration
   const [activeView, setActiveView] = useState<'tree' | 'card' | 'table'>('tree');
 
@@ -146,7 +168,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       formData.append('bucket', 'categories');
       formData.append('path', filePath);
 
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
 
       try {
         const res = await fetch('/api/storage/upload', {
@@ -249,7 +271,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token || 'dev-preview-token'}`
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({ bucket: 'categories', path: storagePath })
             });
@@ -433,40 +455,44 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [testRunnerLogs, setTestRunnerLogs] = useState<{ name: string; status: 'pending' | 'success' | 'failed'; details?: string }[]>([]);
 
-  // --- ACTIVE LOGS list loaded from localStorage ---
-  const [auditLogs, setAuditLogs] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Filter to keep relevant Category/Brand events
-        return parsed.filter((l: any) => 
-          (l.action || '').toLowerCase().includes('category') || 
-          (l.action || '').toLowerCase().includes('brand') ||
-          (l.action || '').toLowerCase().includes('sorting') ||
-          (l.action || '').toLowerCase().includes('seo') ||
-          (l.action || '').toLowerCase().includes('homepage')
-        );
-      }
-    } catch (e) {}
-    return [];
-  });
+  // --- ACTIVE LOGS list loaded from Server Authoritative Audit Ledger ---
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  const refreshAuditLogs = () => {
+  const refreshAuditLogs = useCallback(async () => {
     try {
-      const raw = localStorage.getItem('zoal_admin_logs');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setAuditLogs(parsed.filter((l: any) => 
-          l.action.toLowerCase().includes('category') || 
-          l.action.toLowerCase().includes('brand') ||
-          l.action.toLowerCase().includes('sorting') ||
-          l.action.toLowerCase().includes('seo') ||
-          l.action.toLowerCase().includes('homepage')
-        ));
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('supabase_auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/admin/audit-logs?limit=50', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const logsArray = Array.isArray(data) ? data : (data.logs || []);
+        const filtered = logsArray
+          .filter((l: any) => 
+            (l.resource_type || '').toLowerCase().includes('category') || 
+            (l.resource_type || '').toLowerCase().includes('brand') ||
+            (l.action || '').toLowerCase().includes('category') || 
+            (l.action || '').toLowerCase().includes('brand') ||
+            (l.action || '').toLowerCase().includes('sorting') ||
+            (l.action || '').toLowerCase().includes('seo') ||
+            (l.action || '').toLowerCase().includes('homepage')
+          )
+          .map((l: any) => ({
+            id: l.id,
+            user: l.email || l.user_id || 'Admin',
+            time: l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString(),
+            action: l.action,
+            target: l.resource_id ? `${l.resource_type || ''}: ${l.resource_id}` : (l.resource_type || 'Taxonomy')
+          }));
+        setAuditLogs(filtered);
       }
-    } catch (e) {}
-  };
+    } catch (e) {
+      console.error('Error fetching taxonomy audit logs:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAuditLogs();
+  }, [refreshAuditLogs]);
 
   const handleRealCategoryImageUpload = async (file: File, fieldName: 'thumbnail' | 'banner' | 'mobileBanner' | 'homepageImage') => {
     if (!file) return;
@@ -504,7 +530,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       formData.append('bucket', 'categories');
       formData.append('path', filePath);
 
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
+      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
 
       // 2. Upload the new image using the existing upload service
       try {
@@ -894,72 +920,38 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   // Execute Import Action
-  const handleExecuteImport = () => {
+  const handleExecuteImport = async () => {
     if (!importValidationReport || importValidationReport.valid.length === 0) {
       alert("No valid category records available to import.");
       return;
     }
-
-    // Save backup for rollback
-    setPreviousCategoriesBackup([...categories]);
-
-    const validNewItems = importValidationReport.valid;
-    let finalCategoriesList: Category[] = [];
-    let updatedCount = 0;
-    let importedCount = 0;
-
     if (importMode === 'replace') {
-      finalCategoriesList = validNewItems;
-      importedCount = validNewItems.length;
-    } else if (importMode === 'merge') {
-      const mergedMap = new Map<string, Category>();
-      categories.forEach(c => mergedMap.set(c.id, c));
-      
-      validNewItems.forEach(newItem => {
-        if (mergedMap.has(newItem.id)) {
-          mergedMap.set(newItem.id, { ...mergedMap.get(newItem.id)!, ...newItem });
-          updatedCount++;
-        } else {
-          mergedMap.set(newItem.id, newItem);
-          importedCount++;
-        }
-      });
-      finalCategoriesList = Array.from(mergedMap.values());
-    } else {
-      // Skip Mode
-      const existingIds = new Set(categories.map(c => c.id));
-      const existingSlugs = new Set(categories.map(c => c.slug));
-      
-      const newOnly = validNewItems.filter(item => !existingIds.has(item.id) && !existingSlugs.has(item.slug));
-      importedCount = newOnly.length;
-      finalCategoriesList = [...categories, ...newOnly];
+      alert("Replace mode is disabled in production because destructive category replacement requires a dedicated transactional migration and product-reference safety check.");
+      return;
     }
 
-    setCategories(finalCategoriesList);
-    localStorage.setItem('zoal_admin_categories', JSON.stringify(finalCategoriesList));
-
-    setImportFinalResult({
-      imported: importedCount,
-      updated: updatedCount,
-      skipped: importValidationReport.summary.invalidCount,
-      failed: importValidationReport.summary.invalidCount,
-      mode: importMode.toUpperCase()
-    });
-
-    setImportStep('report');
-    addLog(`Bulk Imported Categories (${importedCount} new, ${updatedCount} updated, mode: ${importMode})`, "Category Import Engine");
+    try {
+      const result = await categoryApi.bulkImport(importValidationReport.valid, importMode);
+      await refreshCategoriesFromServer();
+      setPreviousCategoriesBackup(null);
+      setImportFinalResult({
+        imported: Number(result?.imported || 0),
+        updated: Number(result?.updated || 0),
+        skipped: Number(result?.skipped || 0) + importValidationReport.summary.invalidCount,
+        failed: Number(result?.failed || 0) + importValidationReport.summary.invalidCount,
+        mode: importMode.toUpperCase()
+      });
+      setImportStep('report');
+      addLog(`Bulk category import completed on server (${result?.imported || 0} new, ${result?.updated || 0} updated, mode: ${importMode})`, "Category Import Engine");
+    } catch (error: any) {
+      console.error('Server category import failed:', error);
+      alert(error?.message || 'Server import failed. No local fallback was used.');
+    }
   };
 
-  // Rollback Import Action
+  // Rollback is intentionally disabled: the former localStorage snapshot was not authoritative.
   const handleRollbackImport = () => {
-    if (previousCategoriesBackup) {
-      setCategories(previousCategoriesBackup);
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(previousCategoriesBackup));
-      setPreviousCategoriesBackup(null);
-      addLog("Rolled back previous category import operation", "Category Import Engine");
-      alert("Rollback successful! Categories restored to state prior to import.");
-      setIsImportModalOpen(false);
-    }
+    alert("Local rollback is disabled for data integrity. A production rollback must be performed from an authoritative server-side audit/version mechanism.");
   };
 
   // Export Categories to JSON or CSV file
@@ -1401,384 +1393,102 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   // Save changes from Form Modal
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Permissions check
     if (activeRole === 'customer') {
       alert("Permission Denied: Read-only Website Access. Customers cannot create or modify category taxonomies.");
       return;
     }
-
-    if (!formName || !formSlug) {
+    if (!formName.trim() || !formSlug.trim()) {
       alert("Validation Error: English Name and Slug are required fields.");
       return;
     }
 
-    // 1. Unique Name Validation
-    const nameExists = categories.some(c => (c.name || '').toLowerCase() === (formName || '').toLowerCase() && (!editingCategory || c.id !== editingCategory.id));
-    if (nameExists) {
-      alert(`Duplicate Category Name Error: A category division named "${formName}" already exists. Each division must maintain a unique identity.`);
+    const nameExists = categories.some(c => (c.name || '').toLowerCase() === formName.trim().toLowerCase() && (!editingCategory || c.id !== editingCategory.id));
+    const slugExists = categories.some(c => c.slug === formSlug.trim() && (!editingCategory || c.id !== editingCategory.id));
+    if (nameExists || slugExists) {
+      alert(nameExists ? `Duplicate Category Name Error: "${formName}" already exists.` : `Duplicate Slug Error: "/${formSlug}" is already in use.`);
       return;
     }
-
-    // 2. Unique Slug Validation
-    const slugExists = categories.some(c => c.slug === formSlug && (!editingCategory || c.id !== editingCategory.id));
-    if (slugExists) {
-      alert(`Duplicate Slug Error: The slug "/${formSlug}" is already in use by another category division.`);
-      return;
-    }
-
-    // 3. Self-parenting Validation
     if (formParent && editingCategory && formParent === editingCategory.id) {
-      alert("Hierarchy Error: A category division cannot select itself as its own parent.");
+      alert("Hierarchy Error: A category cannot select itself as its parent.");
       return;
     }
 
-    // 4. Circular Reference Protection (Check if parent isn't a descendant of the editing node)
-    if (formParent && editingCategory) {
-      const isDescendant = (parentId: string, targetId: string): boolean => {
-        const p = categories.find(c => c.id === parentId);
-        if (!p || !p.parent) return false;
-        if (p.parent === targetId) return true;
-        return isDescendant(p.parent, targetId);
-      };
-      if (isDescendant(formParent, editingCategory.id)) {
-        alert("Circular Reference Error: You cannot select a subcategory descendant as a parent node. This would create an infinite hierarchy loop.");
-        return;
+    const payload: Omit<CategoryApiRecord, 'id' | 'createdAt' | 'updatedAt'> = {
+      name: formName.trim(),
+      nameAr: formNameAr.trim() || undefined,
+      slug: formSlug.trim(),
+      description: formDesc.trim() || undefined,
+      shortDescription: formShortDesc.trim() || undefined,
+      featuredImage: isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined,
+      bannerImage: isImgValid(formBannerImage) ? formBannerImage.trim() : undefined,
+      imageUrl: isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined,
+      categoryIcon: formIcon,
+      parent: formParent || null,
+      sortOrder: Number(formSortOrder),
+      visibility: formVisibility,
+      status: formStatus,
+      featuredToggle: formFeatured,
+      homepageDisplayToggle: formHomepage,
+      seoTitle: formSeoTitle.trim() || undefined,
+      seoDescription: formSeoDescription.trim() || undefined,
+      seoKeywords: formSeoKeywords.trim() || undefined,
+      canonicalUrl: formCanonicalUrl.trim() || undefined,
+      openGraphImage: formOpenGraphImage.trim() || undefined,
+      structuredData: formStructuredData.trim() || undefined,
+      friendlyUrl: formFriendlyUrl.trim() || `/shop/${formSlug.trim()}`,
+      mobileBannerImage: formMobileBannerImage.trim() || undefined,
+      homepageImage: formHomepageImage.trim() || undefined
+    };
+
+    try {
+      if (modalMode === 'edit' && editingCategory) {
+        await categoryApi.update(editingCategory.id, payload);
+        addLog(`Updated category division: ${payload.name}`, "Category Center");
+      } else {
+        await categoryApi.create(payload);
+        addLog(`Created category division: ${payload.name}`, "Category Center");
       }
+      await refreshCategoriesFromServer();
+      if (formParent) setExpandedNodeIds(prev => ({ ...prev, [formParent]: true }));
+      setIsFormModalOpen(false);
+    } catch (error: any) {
+      console.error('Category save failed:', error);
+      alert(error?.message || 'Category save failed. No local fallback was used.');
     }
-
-    // Generate calculated friendly URL preview if not customized
-    const finalFriendlyUrl = formFriendlyUrl || `/shop/${formSlug}`;
-
-    if (modalMode === 'edit' && editingCategory) {
-      const oldThumbnail = editingCategory.featuredImage || '';
-      const oldBanner = editingCategory.bannerImage || '';
-      const oldMobileBanner = editingCategory.mobileBannerImage || '';
-      const oldHomepage = editingCategory.homepageImage || '';
-
-      const existingThumbnail = isImgValid(editingCategory.featuredImage) ? editingCategory.featuredImage! : '';
-      const existingBanner = isImgValid(editingCategory.bannerImage) ? editingCategory.bannerImage! : '';
-      const existingImage = isImgValid(editingCategory.image) ? editingCategory.image! : '';
-      const existingImageUrl = isImgValid(editingCategory.imageUrl) ? editingCategory.imageUrl! : '';
-      const initialThumbnailCombined = existingThumbnail || existingImage || existingImageUrl || '';
-
-      let finalFeaturedImage: string | undefined = editingCategory.featuredImage || undefined;
-      let finalImage: string | undefined = editingCategory.image || undefined;
-      let finalImageUrl: string | undefined = editingCategory.imageUrl || undefined;
-      let finalBannerImage: string | undefined = editingCategory.bannerImage || undefined;
-
-      // Handle featuredImage / thumbnail
-      if (formFeaturedImage.trim() !== initialThumbnailCombined) {
-        if (formFeaturedImage.trim() === '') {
-          finalFeaturedImage = undefined;
-          finalImage = undefined;
-          finalImageUrl = undefined;
-        } else if (isImgValid(formFeaturedImage)) {
-          finalFeaturedImage = formFeaturedImage.trim();
-          finalImage = formFeaturedImage.trim();
-          finalImageUrl = formFeaturedImage.trim();
-        }
-      }
-
-      // Handle bannerImage
-      if (formBannerImage.trim() !== existingBanner) {
-        if (formBannerImage.trim() === '') {
-          finalBannerImage = undefined;
-        } else if (isImgValid(formBannerImage)) {
-          finalBannerImage = formBannerImage.trim();
-        }
-      }
-
-      // Edit mode save
-      setCategories(prev => {
-        const updated = prev.map(c => c.id === editingCategory.id ? {
-          ...c,
-          name: formName,
-          nameAr: formNameAr || undefined,
-          slug: formSlug,
-          description: formDesc || undefined,
-          shortDescription: formShortDesc || undefined,
-          parent: formParent === '' ? null : formParent,
-          sortOrder: Number(formSortOrder),
-          categoryIcon: formIcon,
-          featuredImage: finalFeaturedImage,
-          bannerImage: finalBannerImage,
-          image: finalImage,
-          imageUrl: finalImageUrl,
-          visibility: formVisibility,
-          status: formStatus,
-          featuredToggle: formFeatured,
-          isFeatured: formFeatured, // fallback sync
-          homepageDisplayToggle: formHomepage,
-          
-          // SEO additions
-          seoTitle: formSeoTitle || undefined,
-          seoDescription: formSeoDescription || undefined,
-          seoKeywords: formSeoKeywords || undefined,
-          canonicalUrl: formCanonicalUrl || undefined,
-          openGraphImage: formOpenGraphImage || undefined,
-          structuredData: formStructuredData || undefined,
-          friendlyUrl: finalFriendlyUrl,
-
-          // Advanced Images additions
-          mobileBannerImage: formMobileBannerImage || undefined,
-          homepageImage: formHomepageImage || undefined,
-
-          updatedAt: new Date().toISOString()
-        } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-
-      // 7. Delete previous image from Storage after successful save
-      const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || 'dev-preview-token';
-      const deletePhoto = async (oldUrl: string) => {
-        if (!oldUrl) return;
-        let storagePath = '';
-        if (oldUrl.includes('/categories/')) {
-          const parts = oldUrl.split('/categories/');
-          storagePath = parts[parts.length - 1];
-        } else if (oldUrl.includes('/storage/v1/object/public/')) {
-          const parts = oldUrl.split('/public/');
-          const subParts = parts[1]?.split('/') || [];
-          if (subParts.length > 1) {
-            storagePath = subParts.slice(1).join('/');
-          }
-        }
-
-        if (storagePath) {
-          try {
-            console.log(`[Storage Replacement] Deleting old image after successful Save: ${storagePath}`);
-            const delRes = await fetch('/api/storage/delete', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ bucket: 'categories', path: storagePath })
-            });
-            const delData = await delRes.json();
-            if (!delRes.ok) {
-              console.warn(`[Storage Replacement] Cleanup failure: ${delData.error || 'Failed'}`);
-            } else {
-              console.log(`[Storage Replacement] Old image removed successfully from Supabase Storage`);
-            }
-          } catch (delErr) {
-            console.warn(`[Storage Replacement] Cleanup failure:`, delErr);
-          }
-        }
-      };
-
-      if (formFeaturedImage !== oldThumbnail && oldThumbnail) {
-        deletePhoto(oldThumbnail);
-      }
-      if (formBannerImage !== oldBanner && oldBanner) {
-        deletePhoto(oldBanner);
-      }
-      if (formMobileBannerImage !== oldMobileBanner && oldMobileBanner) {
-        deletePhoto(oldMobileBanner);
-      }
-      if (formHomepageImage !== oldHomepage && oldHomepage) {
-        deletePhoto(oldHomepage);
-      }
-
-      // Track granular change activity logs
-      addLog(`Edited Category division: ${formName}`, "Category Center");
-      
-      const isSeoChanged = formSeoTitle !== (editingCategory.seoTitle || '') || formSeoDescription !== (editingCategory.seoDescription || '') || finalFriendlyUrl !== (editingCategory.friendlyUrl || '');
-      if (isSeoChanged) {
-        addLog(`Updated SEO configurations for category "${formName}"`, "Category Center");
-      }
-
-      if (formHomepage !== (editingCategory.homepageDisplayToggle || false)) {
-        addLog(`Toggled homepage display for category "${formName}" to ${formHomepage ? 'Enabled' : 'Disabled'}`, "Category Center");
-      }
-    } else {
-      // Create mode save
-      const finalFeaturedImage = isImgValid(formFeaturedImage) ? formFeaturedImage.trim() : undefined;
-      const finalBannerImage = isImgValid(formBannerImage) ? formBannerImage.trim() : undefined;
-
-      const newCat: Category = {
-        id: `cat-${Date.now()}`,
-        name: formName,
-        nameAr: formNameAr || undefined,
-        slug: formSlug,
-        description: formDesc || undefined,
-        shortDescription: formShortDesc || undefined,
-        parent: formParent === '' ? null : formParent,
-        sortOrder: Number(formSortOrder),
-        categoryIcon: formIcon,
-        featuredImage: finalFeaturedImage,
-        bannerImage: finalBannerImage,
-        image: finalFeaturedImage,
-        imageUrl: finalFeaturedImage,
-        visibility: formVisibility,
-        status: formStatus,
-        featuredToggle: formFeatured,
-        homepageDisplayToggle: formHomepage,
-
-        // SEO additions
-        seoTitle: formSeoTitle || undefined,
-        seoDescription: formSeoDescription || undefined,
-        seoKeywords: formSeoKeywords || undefined,
-        canonicalUrl: formCanonicalUrl || undefined,
-        openGraphImage: formOpenGraphImage || undefined,
-        structuredData: formStructuredData || undefined,
-        friendlyUrl: finalFriendlyUrl,
-
-        // Advanced Images additions
-        mobileBannerImage: formMobileBannerImage || undefined,
-        homepageImage: formHomepageImage || undefined,
-
-        createdAt: new Date().toISOString()
-      };
-
-      setCategories(prev => {
-        const updated = [...prev, newCat];
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-
-      // Expand parent so child is visible in tree
-      if (formParent) {
-        setExpandedNodeIds(prev => ({ ...prev, [formParent]: true }));
-      }
-
-      addLog(`Created new Category division: ${formName}`, "Category Center");
-      
-      if (formSeoTitle || formSeoDescription) {
-        addLog(`Configured initial SEO tags for category: ${formName}`, "Category Center");
-      }
-    }
-
-    setIsFormModalOpen(false);
   };
 
   // Handle single category deletion (with recursive cascade / re-parent prompt)
-  const handleDeleteCategory = (catId: string, name: string) => {
-    // Permissions check
-    if (activeRole === 'customer') {
-      alert("Permission Denied: Read-only Website Access. Customers cannot delete categories.");
+  const handleDeleteCategory = async (catId: string, name: string) => {
+    if (activeRole !== 'admin') {
+      alert("Permission Denied: Only administrators can delete category divisions.");
       return;
     }
-    if (activeRole === 'staff') {
-      alert("Permission Denied: Staff level users are restricted from deleting category divisions to maintain operational integrity.");
-      return;
-    }
+    if (!window.confirm(`Are you sure you want to permanently erase category division "${name}"? Categories with children are protected by the server.`)) return;
 
-    // Check if category has subcategories
-    const subcats = categories.filter(c => c.parent === catId);
-    
-    if (subcats.length > 0) {
-      // Prompt for handling subcategories: Cascade or Orphan
-      const choice = window.confirm(
-        `Warning: Category "${name}" contains ${subcats.length} subcategories.\n\n` +
-        `• Click OK to CASCADE delete all subcategories.\n` +
-        `• Click CANCEL to KEEP subcategories (they will be moved up to the root or parent level).`
-      );
-
-      if (choice) {
-        // Cascade delete parent & all descendants recursively
-        const getDescendantIds = (id: string): string[] => {
-          const children = categories.filter(c => c.parent === id);
-          let ids = children.map(c => c.id);
-          children.forEach(c => {
-            ids = [...ids, ...getDescendantIds(c.id)];
-          });
-          return ids;
-        };
-
-        const idsToDelete = [catId, ...getDescendantIds(catId)];
-
-        setCategories(prev => {
-          const updated = prev.filter(c => !idsToDelete.includes(c.id));
-          localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-          return updated;
-        });
-
-        setSelectedIds(prev => prev.filter(id => !idsToDelete.includes(id)));
-        addLog(`Cascade deleted category "${name}" and its subcategories`, "Category Center");
-      } else {
-        // Keep descendants, re-parent to the deleted category's parent (or null)
-        const deletedCat = categories.find(c => c.id === catId);
-        const parentId = deletedCat ? deletedCat.parent : null;
-
-        setCategories(prev => {
-          const updated = prev
-            .filter(c => c.id !== catId)
-            .map(c => c.parent === catId ? { ...c, parent: parentId } : c);
-          localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-          return updated;
-        });
-
-        setSelectedIds(prev => prev.filter(id => id !== catId));
-        addLog(`Deleted category "${name}" and orphaned subcategories re-parented`, "Category Center");
-      }
-    } else {
-      // Normal simple delete
-      if (!window.confirm(`Are you sure you want to permanently erase category division "${name}"?`)) return;
-
-      setCategories(prev => {
-        const updated = prev.filter(c => c.id !== catId);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-
+    try {
+      await categoryApi.remove(catId);
       setSelectedIds(prev => prev.filter(id => id !== catId));
+      await refreshCategoriesFromServer();
       addLog(`Deleted category division "${name}"`, "Category Center");
+    } catch (error: any) {
+      console.error('Category delete failed:', error);
+      alert(error?.message || 'Category deletion failed. No local fallback was used.');
     }
   };
 
   // Duplicate Category action (deep clone options)
-  const handleDuplicateCategory = (cat: Category) => {
+  const handleDuplicateCategory = async (cat: Category) => {
     const includeChildren = window.confirm(`Duplicate "${cat.name}"?\n\nWould you like to also duplicate all of its subcategories?`);
-    
-    const cloneIdMap: Record<string, string> = {};
-    const newId = `cat-dup-${Date.now()}`;
-    cloneIdMap[cat.id] = newId;
-
-    const mainClone: any = {
-      ...cat,
-      id: newId,
-      name: `${cat.name} (Copy)`,
-      nameAr: cat.nameAr ? `${cat.nameAr} (نسخة)` : undefined,
-      slug: `${cat.slug}-copy`,
-      createdAt: new Date().toISOString()
-    };
-
-    let clonedList = [mainClone];
-
-    if (includeChildren) {
-      // Recursive helper to clone all nested children
-      const cloneChildrenRecursive = (parentId: string, newParentId: string) => {
-        const children = categories.filter(c => c.parent === parentId);
-        children.forEach(c => {
-          const childCloneId = `cat-dup-${Math.floor(Math.random() * 1000000)}-${Date.now()}`;
-          cloneIdMap[c.id] = childCloneId;
-          clonedList.push({
-            ...c,
-            id: childCloneId,
-            parent: newParentId,
-            name: `${c.name} (Copy)`,
-            slug: `${c.slug}-copy-${Math.floor(Math.random() * 1000)}`,
-            createdAt: new Date().toISOString()
-          });
-          cloneChildrenRecursive(c.id, childCloneId);
-        });
-      };
-
-      cloneChildrenRecursive(cat.id, newId);
+    try {
+      await categoryApi.duplicate(cat.id, includeChildren);
+      await refreshCategoriesFromServer();
+      addLog(`Duplicated category on server: ${cat.name}${includeChildren ? ' with sub-branches' : ''}`, "Category Center");
+    } catch (error: any) {
+      alert(error?.message || 'Server duplication failed. No local fallback was used.');
     }
-
-    setCategories(prev => {
-      const updated = [...prev, ...clonedList];
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-      return updated;
-    });
-
-    addLog(`Duplicated Category: ${cat.name} ${includeChildren ? 'with sub-branches' : ''}`, "Category Center");
   };
 
   // Sibling Sorting Tool handlers (native drag/drop or buttons)
@@ -1789,29 +1499,16 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   }, [categories, sortParentId]);
 
-  const handleMoveSiblingOrder = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === directSiblingsToSort.length - 1) return;
-
+  const handleMoveSiblingOrder = async (index: number, direction: 'up' | 'down') => {
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === directSiblingsToSort.length - 1)) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     const reordered = [...directSiblingsToSort];
-    
-    // Swap positions
-    const temp = reordered[index];
-    reordered[index] = reordered[targetIndex];
-    reordered[targetIndex] = temp;
-
-    // Apply sort indexes sequentially
-    const updatedCategories = categories.map(cat => {
-      const reorderIdx = reordered.findIndex(rc => rc.id === cat.id);
-      if (reorderIdx !== -1) {
-        return { ...cat, sortOrder: reorderIdx + 1 };
-      }
-      return cat;
-    });
-
-    setCategories(updatedCategories);
-    localStorage.setItem('zoal_admin_categories', JSON.stringify(updatedCategories));
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    try {
+      await categoryApi.reorder(reordered.map((cat, i) => ({ id: cat.id, sortOrder: i + 1 })));
+      await refreshCategoriesFromServer();
+      addLog(`Re-sorted subcategories for parent ID ${sortParentId}`, "Category Center");
+    } catch (error: any) { alert(error?.message || 'Server reorder failed.'); }
   };
 
   // Native HTML5 Drag and Drop Handlers for sibling reordering
@@ -1823,142 +1520,65 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
     e.preventDefault();
   };
 
-  const handleDropSibling = (e: React.DragEvent, targetIndex: number) => {
+  const handleDropSibling = async (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
     const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
     if (isNaN(sourceIndex) || sourceIndex === targetIndex) return;
-
     const reordered = [...directSiblingsToSort];
     const [removed] = reordered.splice(sourceIndex, 1);
     reordered.splice(targetIndex, 0, removed);
-
-    const updatedCategories = categories.map(cat => {
-      const reorderIdx = reordered.findIndex(rc => rc.id === cat.id);
-      if (reorderIdx !== -1) {
-        return { ...cat, sortOrder: reorderIdx + 1 };
-      }
-      return cat;
-    });
-
-    setCategories(updatedCategories);
-    localStorage.setItem('zoal_admin_categories', JSON.stringify(updatedCategories));
-    addLog(`Re-sorted subcategories for parent ID ${sortParentId}`, "Category Center");
+    try {
+      await categoryApi.reorder(reordered.map((cat, i) => ({ id: cat.id, sortOrder: i + 1 })));
+      await refreshCategoriesFromServer();
+      addLog(`Re-sorted subcategories for parent ID ${sortParentId}`, "Category Center");
+    } catch (error: any) { alert(error?.message || 'Server reorder failed.'); }
   };
 
   // Merge Category execution (combines products under one category into another)
-  const handleMergeCategoriesSubmit = (e: React.FormEvent) => {
+  const handleMergeCategoriesSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mergeSourceId || !mergeDestId) {
-      alert("Please select both a source and a destination category.");
+    if (!mergeSourceId || !mergeDestId || mergeSourceId === mergeDestId) {
+      alert("Please select two different categories.");
       return;
     }
-    if (mergeSourceId === mergeDestId) {
-      alert("Source and destination categories must be different.");
-      return;
-    }
-
     const sourceCat = categories.find(c => c.id === mergeSourceId);
     const destCat = categories.find(c => c.id === mergeDestId);
-
-    if (!sourceCat || !destCat) {
-      alert("Invalid categories specified.");
-      return;
-    }
-
-    const confirmMerge = window.confirm(
-      `Merge Category Action Confirmation:\n\n` +
-      `All catalog products linked to "${sourceCat.name}" will be mapped under "${destCat.name}".\n\n` +
-      `This change is final. Proceed?`
-    );
-
-    if (!confirmMerge) return;
-
-    // Execute product category assignment swap (if product points to source slug or name)
-    addLog(`Merged Category division "${sourceCat.name}" into "${destCat.name}"`, "Category Center");
-    
-    // De-orphan or clean source category
-    const deleteSource = window.confirm(`Would you like to permanently delete the source category "${sourceCat.name}" now?`);
-    
-    if (deleteSource) {
-      setCategories(prev => {
-        const updated = prev
-          .filter(c => c.id !== mergeSourceId)
-          // Move any child subcategories to the destination parent
-          .map(c => c.parent === mergeSourceId ? { ...c, parent: mergeDestId } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-    } else {
-      // Keep but archive the source
-      setCategories(prev => {
-        const updated = prev.map(c => c.id === mergeSourceId ? { ...c, status: 'Archived' } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-    }
-
-    setIsMergeModalOpen(false);
-    alert("Merging and products re-mapping completed successfully.");
+    if (!sourceCat || !destCat || !window.confirm(`Merge "${sourceCat.name}" into "${destCat.name}"? Server-side hierarchy changes will be authoritative.`)) return;
+    const deleteSource = window.confirm(`Delete source category "${sourceCat.name}"? Cancel archives it instead.`);
+    try {
+      await categoryApi.merge(mergeSourceId, mergeDestId, !deleteSource);
+      await refreshCategoriesFromServer();
+      addLog(`Merged Category division "${sourceCat.name}" into "${destCat.name}"`, "Category Center");
+      setIsMergeModalOpen(false);
+    } catch (error: any) { alert(error?.message || 'Server merge failed.'); }
   };
 
   // Move entire branch sub-tree helper
-  const handleMoveBranchSubmit = (e: React.FormEvent) => {
+  const handleMoveBranchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!moveTargetId) return;
-
     const targetCat = categories.find(c => c.id === moveTargetId);
     if (!targetCat) return;
-
     const newParent = moveNewParentId === 'root' ? null : moveNewParentId;
-
-    setCategories(prev => {
-      const updated = prev.map(c => c.id === moveTargetId ? { ...c, parent: newParent } : c);
-      localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-      return updated;
-    });
-
-    addLog(`Moved category branch "${targetCat.name}" to parent ${moveNewParentId}`, "Category Center");
-    setIsMoveModalOpen(false);
-    alert("Category branch moved successfully!");
+    try {
+      await categoryApi.move(moveTargetId, newParent);
+      await refreshCategoriesFromServer();
+      addLog(`Moved category branch "${targetCat.name}" to parent ${moveNewParentId}`, "Category Center");
+      setIsMoveModalOpen(false);
+    } catch (error: any) { alert(error?.message || 'Server move failed.'); }
   };
 
   // Bulk action operations
-  const handleBulkAction = (action: 'publish' | 'unpublish' | 'delete' | 'sort') => {
-    if (selectedIds.length === 0) return;
-
-    if (action === 'delete') {
-      if (!window.confirm(`Are you sure you want to bulk-delete ${selectedIds.length} categories? Descendants of these categories may also be affected.`)) return;
-
-      setCategories(prev => {
-        const updated = prev.filter(c => !selectedIds.includes(c.id));
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
+  const handleBulkAction = async (action: 'publish' | 'unpublish' | 'delete' | 'sort') => {
+    if (!selectedIds.length) return;
+    if (action === 'delete' && !window.confirm(`Bulk-delete ${selectedIds.length} categories? Categories with children are protected by the server.`)) return;
+    try {
+      await categoryApi.bulkUpdate(selectedIds, action);
+      await refreshCategoriesFromServer();
       setSelectedIds([]);
-      addLog(`Bulk deleted ${selectedIds.length} category divisions`, "Category Center");
-    } else if (action === 'publish' || action === 'unpublish') {
-      const statusValue = action === 'publish' ? 'Published' : 'Draft';
-      setCategories(prev => {
-        const updated = prev.map(c => selectedIds.includes(c.id) ? { ...c, status: statusValue as any } : c);
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-      addLog(`Bulk updated ${selectedIds.length} categories to status: ${statusValue}`, "Category Center");
-    } else if (action === 'sort') {
-      // Sequences sorting index dynamically
-      setCategories(prev => {
-        let idx = 1;
-        const updated = prev.map(c => {
-          if (selectedIds.includes(c.id)) {
-            return { ...c, sortOrder: idx++ };
-          }
-          return c;
-        });
-        localStorage.setItem('zoal_admin_categories', JSON.stringify(updated));
-        return updated;
-      });
-      addLog(`Bulk re-indexed sorting order for ${selectedIds.length} categories`, "Category Center");
-      alert("Bulk sequencing order updated successfully.");
+      addLog(`Bulk category operation completed on server: ${action} (${selectedIds.length})`, "Category Center");
+    } catch (error: any) {
+      alert(error?.message || 'Server bulk operation failed. No local fallback was used.');
     }
   };
 
@@ -3269,7 +2889,9 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex justify-end animate-fade-in">
           <div className="w-full max-w-xl bg-zinc-950 border-l border-white/10 h-full flex flex-col justify-between overflow-y-auto shadow-2xl relative">
             
-            {/* Header */}
+            {categorySyncError && <div className="mb-3 border border-red-500/30 bg-red-500/10 px-3 py-2 text-[10px] text-red-300">Category server sync failed: {categorySyncError}</div>}
+      {isCategorySyncing && <div className="mb-3 text-[9px] font-mono text-zinc-500 uppercase">Loading authoritative categories…</div>}
+      {/* Header */}
             <div className="p-5 border-b border-white/5 flex justify-between items-center bg-zinc-900/60">
               <div>
                 <span className="text-[8.5px] font-mono text-gold-pure uppercase tracking-widest block">Category Configuration</span>
