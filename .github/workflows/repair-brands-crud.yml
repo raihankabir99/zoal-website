@@ -28,5 +28,7 @@ jobs:
         run: npm ci
       - name: TypeScript verification
         run: npm run lint
+      - name: Security regression tests
+        run: npm run verify:security
       - name: Production build verification
         run: npm run build
