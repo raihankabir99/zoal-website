@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { logAuditEvent } from './audit';
 
 function getClient() {
-  return getServiceSupabaseClient() || getSupabaseClient();
+  return getServiceSupabaseClient();
 }
 
 export async function getBrands(req: Request, res: Response) {
