@@ -5,7 +5,7 @@ import { friendlyToUUID } from '../src/lib/uuidMapper.ts';
 import { logAuditEvent } from './audit.ts';
 
 function getSupabase() {
-  return getServiceSupabaseClient() || getSupabaseClient();
+  return getServiceSupabaseClient();
 }
 
 /**
