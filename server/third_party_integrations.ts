@@ -4,6 +4,8 @@ import pg from 'pg';
 
 const { Client } = pg;
 
+type FetchResponse = globalThis.Response;
+
 const SUPPORTED_PROVIDERS = new Set(['metricool']);
 const PROVIDER_ENDPOINTS: Record<string, string> = {
   metricool: 'https://app.metricool.com'
@@ -223,7 +225,7 @@ export async function testThirdPartyIntegration(req: Request, res: Response) {
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      let response: Response;
+      let response: FetchResponse;
       try {
         response = await fetch(url, {
           method: 'GET',
