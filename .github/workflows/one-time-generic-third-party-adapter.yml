@@ -1,0 +1,79 @@
+name: One-time generic third-party adapter hardening
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Apply guarded patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          server = Path('server/third_party_integrations.ts')
+          app = Path('app.ts')
+          dash = Path('src/components/AdminDashboard.tsx')
+          s = server.read_text()
+          a = app.read_text()
+          d = dash.read_text()
+
+          if "const SUPPORTED_PROVIDERS = new Set(['metricool']);" not in s:
+              raise SystemExit('SERVER_PRECONDITION_FAILED')
+          if "export async function testThirdPartyIntegration" not in s:
+              raise SystemExit('SERVER_TEST_PRECONDITION_FAILED')
+          if "app.get('/api/admin/third-party-integrations'" not in a:
+              raise SystemExit('APP_PRECONDITION_FAILED')
+          if "fetch('/api/admin/third-party', { headers })" not in d:
+              raise SystemExit('DASH_PRECONDITION_FAILED')
+
+          s = s.replace(
+              "const SUPPORTED_PROVIDERS = new Set(['metricool']);\nconst PROVIDER_ENDPOINTS: Record<string, string> = { metricool: 'https://app.metricool.com' };\nconst METRICOOL_VERIFY_ENDPOINT = 'https://app.metricool.com/api/admin/simpleProfiles';",
+              "const SUPPORTED_PROVIDERS = new Set(['metricool', 'openai', 'groq', 'gemini']);\nconst PROVIDER_ENDPOINTS: Record<string, string> = { metricool: 'https://app.metricool.com', openai: 'https://api.openai.com', groq: 'https://api.groq.com', gemini: 'https://generativelanguage.googleapis.com' };\nconst METRICOOL_VERIFY_ENDPOINT = 'https://app.metricool.com/api/admin/simpleProfiles';\n\nasync function verifyProviderCredential(provider: string, secret: string): Promise<{ ok: boolean; status: number; message: string }> {\n  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 10000);\n  try {\n    let url = ''; const headers: Record<string, string> = { Accept: 'application/json' };\n    if (provider === 'metricool') {\n      let credential: any = null; try { const parsed = JSON.parse(secret); credential = { userToken: String(parsed?.userToken ?? parsed?.token ?? '').trim(), userId: String(parsed?.userId ?? '').trim(), blogId: String(parsed?.blogId ?? '').trim() }; } catch {}\n      if (!credential?.userToken || !credential?.userId || !credential?.blogId) return { ok: false, status: 400, message: 'Metricool credential must contain userToken, userId and blogId' };\n      const u = new URL(METRICOOL_VERIFY_ENDPOINT); u.searchParams.set('blogId', credential.blogId); u.searchParams.set('userId', credential.userId); url = u.toString(); headers['X-Mc-Auth'] = credential.userToken;\n    } else if (provider === 'openai') { url = 'https://api.openai.com/v1/models'; headers.Authorization = `Bearer ${secret.trim()}`;\n    } else if (provider === 'groq') { url = 'https://api.groq.com/openai/v1/models'; headers.Authorization = `Bearer ${secret.trim()}`;\n    } else if (provider === 'gemini') { url = 'https://generativelanguage.googleapis.com/v1beta/models'; headers['x-goog-api-key'] = secret.trim();\n    } else return { ok: false, status: 400, message: 'No provider adapter is available for this integration yet' };\n    const response = await fetch(url, { method: 'GET', headers, signal: controller.signal });\n    if (!response.ok) return { ok: false, status: response.status, message: `${provider} API verification failed with HTTP ${response.status}` };\n    return { ok: true, status: response.status, message: `${provider} API connectivity verified successfully.` };\n  } catch (error: any) { if (error?.name === 'AbortError') return { ok: false, status: 504, message: `${provider} API verification timed out` }; return { ok: false, status: 502, message: error?.message || `${provider} API verification failed` }; }\n  finally { clearTimeout(timeout); }\n}")
+          s = re.sub(r"\nfunction parseMetricoolCredential\(secret: string\) \{.*?\n\}", "", s, count=1, flags=re.S)
+          old_gate = "if (status !== undefined && !['inactive','error'].includes(status)) return res.status(400).json({ ok: false, error: 'Active status can only be granted after a successful live provider API verification' });"
+          if old_gate not in s: raise SystemExit('STATUS_GATE_NOT_FOUND')
+          s = s.replace(old_gate, "if (status !== undefined && !['active','inactive','error'].includes(status)) return res.status(400).json({ ok: false, error: 'Invalid integration status' });", 1)
+          marker = "if (status !== undefined) { sets.push(`status = $${values.length + 1}`); values.push(status); }"
+          if marker not in s: raise SystemExit('STATUS_MARKER_NOT_FOUND')
+          s = s.replace(marker, "if (status === 'active') { const verification = await client.query(`select last_verified_at from public.zoal_third_party_integrations where id = $1`, [id]); if (!verification.rows[0]?.last_verified_at) return res.status(409).json({ ok: false, error: 'Integration must pass live provider verification before activation' }); }\n    if (status !== undefined) { sets.push(`status = $${values.length + 1}`); values.push(status); }", 1)
+          s = re.sub(r"export async function testThirdPartyIntegration[\s\S]*$", '''export async function testThirdPartyIntegration(req: Request, res: Response) {\n  try { requireAdmin(req); const id = String(req.params.id || '').trim(); const client = getPgClient(); await client.connect();\n    try {\n      const result = await client.query(`select id,provider,encrypted_secret,iv,auth_tag from public.zoal_third_party_integrations where id = $1`, [id]); const row = result.rows[0];\n      if (!row) return res.status(404).json({ ok: false, error: 'Integration not found' });\n      const secret = decryptSecret(row.encrypted_secret, row.iv, row.auth_tag); const verification = await verifyProviderCredential(row.provider, secret);\n      if (!verification.ok) { await client.query(`update public.zoal_third_party_integrations set status = 'error', last_verified_at = null, last_error = $2, updated_at = now() where id = $1`, [id, verification.message]); await audit(req, 'THIRD_PARTY_INTEGRATION_TEST', id, { provider: row.provider, apiCalled: true, verified: false, httpStatus: verification.status }); return res.status(verification.status >= 500 ? 502 : 400).json({ ok: false, verified: false, active: false, error: verification.message }); }\n      await client.query(`update public.zoal_third_party_integrations set status = 'active', last_verified_at = now(), last_error = null, updated_at = now(), updated_by = $2 where id = $1`, [id, String((req as any).user.id)]); await audit(req, 'THIRD_PARTY_INTEGRATION_TEST', id, { provider: row.provider, apiCalled: true, verified: true, httpStatus: verification.status }); return res.json({ ok: true, verified: true, active: true, message: verification.message });\n    } finally { await client.end(); }\n  } catch (error: any) { return res.status(error?.statusCode || 502).json({ ok: false, verified: false, active: false, error: error?.message || 'Integration test failed' }); }\n}\n''', s, count=1)
+
+          anchor = "app.post('/api/admin/third-party-integrations/:id/test', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.testThirdPartyIntegration);"
+          if "app.get('/api/admin/third-party'," not in a:
+              if anchor not in a: raise SystemExit('APP_ANCHOR_NOT_FOUND')
+              aliases = anchor + "\napp.get('/api/admin/third-party', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.listThirdPartyIntegrations);\napp.post('/api/admin/third-party', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.createThirdPartyIntegration);\napp.patch('/api/admin/third-party/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.updateThirdPartyIntegration);\napp.delete('/api/admin/third-party/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.deleteThirdPartyIntegration);\napp.post('/api/admin/third-party/:id/test', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.testThirdPartyIntegration);"
+              a = a.replace(anchor, aliases, 1)
+
+          d = d.replace("status: activate ? 'active' : 'inactive'", "status: 'inactive'", 1)
+          marker = "if (!response.ok) throw new Error(payload?.error || 'Unable to save integration.');\n    await loadThirdPartyIntegrations();"
+          if marker not in d: raise SystemExit('DASH_SAVE_MARKER_NOT_FOUND')
+          replacement = "if (!response.ok) throw new Error(payload?.error || 'Unable to save integration.');\n    if (activate) { const integrationId = payload?.integration?.id || editingIntegration?.id; if (!integrationId) throw new Error('Integration was saved but its id was not returned.'); const testResponse = await fetch(`/api/admin/third-party/${integrationId}/test`, { method: 'POST', headers }); const testPayload = await testResponse.json(); if (!testResponse.ok || !testPayload?.active) throw new Error(testPayload?.error || 'Live provider verification failed.'); }\n    await loadThirdPartyIntegrations();"
+          d = d.replace(marker, replacement, 1)
+
+          server.write_text(s); app.write_text(a); dash.write_text(d)
+          Path('.github/workflows/one-time-generic-third-party-adapter.yml').unlink()
+      - name: Validate
+        run: |
+          grep -q "new Set(\['metricool', 'openai', 'groq', 'gemini'\])" server/third_party_integrations.ts
+          grep -q "api.groq.com/openai/v1/models" server/third_party_integrations.ts
+          grep -q "generativelanguage.googleapis.com/v1beta/models" server/third_party_integrations.ts
+          grep -q "app.get('/api/admin/third-party'," app.ts
+          grep -q "status: 'inactive'" src/components/AdminDashboard.tsx
+          npm run build
+      - name: Commit patched files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/third_party_integrations.ts app.ts src/components/AdminDashboard.tsx .github/workflows/one-time-generic-third-party-adapter.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(3rd-party): add verified AI provider adapters and safe activation"
+          git push origin audit/dashboard-sync-fix
