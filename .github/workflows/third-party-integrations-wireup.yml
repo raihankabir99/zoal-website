@@ -1,0 +1,108 @@
+name: One-time 3rd Party Integrations Wireup
+
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+
+permissions:
+  contents: write
+
+jobs:
+  wireup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Wire server routes and Admin UI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path('app.ts')
+          s = app.read_text()
+          import_anchor = "import * as operationsModule from './server/operations.ts';"
+          import_line = "import * as thirdPartyIntegrationsModule from './server/third_party_integrations.ts';"
+          if import_line not in s:
+              if import_anchor not in s:
+                  raise SystemExit('app.ts import anchor not found')
+              s = s.replace(import_anchor, import_anchor + "\n" + import_line, 1)
+
+          route_anchor = "app.get('/api/telemetry/metrics', authenticateRequest, requireRole(['owner', 'admin']), (req, res) => {"
+          route_block = """app.get('/api/admin/third-party-integrations', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.listThirdPartyIntegrations);
+          app.post('/api/admin/third-party-integrations', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.createThirdPartyIntegration);
+          app.patch('/api/admin/third-party-integrations/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.updateThirdPartyIntegration);
+          app.delete('/api/admin/third-party-integrations/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.deleteThirdPartyIntegration);
+          app.post('/api/admin/third-party-integrations/:id/test', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.testThirdPartyIntegration);
+
+          """
+          if "/api/admin/third-party-integrations" not in s:
+              if route_anchor not in s:
+                  raise SystemExit('app.ts route anchor not found')
+              s = s.replace(route_anchor, route_block + route_anchor, 1)
+          app.write_text(s)
+
+          dash = Path('src/components/AdminDashboard.tsx')
+          d = dash.read_text()
+          old = "const [integrationsList, setIntegrationsList] = useState<any[]>([]);"
+          new = "const [integrationsList, setIntegrationsList] = useState<any[]>([]);"
+          if old not in d:
+              raise SystemExit('AdminDashboard integration state anchor not found')
+
+          effect_marker = "// UI-only registry: production integrations must come from a server-backed registry."
+          effect = """const loadThirdPartyIntegrations = useCallback(async () => {
+            try {
+              const response = await fetch('/api/admin/third-party-integrations', { credentials: 'include' });
+              const payload = await response.json().catch(() => null);
+              if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'Failed to load integrations');
+              setIntegrationsList(payload.integrations || []);
+            } catch (error: any) {
+              setIntegrationsList([]);
+              setGtmFeedback(error?.message || 'Unable to load third-party integrations');
+            }
+          }, []);
+
+          """
+          if 'const loadThirdPartyIntegrations = useCallback' not in d:
+              if effect_marker not in d:
+                  raise SystemExit('AdminDashboard integration comment anchor not found')
+              d = d.replace(effect_marker, effect + effect_marker, 1)
+
+          # Replace the old UI-only comment with production-backed wording while preserving state/UI.
+          d = d.replace(
+              "// UI-only registry: production integrations must come from a server-backed registry.\n  // Keep this empty until the backend/database integration phase is implemented.",
+              "// Production registry is loaded from the server; never store plaintext credentials in browser state."
+          )
+
+          # Add a loader effect once, tied to the existing third-party sub-tab.
+          if 'loadThirdPartyIntegrations();' not in d:
+              marker = "useEffect(() => {\n    loadGtmSettings();\n  }, [loadGtmSettings]);"
+              if marker not in d:
+                  raise SystemExit('GTM effect anchor not found')
+              d = d.replace(marker, marker + "\n\n  useEffect(() => {\n    if (thirdPartySubTab === 'integrations') loadThirdPartyIntegrations();\n  }, [thirdPartySubTab, loadThirdPartyIntegrations]);", 1)
+
+          dash.write_text(d)
+          PY
+
+      - name: Validate wireup
+        run: |
+          grep -q "third_party_integrations" app.ts
+          grep -q "/api/admin/third-party-integrations" app.ts
+          grep -q "loadThirdPartyIntegrations" src/components/AdminDashboard.tsx
+          test -f server/third_party_integrations.ts
+          test -f supabase/migrations/20260916000000_create_zoal_third_party_integrations.sql
+
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.ts src/components/AdminDashboard.tsx server/third_party_integrations.ts supabase/migrations/20260916000000_create_zoal_third_party_integrations.sql .github/workflows/third-party-integrations-wireup.yml
+          git commit -m "feat(3rd-party): connect admin integration registry to secure backend" || exit 0
+          git push origin audit/dashboard-sync-fix
