@@ -69,7 +69,7 @@ export default function CustomerDashboard({ customerSubTab, setSidebarOpen, sele
         return;
       }
       try {
-        const response = await fetch('/api/orders?limit=100&page=1', { headers: { Authorization: `Bearer ${token}` } });
+        const response = await fetch('/api/orders/my-orders?limit=100&page=1', { headers: { Authorization: `Bearer ${token}` } });
         if (!response.ok) throw new Error(`Orders request failed (${response.status})`);
         const payload = await response.json();
         const rows = Array.isArray(payload?.data?.orders) ? payload.data.orders : Array.isArray(payload?.orders) ? payload.orders : [];
