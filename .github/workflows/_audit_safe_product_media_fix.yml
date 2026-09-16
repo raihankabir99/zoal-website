@@ -1,0 +1,97 @@
+name: Guarded Product Media Audit Fix
+on:
+  push:
+    branches: [audit/dashboard-sync-fix]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.event.head_commit.message != 'fix: product media delete synchronization'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Apply guarded surgical patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('server/products_crud.ts')
+          s = p.read_text(encoding='utf-8')
+          helper_anchor = "function getSupabase() {\n  return getServiceSupabaseClient() || getSupabaseClient();\n}\n"
+          helper = r'''
+
+const PRODUCT_STORAGE_PUBLIC_MARKER = '/storage/v1/object/public/products/';
+
+function getProductStoragePath(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const marker = value.indexOf(PRODUCT_STORAGE_PUBLIC_MARKER);
+  if (marker < 0) return null;
+  const path = value.slice(marker + PRODUCT_STORAGE_PUBLIC_MARKER.length).split(/[?#]/, 1)[0];
+  return path ? decodeURIComponent(path).replace(/^\/+/, '') : null;
+}
+
+async function cleanupRemovedProductImages(supabase: any, previousImages: unknown, nextImages: string[]) {
+  const previous = Array.isArray(previousImages)
+    ? previousImages.filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+    : [];
+  const next = new Set(nextImages.filter((value) => typeof value === 'string' && value.trim() !== ''));
+
+  for (const oldUrl of [...new Set(previous)]) {
+    if (next.has(oldUrl)) continue;
+    const storagePath = getProductStoragePath(oldUrl);
+    if (!storagePath) continue;
+
+    const { data: references, error: referenceError } = await supabase
+      .from('zoal_products')
+      .select('id')
+      .contains('image_urls', [oldUrl])
+      .limit(1);
+    if (referenceError) {
+      console.warn('[Product Media] Reference check skipped:', referenceError.message);
+      continue;
+    }
+    if (references && references.length > 0) continue;
+
+    const { error: removeError } = await supabase.storage.from('products').remove([storagePath]);
+    if (removeError) console.warn(`[Product Media] Storage cleanup failed for ${storagePath}:`, removeError.message);
+  }
+}
+'''
+          if 'async function cleanupRemovedProductImages' not in s:
+            if helper_anchor not in s: raise SystemExit('SAFE_ABORT: helper anchor changed')
+            s = s.replace(helper_anchor, helper_anchor + helper, 1)
+
+          old_existing = "    const { data: existingRecord } = await supabase.from('zoal_supabase_products').select('data').eq('id', uuid).maybeSingle();\n"
+          new_existing = old_existing + "    const previousImages = Array.isArray(existingRecord?.data?.images) ? existingRecord.data.images : Array.isArray(existingRecord?.data?.image_urls) ? existingRecord.data.image_urls : [];\n"
+          if 'const previousImages = Array.isArray(existingRecord?.data?.images)' not in s:
+            if old_existing not in s: raise SystemExit('SAFE_ABORT: existing record anchor changed')
+            s = s.replace(old_existing, new_existing, 1)
+
+          sync_anchor = """    // -------------------------------------
+    logAuditEvent({ req, action: 'UPDATE_PRODUCT', resourceType: 'product', resourceId: id, beforeState: existingRecord?.data || null, afterState: completeProductJson, severity: 'INFO', metadata: { name: body.name, price, category: body.category } });
+"""
+          replacement = """    // -------------------------------------
+    await cleanupRemovedProductImages(supabase, previousImages, imagesList);
+    logAuditEvent({ req, action: 'UPDATE_PRODUCT', resourceType: 'product', resourceId: id, beforeState: existingRecord?.data || null, afterState: completeProductJson, severity: 'INFO', metadata: { name: body.name, price, category: body.category } });
+"""
+          if 'await cleanupRemovedProductImages(supabase, previousImages, imagesList);' not in s:
+            if sync_anchor not in s: raise SystemExit('SAFE_ABORT: update sync anchor changed')
+            s = s.replace(sync_anchor, replacement, 1)
+
+          p.write_text(s, encoding='utf-8')
+      - name: Verify
+        run: |
+          git diff --check
+          npx tsc --noEmit --pretty false
+      - name: Commit surgical fix and remove workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/_audit_safe_product_media_fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/products_crud.ts .github/workflows/_audit_safe_product_media_fix.yml
+          git diff --cached --check
+          git commit -m 'fix: product media delete synchronization'
+          git push origin audit/dashboard-sync-fix
