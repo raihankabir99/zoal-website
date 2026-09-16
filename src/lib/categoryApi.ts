@@ -55,7 +55,32 @@ export const categoryApi = {
   async list(): Promise<CategoryApiRecord[]> {
     const payload = await request('/api/categories');
     const rows = Array.isArray(payload) ? payload : payload?.data || payload?.categories || [];
-    return Array.isArray(rows) ? rows : [];
+    return Array.isArray(rows)
+      ? rows.map((row: any) => ({
+          ...row,
+          nameAr: row.nameAr ?? row.name_ar,
+          shortDescription: row.shortDescription ?? row.short_description,
+          imageUrl: row.imageUrl ?? row.image_url,
+          featuredImage: row.featuredImage ?? row.featured_image,
+          bannerImage: row.bannerImage ?? row.banner_image,
+          categoryIcon: row.categoryIcon ?? row.category_icon,
+          parent: row.parent ?? row.parent_id ?? null,
+          sortOrder: row.sortOrder ?? row.sort_order ?? 0,
+          featuredToggle: row.featuredToggle ?? row.featured_toggle ?? false,
+          homepageDisplayToggle: row.homepageDisplayToggle ?? row.homepage_display_toggle ?? false,
+          createdAt: row.createdAt ?? row.created_at,
+          updatedAt: row.updatedAt ?? row.updated_at,
+          seoTitle: row.seoTitle ?? row.seo_title,
+          seoDescription: row.seoDescription ?? row.seo_description,
+          seoKeywords: row.seoKeywords ?? row.seo_keywords,
+          canonicalUrl: row.canonicalUrl ?? row.canonical_url,
+          openGraphImage: row.openGraphImage ?? row.open_graph_image,
+          structuredData: row.structuredData ?? row.structured_data,
+          friendlyUrl: row.friendlyUrl ?? row.friendly_url,
+          mobileBannerImage: row.mobileBannerImage ?? row.mobile_banner_image,
+          homepageImage: row.homepageImage ?? row.homepage_image,
+        }))
+      : [];
   },
 
   async create(category: Omit<CategoryApiRecord, 'id' | 'createdAt' | 'updatedAt'>) {
