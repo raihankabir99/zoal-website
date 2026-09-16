@@ -275,6 +275,7 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
       updateCacheMeta({ lastFetched: Date.now() });
       window.dispatchEvent(new Event('storage'));
       notifyPoolListeners();
+      window.dispatchEvent(new CustomEvent<Product[]>('zoal-products-updated', { detail: finalProducts }));
       return finalProducts;
     }
 
@@ -285,6 +286,7 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
     updateCacheMeta({ lastFetched: 0 });
     window.dispatchEvent(new Event('storage'));
     notifyPoolListeners();
+    window.dispatchEvent(new CustomEvent<Product[]>('zoal-products-updated', { detail: [] }));
     return [];
   }
 }

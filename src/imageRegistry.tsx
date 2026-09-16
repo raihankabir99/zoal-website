@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { BusinessCategory, Product } from './types';
-import { PRODUCTS } from './data';
 import { deleteProductFromSupabase, cleanupProductOrphans } from './lib/productSync';
 
 // Centralised registry mapping all local asset paths to their high-quality default fallbacks
@@ -1128,6 +1127,7 @@ export function useGlobalImages(categoryFilter?: BusinessCategory) {
 export function useGlobalProducts(): Product[] {
   // Customer-facing catalog starts empty and is populated only by the live Product API.
   // Never hydrate storefront products from legacy localStorage snapshots.
+  // Customer-facing catalog state is populated only from authoritative Product API responses.
   const [customProducts, setCustomProducts] = useState<Product[]>([]);
   const [inventoryOverrides, setInventoryOverrides] = useState<Record<string, number>>(() => {
     try {
@@ -1150,9 +1150,8 @@ export function useGlobalProducts(): Product[] {
 
   useEffect(() => {
     const readProductsAndOverrides = () => {
-      // Product catalog is refreshed exclusively by productSync.triggerProductFetch().
-      // This listener only reacts to the authoritative cache after that fetch completes.
-      setCustomProducts([]);
+      // Product catalog state is updated only by the server-response event below.
+      // This listener handles inventory/field metadata changes without reading product records from localStorage.
 
       try {
         const rawOverrides = localStorage.getItem('zoal_product_inventories');
@@ -1188,12 +1187,18 @@ export function useGlobalProducts(): Product[] {
       }
     };
 
+    const handleAuthoritativeProducts = (event: Event) => {
+      const detail = (event as CustomEvent<Product[]>).detail;
+      setCustomProducts(Array.isArray(detail) ? detail : []);
+    };
+
     poolChangeListeners.add(readProductsAndOverrides);
     window.addEventListener('storage', readProductsAndOverrides);
+    window.addEventListener('zoal-products-updated', handleAuthoritativeProducts);
     
-    // Dynamically trigger Supabase fetch on hook mount to keep state perfectly synchronized
+    // Trigger a fresh server fetch on hook mount. The resulting response populates state directly.
     import('./lib/productSync').then(mod => {
-      mod.triggerProductFetch();
+      mod.triggerProductFetch(true);
     }).catch(err => {
       console.error('Failed to load productSync module on mount:', err);
     });
@@ -1201,6 +1206,7 @@ export function useGlobalProducts(): Product[] {
     return () => {
       poolChangeListeners.delete(readProductsAndOverrides);
       window.removeEventListener('storage', readProductsAndOverrides);
+      window.removeEventListener('zoal-products-updated', handleAuthoritativeProducts);
     };
   }, []);
 
