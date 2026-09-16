@@ -126,10 +126,12 @@ export async function updateThirdPartyIntegration(req: Request, res: Response) {
     const id = String(req.params.id || '').trim();
     const displayName = req.body?.displayName === undefined ? undefined : String(req.body.displayName).trim();
     const category = req.body?.category === undefined ? undefined : String(req.body.category).trim().slice(0, 80);
-    const status = req.body?.status === undefined ? undefined : String(req.body.status);
+    const status = req.body?.status === undefined ? undefined : String(req.body.status).toLowerCase();
     const secret = req.body?.secret === undefined ? undefined : String(req.body.secret);
     if (!id) return res.status(400).json({ ok: false, error: 'Integration id is required' });
-    if (status !== undefined && !['active','inactive','error'].includes(status)) return res.status(400).json({ ok: false, error: 'Invalid integration status' });
+    if (status !== undefined && !['inactive','error'].includes(status)) {
+      return res.status(400).json({ ok: false, error: 'Active status can only be granted after a successful live provider API verification' });
+    }
     if (secret !== undefined && (secret.length < 8 || secret.length > 4096)) return res.status(400).json({ ok: false, error: 'Credential length is invalid' });
     const sets: string[] = ['updated_by = $2'];
     const values: any[] = [id, String(user.id)];
@@ -138,8 +140,12 @@ export async function updateThirdPartyIntegration(req: Request, res: Response) {
     if (status !== undefined) { sets.push(`status = $${values.length + 1}`); values.push(status); }
     if (secret !== undefined) {
       const encrypted = encryptSecret(secret);
-      sets.push(`encrypted_secret = $${values.length + 1}`, `iv = $${values.length + 2}`, `auth_tag = $${values.length + 3}`, `rotated_at = now()`, `last_error = null`);
+      sets.push(`encrypted_secret = $${values.length + 1}`, `iv = $${values.length + 2}`, `auth_tag = $${values.length + 3}`, `rotated_at = now()`, `last_verified_at = null`, `last_error = null`);
       values.push(encrypted.encrypted, encrypted.iv, encrypted.authTag);
+      if (status === undefined) {
+        sets.push(`status = $${values.length + 1}`);
+        values.push('inactive');
+      }
     }
     values.push(id);
     const client = getPgClient();
@@ -147,7 +153,7 @@ export async function updateThirdPartyIntegration(req: Request, res: Response) {
     try {
       const result = await client.query(`update public.zoal_third_party_integrations set ${sets.join(', ')} where id = $${values.length} returning id,provider,display_name,category,auth_type,status,created_at,updated_at,last_verified_at,rotated_at`, values);
       if (!result.rows[0]) return res.status(404).json({ ok: false, error: 'Integration not found' });
-      await audit(req, 'THIRD_PARTY_INTEGRATION_UPDATE', id, { credentialRotated: secret !== undefined, statusChanged: status !== undefined });
+      await audit(req, 'THIRD_PARTY_INTEGRATION_UPDATE', id, { credentialRotated: secret !== undefined, statusChanged: status !== undefined, forcedInactiveAfterRotation: secret !== undefined && status === undefined });
       return res.json({ ok: true, integration: { ...result.rows[0], secretConfigured: true } });
     } finally { await client.end(); }
   } catch (error: any) {
@@ -183,18 +189,10 @@ export async function testThirdPartyIntegration(req: Request, res: Response) {
       const row = result.rows[0];
       if (!row) return res.status(404).json({ ok: false, error: 'Integration not found' });
       if (row.provider !== 'metricool') return res.status(400).json({ ok: false, error: 'No provider adapter is available for this integration yet' });
-
-      // IMPORTANT: decrypting proves only that the stored credential can be recovered.
-      // It is not an external Metricool API connectivity test. Metricool API calls require
-      // an API access token plus userId/blogId and must be routed through the backend.
       decryptSecret(row.encrypted_secret, row.iv, row.auth_tag);
-
-      // Never promote an integration to active from a credential-integrity check.
-      // Activation remains manual until a real provider adapter has completed a successful API call.
       if (row.status === 'active') {
         await client.query(`update public.zoal_third_party_integrations set status = 'inactive', last_error = 'Provider API adapter has not completed a live connectivity test' where id = $1`, [id]);
       }
-
       await audit(req, 'THIRD_PARTY_INTEGRATION_CREDENTIAL_CHECK', id, { provider: row.provider, adapter: 'credential-integrity', apiCalled: false });
       return res.json({
         ok: true,
