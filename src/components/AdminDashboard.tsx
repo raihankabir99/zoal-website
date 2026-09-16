@@ -9322,91 +9322,33 @@ export default function AdminDashboard({
                         Validate API
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!integrationForm.name || !integrationForm.provider) {
                             alert('Integration Name and Provider are required.');
                             return;
                           }
-                          if (editingIntegration) {
-                            const updated = integrationsList.map(i => i.id === editingIntegration.id ? { ...integrationForm, status: 'Draft', lastUpdated: new Date().toISOString().split('T')[0] } : i);
-                            setIntegrationsList(updated);
-                            addLog(`Saved integration draft: ${integrationForm.name}`);
-                            const auditEvent = {
-                              action: `Saved integration draft: ${integrationForm.name}`,
-                              user: currentUser?.name || 'Admin',
-                              timestamp: new Date().toLocaleString(),
-                              environment: integrationForm.environment,
-                              result: 'Success'
-                            };
-                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                          } else {
-                            const newId = `int-${Date.now()}`;
-                            const item = {
-                              ...integrationForm,
-                              id: newId,
-                              status: 'Draft',
-                              lastTested: 'Never',
-                              lastUpdated: new Date().toISOString().split('T')[0]
-                            };
-                            setIntegrationsList(prev => [item, ...prev]);
-                            addLog(`Added integration configuration draft: ${integrationForm.name}`);
-                            const auditEvent = {
-                              action: `Added integration draft: ${integrationForm.name}`,
-                              user: currentUser?.name || 'Admin',
-                              timestamp: new Date().toLocaleString(),
-                              environment: integrationForm.environment,
-                              result: 'Success'
-                            };
-                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                          try {
+                            await saveThirdPartyIntegration(false);
+                          } catch (error: any) {
+                            setIntegrationFeedback(`Error: ${error?.message || 'Unable to save integration.'}`);
                           }
-                          setIsAddIntegrationOpen(false);
-                          setIntegrationFeedback(`Successfully saved "${integrationForm.name}" as draft configuration locally.`);
                         }}
                         className="py-2.5 px-4 bg-zinc-900 border border-white/15 text-white hover:bg-zinc-800 font-mono text-xs uppercase tracking-wider rounded-xs cursor-pointer flex-1 text-center transition-all"
                       >
                         Save Draft
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!integrationForm.name || !integrationForm.provider) {
                             alert('Integration Name and Provider are required.');
                             return;
                           }
-                          const tarStatus = 'Connected';
-                          if (editingIntegration) {
-                            const updated = integrationsList.map(i => i.id === editingIntegration.id ? { ...integrationForm, status: tarStatus, lastUpdated: new Date().toISOString().split('T')[0] } : i);
-                            setIntegrationsList(updated);
-                            addLog(`Published integration: ${integrationForm.name}`);
-                            const auditEvent = {
-                              action: `Published integration ${integrationForm.name}`,
-                              user: currentUser?.name || 'Admin',
-                              timestamp: new Date().toLocaleString(),
-                              environment: integrationForm.environment,
-                              result: 'Published'
-                            };
-                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                          } else {
-                            const newId = `int-${Date.now()}`;
-                            const item = {
-                              ...integrationForm,
-                              id: newId,
-                              status: tarStatus,
-                              lastTested: 'Never',
-                              lastUpdated: new Date().toISOString().split('T')[0]
-                            };
-                            setIntegrationsList(prev => [item, ...prev]);
-                            addLog(`Published integration configuration: ${integrationForm.name}`);
-                            const auditEvent = {
-                              action: `Published integration ${integrationForm.name}`,
-                              user: currentUser?.name || 'Admin',
-                              timestamp: new Date().toLocaleString(),
-                              environment: integrationForm.environment,
-                              result: 'Published'
-                            };
-                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                          try {
+                            await saveThirdPartyIntegration(true);
+                          } catch (error: any) {
+                            setIntegrationFeedback(`Error: ${error?.message || 'Unable to publish integration.'}`);
                           }
-                          setIsAddIntegrationOpen(false);
-                          setIntegrationFeedback(`Successfully published "${integrationForm.name}" configuration locally.`);
+                        }}
                         }}
                         className="py-2.5 px-4 bg-gold-pure text-black font-bold text-xs uppercase font-mono tracking-wider rounded-xs hover:bg-gold-light transition-all flex-1 text-center cursor-pointer shadow-md"
                       >
