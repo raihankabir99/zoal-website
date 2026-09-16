@@ -1,0 +1,84 @@
+name: One-time third-party UI routing compatibility patch
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'third-party: apply UI routing compatibility patch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply guarded compatibility patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path('app.ts')
+          s = app.read_text()
+          marker = "app.post('/api/admin/third-party-integrations/:id/test', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.testThirdPartyIntegration);"
+          if marker not in s:
+              raise SystemExit('canonical third-party route marker not found')
+          alias = marker + "\n" + "app.get('/api/admin/third-party', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.listThirdPartyIntegrations);\n" + "app.post('/api/admin/third-party', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.createThirdPartyIntegration);\n" + "app.patch('/api/admin/third-party/:id', authenticateRequest, requireRole(['owner', 'admin']), (req, res) => { if (req.body?.status === 'active') return thirdPartyIntegrationsModule.testThirdPartyIntegration(req, res); return thirdPartyIntegrationsModule.updateThirdPartyIntegration(req, res); });\n" + "app.delete('/api/admin/third-party/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.deleteThirdPartyIntegration);\n" + "app.post('/api/admin/third-party/:id/test', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.testThirdPartyIntegration);"
+          if "app.get('/api/admin/third-party'," not in s:
+              s = s.replace(marker, alias, 1)
+              app.write_text(s)
+
+          ai = Path('server/ai_gateway.ts')
+          s = ai.read_text()
+          old = "if (requested && requested !== 'gemini') { where = `provider = $1 AND status = 'active'`; params.push(requested); }"
+          new = "if (requested) { where = `provider = $1 AND status = 'active'`; params.push(requested); }"
+          if old not in s:
+              raise SystemExit('AI provider selection marker not found')
+          s = s.replace(old, new, 1)
+          ai.write_text(s)
+
+          admin = Path('src/components/AdminDashboard.tsx')
+          s = admin.read_text()
+          old = "const response = editingIntegration\n      ? await fetch(`/api/admin/third-party/${editingIntegration.id}`, { method: 'PATCH', headers, body: JSON.stringify({ displayName: body.displayName, category: body.category, status: activate ? 'active' : 'inactive', secret: body.secret }) })\n      : await fetch('/api/admin/third-party', { method: 'POST', headers, body: JSON.stringify(body) });"
+          new = "const response = editingIntegration\n      ? await fetch(`/api/admin/third-party/${editingIntegration.id}`, { method: 'PATCH', headers, body: JSON.stringify({ displayName: body.displayName, category: body.category, status: 'inactive', secret: body.secret }) })\n      : await fetch('/api/admin/third-party', { method: 'POST', headers, body: JSON.stringify(body) });"
+          if old in s:
+              s = s.replace(old, new, 1)
+          old2 = "const response = await fetch(`/api/admin/third-party/${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status }) });"
+          new2 = "const response = status === 'active'\n      ? await fetch(`/api/admin/third-party/${id}/test`, { method: 'POST', headers })\n      : await fetch(`/api/admin/third-party/${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status }) });"
+          if old2 in s:
+              s = s.replace(old2, new2, 1)
+          admin.write_text(s)
+          PY
+
+          npm ci --ignore-scripts
+          npm run build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.ts server/ai_gateway.ts src/components/AdminDashboard.tsx
+          if git diff --cached --quiet; then
+            echo 'No patch changes required.'
+            exit 0
+          fi
+          git commit -m 'fix(3rd-party): apply UI routing compatibility patch'
+          git push origin audit/dashboard-sync-fix
+
+      - name: Remove one-time workflow
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/one-time-third-party-ui-routing-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/one-time-third-party-ui-routing-fix.yml
+          git commit -m 'chore(3rd-party): remove one-time UI routing workflow'
+          git push origin audit/dashboard-sync-fix
