@@ -193,6 +193,7 @@ export default async function handler(req: any, res: any) {
       if (action === 'sort') return res.status(400).json({ error: 'Use reorder operation with sortOrder values for sorting.' });
       if (!['publish', 'unpublish', 'delete'].includes(action)) return res.status(400).json({ error: 'Unsupported bulk action' });
       if (action === 'delete') {
+        if (auth.role !== 'admin' && auth.role !== 'owner') return res.status(403).json({ error: 'Only admin or owner may delete categories.' });
         const { data: children } = await adminClient.from('zoal_categories').select('id').in('parent_id', ids).limit(1);
         if ((children || []).length) return res.status(409).json({ error: 'Bulk delete blocked: selected categories have children' });
         const { error } = await adminClient.from('zoal_categories').delete().in('id', ids);
