@@ -1,0 +1,149 @@
+name: One-time GTM Final Block Fix
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Replace complete GTM action block
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p = Path('src/components/AdminDashboard.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          new_block = '''                        {/* Action Hierarchy */}
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <button
+                            onClick={async () => {
+                              try {
+                                const data = await saveGtmSettings(false);
+                                setGtmStatus('Draft');
+                                addLog('Saved GTM production draft configuration');
+                                setGtmFeedback('GTM configuration saved to the production database as a disabled draft.');
+                                setGtmContainerId(data?.container_id || gtmContainerId.trim().toUpperCase());
+                              } catch (error: any) {
+                                console.error('[Admin] GTM draft save failed:', error);
+                                setGtmFeedback(`Error: ${error?.message || 'Unable to save GTM configuration.'}`);
+                              }
+                            }}
+                            className="py-2.5 px-3 bg-gold-pure text-black font-bold hover:bg-gold-light text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all shadow-md col-span-2 md:col-span-1"
+                          >
+                            Save Draft
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              const value = gtmContainerId.trim().toUpperCase();
+                              if (!value) return setGtmFeedback('Error: GTM Container ID is empty.');
+                              if (!/^GTM-[A-Z0-9]{5,10}$/.test(value)) return setGtmFeedback('Error: Invalid GTM Container ID format. Must match GTM-XXXXXX');
+                              setGtmContainerId(value);
+                              setGtmFeedback('Validation Success: GTM Container ID format is perfectly valid (GTM-XXXXXX).');
+                            }}
+                            className="py-2.5 px-3 bg-zinc-900 border border-white/20 text-zinc-200 hover:bg-zinc-800 text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
+                          >
+                            Validate
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                const data = await saveGtmSettings(true);
+                                setGtmStatus('Enabled');
+                                addLog('Enabled GTM site-side container injection');
+                                setGtmFeedback('GTM is enabled in production. The site will load the saved container after consent.');
+                                setGtmContainerId(data?.container_id || gtmContainerId.trim().toUpperCase());
+                              } catch (error: any) {
+                                console.error('[Admin] GTM enable failed:', error);
+                                setGtmFeedback(`Error: ${error?.message || 'Unable to enable GTM.'}`);
+                              }
+                            }}
+                            className="py-2.5 px-3 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
+                          >
+                            Enable
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                await saveGtmSettings(false);
+                                setGtmStatus('Disabled');
+                                addLog('Disabled GTM site-side container injection');
+                                setGtmFeedback('GTM site-side injection is disabled in the production database.');
+                              } catch (error: any) {
+                                console.error('[Admin] GTM disable failed:', error);
+                                setGtmFeedback(`Error: ${error?.message || 'Unable to disable GTM.'}`);
+                              }
+                            }}
+                            className="py-2.5 px-3 bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2"
+                          >
+                            Disable
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                const data = await saveGtmSettings(true);
+                                setGtmStatus('Enabled');
+                                const newVerNum = gtmVersions.length + 1;
+                                setGtmVersions(prev => [{
+                                  version: `v${newVerNum}`,
+                                  status: 'Site Activated',
+                                  containerId: data.container_id,
+                                  environment: data.environment,
+                                  createdBy: currentUser?.name || 'Admin',
+                                  createdAt: new Date().toLocaleString(),
+                                  publishedAt: new Date().toLocaleString()
+                                }, ...prev]);
+                                addLog(`Activated GTM site configuration v${newVerNum}`);
+                                setGtmFeedback('GTM site configuration is active. This action does not publish a version inside the Google Tag Manager workspace.');
+                              } catch (error: any) {
+                                console.error('[Admin] GTM activation failed:', error);
+                                setGtmFeedback(`Error: ${error?.message || 'Unable to activate GTM.'}`);
+                              }
+                            }}
+                            className="py-3 px-3 bg-gradient-to-r from-amber-400 via-gold-pure to-amber-500 text-black font-extrabold text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 mt-1 shadow-lg hover:brightness-110"
+                          >
+                            Activate Site Configuration
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Area'''
+
+          pattern = r'                        /\* Action Hierarchy \*/.*?                    /\* Right Area'
+          s2, n = re.subn(pattern, new_block, s, count=1, flags=re.S)
+          assert n == 1, f'Action Hierarchy block replacement count={n}'
+          s = s2
+          p.write_text(s, encoding='utf-8')
+
+          text = p.read_text(encoding='utf-8')
+          assert "const actionMsg = 'Saved GTM UI Draft';" not in text
+          assert "const actionMsg = 'Enabled GTM Tag Container (UI Local)';" not in text
+          assert "const actionMsg = 'Disabled GTM Tag Container (UI Local)';" not in text
+          assert 'GTM UI state enabled locally only' not in text
+          assert 'GTM UI state disabled locally' not in text
+          assert 'Draft configuration stored in this UI session only' not in text
+          assert "setGtmContainerId('GTM-ZOALHQ');" not in text
+      - name: Commit and remove runner
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/gtm-final-block-fix.yml
+          git add src/components/AdminDashboard.tsx .github/workflows/gtm-final-block-fix.yml
+          git commit -m "fix(gtm): replace unsafe local action block"
+          git push origin audit/dashboard-sync-fix
