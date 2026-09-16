@@ -2,7 +2,7 @@ import { supabaseClient } from '../lib/supabaseClient';
 
 declare global {
   interface Window {
-    dataLayer?: Record<string, unknown>[];
+    dataLayer?: any[];
     __zoalGtmContainerId?: string;
   }
 }
