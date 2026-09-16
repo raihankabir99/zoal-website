@@ -9,6 +9,7 @@ import { BusinessCategory, ProductVariant, Review, Question } from '../types';
 import { ProductSeoSuite } from './ProductSeoSuite';
 import { SafeImage } from '../imageRegistry';
 import { supabaseClient } from '../lib/supabaseClient';
+import { deleteProductStorageImageIfUnused } from '../utils/productStorage';
 
 interface ProductWorkspaceFormProps {
   formState: any;
@@ -777,9 +778,19 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          const next = [...formState.images];
+                          const removedUrl = formState.images?.[0] || formState.image;
+                          const next = [...(formState.images || [])];
                           next.shift();
-                          setFormState((prev: any) => ({ ...prev, images: next }));
+                          setFormState((prev: any) => ({
+                            ...prev,
+                            images: next,
+                            image_urls: next,
+                            image: next[0] || '',
+                            image_url: next[0] || ''
+                          }));
+                          if (removedUrl) {
+                            deleteProductStorageImageIfUnused(removedUrl);
+                          }
                         }}
                         className="absolute inset-0 bg-black/70 text-rose-400 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all cursor-pointer"
                         title="Remove Thumbnail"
@@ -846,8 +857,18 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
                       <button
                         type="button"
                         onClick={() => {
+                          const removedUrl = formState.images[idx];
                           const nextImgs = formState.images.filter((_: any, i: number) => i !== idx);
-                          setFormState((prev: any) => ({ ...prev, images: nextImgs }));
+                          setFormState((prev: any) => ({
+                            ...prev,
+                            images: nextImgs,
+                            image_urls: nextImgs,
+                            image: nextImgs[0] || '',
+                            image_url: nextImgs[0] || ''
+                          }));
+                          if (removedUrl) {
+                            deleteProductStorageImageIfUnused(removedUrl);
+                          }
                         }}
                         className="absolute inset-0 bg-black/70 text-rose-400 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all cursor-pointer"
                         title="Delete Image"
@@ -861,7 +882,13 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
                       onChange={(e) => {
                         const nextImgs = [...formState.images];
                         nextImgs[idx] = e.target.value;
-                        setFormState((prev: any) => ({ ...prev, images: nextImgs }));
+                        setFormState((prev: any) => ({
+                          ...prev,
+                          images: nextImgs,
+                          image_urls: nextImgs,
+                          image: nextImgs[0] || '',
+                          image_url: nextImgs[0] || ''
+                        }));
                       }}
                       className="bg-black border border-white/5 p-1 rounded-xs text-white font-mono text-[8px] truncate"
                       placeholder="Storage URL"

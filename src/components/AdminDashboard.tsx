@@ -968,12 +968,12 @@ export default function AdminDashboard({
         const fullProduct = { ...cachedProd, ...updatedFields };
         
         // Ensure image consistency if images are updated
-        if (Array.isArray(updatedFields.images) && (updatedFields.images.length > 0 || updatedFields.explicitImageDeletion === true)) {
+        if (Array.isArray(updatedFields.images)) {
           fullProduct.image_urls = updatedFields.images;
-          fullProduct.image = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image || ''));
-          fullProduct.image_url = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image_url || ''));
-          fullProduct.imageUrl = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.imageUrl || ''));
-          fullProduct.thumbnail = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.thumbnail || ''));
+          fullProduct.image = updatedFields.images[0] || '';
+          fullProduct.image_url = updatedFields.images[0] || '';
+          fullProduct.imageUrl = updatedFields.images[0] || '';
+          fullProduct.thumbnail = updatedFields.images[0] || '';
         }
 
         saveProductToSupabase(fullProduct);
@@ -986,12 +986,12 @@ export default function AdminDashboard({
       };
 
       // Ensure image consistency if images are updated
-      if (Array.isArray(updatedFields.images) && (updatedFields.images.length > 0 || updatedFields.explicitImageDeletion === true)) {
+      if (Array.isArray(updatedFields.images)) {
         fullProduct.image_urls = updatedFields.images;
-        fullProduct.image = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image || ''));
-        fullProduct.image_url = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.image_url || ''));
-        fullProduct.imageUrl = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.imageUrl || ''));
-        fullProduct.thumbnail = updatedFields.images[0] || (updatedFields.explicitImageDeletion ? '' : (fullProduct.thumbnail || ''));
+        fullProduct.image = updatedFields.images[0] || '';
+        fullProduct.image_url = updatedFields.images[0] || '';
+        fullProduct.imageUrl = updatedFields.images[0] || '';
+        fullProduct.thumbnail = updatedFields.images[0] || '';
       }
 
       saveProductToSupabase(fullProduct);

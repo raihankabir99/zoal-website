@@ -358,28 +358,8 @@ export const PmsSubTabs: React.FC<PmsSubTabsProps> = ({
           }
           alert(`File successfully uploaded and optimized under /products/${folder}!`);
         } else {
-          // Fallback if Supabase is not configured or errors out
-          const fallbackPath = `/products/${folder}/${Date.now()}_${file.name}`;
-          if (actualTarget === 'images') {
-            const current = [...(selectedPmsProduct.images || [])];
-            current[0] = fallbackPath;
-            saveProductFields(selectedPmsProduct.id, { images: current });
-            addLog("Media Uploaded", `Uploaded featured image to local fallback path: ${fallbackPath}`);
-          } else if (actualTarget === 'gallery') {
-            const current = [...(selectedPmsProduct.images || [])];
-            current.push(fallbackPath);
-            saveProductFields(selectedPmsProduct.id, { images: current });
-            addLog("Media Uploaded", `Uploaded gallery image to local fallback path: ${fallbackPath}`);
-          } else if (actualTarget === 'variants') {
-            setVariantImage(fallbackPath);
-            addLog("Media Uploaded", `Uploaded variant image to local fallback path: ${fallbackPath}`);
-          } else if (actualTarget === 'videos') {
-            setVideoUrl(fallbackPath);
-            saveProductFields(selectedPmsProduct.id, { videoUrl: fallbackPath });
-            addLog("Media Uploaded", `Uploaded product video to local fallback path: ${fallbackPath}`);
-          }
-          console.warn("Supabase upload failed, using local fallback path.", data?.error);
-          alert(`Simulated local catalog upload path. (Supabase Storage offline. Path: /products/${folder}/${file.name})`);
+          console.error("Supabase Storage upload failed:", data?.error || response.statusText);
+          alert(`Upload failed: ${data?.error || 'Supabase Storage upload failed. Existing product media left unchanged.'}`);
         }
       }, 200);
     } catch (err: any) {
