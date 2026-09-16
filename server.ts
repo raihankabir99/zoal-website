@@ -30,6 +30,7 @@ import * as productsCrudModule from './server/products_crud';
 import * as warehousesModule from './server/warehouses';
 import * as crmModule from './server/crm';
 import * as staffModule from './server/staff';
+import * as thirdPartyIntegrationsModule from './server/third_party_integrations';
 import pg from 'pg';
 import { resolveShippingOptions, calculateAuthoritativeShippingFee, getProvider, isMockShippingEnabled } from './server/shipping';
 const { Client } = pg;
