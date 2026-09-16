@@ -1,6 +1,9 @@
 name: Verify Brands CRUD
 
 on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
   pull_request:
     types: [opened, reopened, synchronize]
   workflow_dispatch:
