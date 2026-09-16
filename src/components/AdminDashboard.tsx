@@ -229,6 +229,40 @@ export default function AdminDashboard({
   const [gtmVersions, setGtmVersions] = useState<any[]>([]);
   const [gtmFeedback, setGtmFeedback] = useState<string | null>(null);
 
+  const saveGtmSettings = async (enabled: boolean) => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session?.user?.id) throw new Error('No active authenticated admin session.');
+    const containerId = gtmContainerId.trim().toUpperCase();
+    if (!/^GTM-[A-Z0-9]{5,10}$/.test(containerId)) throw new Error('Invalid GTM Container ID format.');
+    const payload = { container_id: containerId, environment: gtmEnvironment, enabled, consent_required: gtmConsentMode !== 'Consent Confirmed', description: gtmDescription.trim(), updated_by: session.user.id };
+    const { data: existing, error: readError } = await supabaseClient.from('zoal_gtm_settings').select('id').maybeSingle();
+    if (readError) throw readError;
+    const result = existing?.id
+      ? await supabaseClient.from('zoal_gtm_settings').update(payload).eq('id', existing.id).select().single()
+      : await supabaseClient.from('zoal_gtm_settings').insert(payload).select().single();
+    if (result.error) throw result.error;
+    return result.data;
+  };
+
+  const loadGtmSettings = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const { data, error } = await supabaseClient.from('zoal_gtm_settings').select('id, container_id, environment, enabled, consent_required, description, updated_by, updated_at').maybeSingle();
+      if (error) throw error;
+      if (!data) { setGtmContainerId(''); setGtmEnvironment('Production'); setGtmStatus('Not Configured'); setGtmConsentMode('Not Configured'); setGtmDescription(''); return; }
+      setGtmContainerId(data.container_id || '');
+      setGtmEnvironment(data.environment || 'Production');
+      setGtmStatus(data.enabled ? 'Enabled' : 'Draft');
+      setGtmConsentMode(data.consent_required ? 'Consent Required' : 'Consent Confirmed');
+      setGtmDescription(data.description || '');
+    } catch (error) {
+      console.error('[Admin] GTM settings load failed:', error);
+      setGtmFeedback('Error: Unable to load GTM configuration from the production database.');
+    }
+  }, [isAdmin]);
+
+  useEffect(() => { loadGtmSettings(); }, [loadGtmSettings]);
+
   // 3rd-Party Integration states
   // UI-only registry: production integrations must come from a server-backed registry.
   // Keep this empty until the backend/database integration phase is implemented.
@@ -8272,7 +8306,7 @@ export default function AdminDashboard({
                 <div>
                   <span className="text-xs tracking-[0.3em] text-gold-pure uppercase font-mono block mb-1 font-semibold">INTEGRATIONS PLATFORM</span>
                   <h2 className="text-xl md:text-2xl font-bold tracking-widest font-display uppercase text-white">3RD PARTY SYSTEM WORKSPACE</h2>
-                  <p className="text-xs text-zinc-400 font-mono mt-1">UI Preview Mode • Server persistence & production backend API integrations are not yet connected.</p>
+                  <p className="text-xs text-zinc-400 font-mono mt-1">Production configuration mode • GTM is database-backed; other third-party integrations remain intentionally empty.</p>
                 </div>
                 {/* Sub Tabs Selector */}
                 <div className="flex bg-zinc-950 p-1 border border-white/10 rounded-xs self-start md:self-auto">
@@ -8302,7 +8336,7 @@ export default function AdminDashboard({
                   <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xs flex items-center gap-3 text-left">
                     <Info className="w-4 h-4 text-amber-400 shrink-0" />
                     <p className="text-amber-300 text-xs font-mono leading-relaxed">
-                      Local UI State • Production GTM script injection & server persistence not connected
+                      Production GTM configuration • Container ID is stored in Supabase and site injection is consent-aware
                     </p>
                   </div>
 
@@ -8395,7 +8429,18 @@ export default function AdminDashboard({
                         <div className="grid grid-cols-2 gap-2 pt-2">
                           {/* Primary Workflow Action */}
                           <button
-                            onClick={() => {
+                            onClick={async () => {
+                              try {
+                                await saveGtmSettings(false);
+                                setGtmStatus('Draft');
+                                setGtmFeedback('GTM configuration saved to the production database as a disabled draft.');
+                              return;
+                            } catch (error: any) {
+                              console.error('[Admin] GTM action failed:', error);
+                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
+                              return;
+                            }
+                            
                               if (!gtmContainerId) {
                                 setGtmFeedback('Error: Please enter a valid GTM Container ID first.');
                                 return;
@@ -8449,7 +8494,18 @@ export default function AdminDashboard({
 
                           {/* State Control: Enable */}
                           <button
-                            onClick={() => {
+                            onClick={async () => {
+                              try {
+                                await saveGtmSettings(true);
+                                setGtmStatus('Enabled');
+                                setGtmFeedback('GTM is enabled in production. The site will load the saved container after consent.');
+                              return;
+                            } catch (error: any) {
+                              console.error('[Admin] GTM action failed:', error);
+                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
+                              return;
+                            }
+                            
                               if (!gtmContainerId) {
                                 setGtmFeedback('Error: Please enter a valid GTM Container ID.');
                                 return;
@@ -8474,7 +8530,18 @@ export default function AdminDashboard({
 
                           {/* State Control: Disable */}
                           <button
-                            onClick={() => {
+                            onClick={async () => {
+                              try {
+                                await saveGtmSettings(false);
+                                setGtmStatus('Disabled');
+                                setGtmFeedback('GTM site-side injection is disabled in the production database.');
+                              return;
+                            } catch (error: any) {
+                              console.error('[Admin] GTM action failed:', error);
+                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
+                              return;
+                            }
+                            
                               setGtmStatus('Disabled');
                               const actionMsg = 'Disabled GTM Tag Container (UI Local)';
                               addLog(actionMsg);
@@ -8495,7 +8562,18 @@ export default function AdminDashboard({
 
                           {/* Advanced/Publishing Milestone */}
                           <button
-                            onClick={() => {
+                            onClick={async () => {
+                              try {
+                                const activated = await saveGtmSettings(true);
+                                setGtmStatus('Enabled');
+                                setGtmFeedback('GTM site configuration is active. This action does not publish a version inside the Google Tag Manager workspace.');
+                              return;
+                            } catch (error: any) {
+                              console.error('[Admin] GTM action failed:', error);
+                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
+                              return;
+                            }
+                            
                               if (!gtmContainerId) {
                                 setGtmFeedback('Error: Container ID is required to publish.');
                                 return;
@@ -8524,7 +8602,7 @@ export default function AdminDashboard({
                             }}
                             className="py-3 px-3 bg-gradient-to-r from-amber-400 via-gold-pure to-amber-500 text-black font-extrabold text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 mt-1 shadow-lg hover:brightness-110"
                           >
-                            Publish Version (Local Snapshot)
+                            Activate Site Configuration
                           </button>
                         </div>
                       </div>
@@ -8543,7 +8621,7 @@ export default function AdminDashboard({
                             <Clock className="w-8 h-8 text-zinc-600 mb-1" />
                             <h4 className="text-white text-xs font-mono font-bold uppercase tracking-wider">No GTM Draft Versions Recorded</h4>
                             <p className="text-zinc-400 text-xs font-mono max-w-md">
-                              Click &quot;Publish Version (Local Snapshot)&quot; in the GTM Container Setup panel to create a local configuration snapshot.
+                              Click &quot;Activate Site Configuration&quot; in the GTM Container Setup panel to create a local configuration snapshot.
                             </p>
                           </div>
                         ) : (
@@ -8582,7 +8660,7 @@ export default function AdminDashboard({
                                       </button>
                                       <button
                                         onClick={() => {
-                                          setGtmContainerId('GTM-ZOALHQ');
+                                          setGtmContainerId(v.containerId || '');
                                           setGtmFeedback(`UI Draft Rollback: Restored local workspace form state to snapshot ${v.version}.`);
                                         }}
                                         className="text-gold-pure border border-gold-pure/30 hover:bg-gold-pure/10 px-2.5 py-1 rounded-xs font-semibold transition-all cursor-pointer"
