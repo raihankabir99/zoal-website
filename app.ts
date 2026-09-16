@@ -91,6 +91,7 @@ import * as crmModule from './server/crm.ts';
 import * as staffModule from './server/staff.ts';
 import * as adminModule from './server/admin.ts';
 import * as operationsModule from './server/operations.ts';
+import * as thirdPartyIntegrationsModule from './server/third_party_integrations.ts';
 
 import {
   securityHeadersMiddleware,
@@ -147,6 +148,12 @@ app.use('/api', rateLimiterMiddleware(120, 15 * 60 * 1000)); // Max 120 requests
 app.use(telemetryMiddleware);
 
 // Expose telemetry metrics API
+app.get('/api/admin/third-party-integrations', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.listThirdPartyIntegrations);
+app.post('/api/admin/third-party-integrations', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.createThirdPartyIntegration);
+app.patch('/api/admin/third-party-integrations/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.updateThirdPartyIntegration);
+app.delete('/api/admin/third-party-integrations/:id', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.deleteThirdPartyIntegration);
+app.post('/api/admin/third-party-integrations/:id/test', authenticateRequest, requireRole(['owner', 'admin']), thirdPartyIntegrationsModule.testThirdPartyIntegration);
+
 app.get('/api/telemetry/metrics', authenticateRequest, requireRole(['owner', 'admin']), (req, res) => {
   res.json({
     status: 'ok',

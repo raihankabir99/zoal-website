@@ -264,8 +264,7 @@ export default function AdminDashboard({
   useEffect(() => { loadGtmSettings(); }, [loadGtmSettings]);
 
   // 3rd-Party Integration states
-  // UI-only registry: production integrations must come from a server-backed registry.
-  // Keep this empty until the backend/database integration phase is implemented.
+  // Production registry is loaded from the server; never store plaintext credentials in browser state.
   const [integrationsList, setIntegrationsList] = useState<any[]>([]);
   const [searchIntegration, setSearchIntegration] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
