@@ -1,0 +1,44 @@
+name: One-time GTM CSP Fix 2
+
+on:
+  push:
+    branches:
+      - audit/dashboard-sync-fix
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/dashboard-sync-fix
+          fetch-depth: 1
+      - name: Correct GTM CSP directives
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('server/security.ts')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(' https://www.googletagmanager.com",\n    "connect-src', '",\n    "connect-src', 1)
+          s = s.replace('    "connect-src \'self\' ws: wss: https://*.supabase.co https://*.supabase.in https://api.studio https://*.google.com https://*.run.app",', '    "connect-src \'self\' ws: wss: https://*.supabase.co https://*.supabase.in https://api.studio https://*.google.com https://*.run.app https://www.googletagmanager.com",', 1)
+          p.write_text(s, encoding='utf-8')
+          text = p.read_text(encoding='utf-8')
+          lines = text.splitlines()
+          script = next(x for x in lines if 'script-src' in x)
+          img = next(x for x in lines if 'img-src' in x)
+          connect = next(x for x in lines if 'connect-src' in x)
+          assert 'https://www.googletagmanager.com' in script
+          assert 'https://www.googletagmanager.com' not in img
+          assert 'https://www.googletagmanager.com' in connect
+      - name: Commit and remove runner
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/gtm-csp-fix-2.yml
+          git add server/security.ts .github/workflows/gtm-csp-fix-2.yml
+          git commit -m "fix(gtm): place GTM domain in script and connect CSP"
+          git push origin audit/dashboard-sync-fix
