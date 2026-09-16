@@ -8430,34 +8430,17 @@ export default function AdminDashboard({
                           {/* Primary Workflow Action */}
                           <button
                             onClick={async () => {
-                              try {
-                                await saveGtmSettings(false);
-                                setGtmStatus('Draft');
-                                setGtmFeedback('GTM configuration saved to the production database as a disabled draft.');
-                              return;
-                            } catch (error: any) {
-                              console.error('[Admin] GTM action failed:', error);
-                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
-                              return;
-                            }
-                            
-                              if (!gtmContainerId) {
-                                setGtmFeedback('Error: Please enter a valid GTM Container ID first.');
-                                return;
-                              }
-                              setGtmStatus('Draft');
-                              const actionMsg = 'Saved GTM UI Draft';
-                              addLog(actionMsg);
-                              const auditEvent = {
-                                action: actionMsg,
-                                user: currentUser?.name || 'Admin',
-                                timestamp: new Date().toLocaleString(),
-                                environment: gtmEnvironment,
-                                result: 'Success'
-                              };
-                              setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback('Draft configuration stored in this UI session only. Backend persistence is not yet connected.');
-                            }}
+                    try {
+                      const data = await saveGtmSettings(false);
+                      setGtmStatus('Draft');
+                      addLog('Saved GTM production draft configuration');
+                      setGtmFeedback('GTM configuration saved to the production database as a disabled draft.');
+                      if (data) setGtmContainerId(data.container_id || '');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM draft save failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to save GTM configuration.'}`);
+                    }
+                  }}
                             className="py-2.5 px-3 bg-gold-pure text-black font-bold hover:bg-gold-light text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all shadow-md col-span-2 md:col-span-1"
                           >
                             Save Draft
@@ -8495,34 +8478,17 @@ export default function AdminDashboard({
                           {/* State Control: Enable */}
                           <button
                             onClick={async () => {
-                              try {
-                                await saveGtmSettings(true);
-                                setGtmStatus('Enabled');
-                                setGtmFeedback('GTM is enabled in production. The site will load the saved container after consent.');
-                              return;
-                            } catch (error: any) {
-                              console.error('[Admin] GTM action failed:', error);
-                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
-                              return;
-                            }
-                            
-                              if (!gtmContainerId) {
-                                setGtmFeedback('Error: Please enter a valid GTM Container ID.');
-                                return;
-                              }
-                              setGtmStatus('Enabled');
-                              const actionMsg = 'Enabled GTM Tag Container (UI Local)';
-                              addLog(actionMsg);
-                              const auditEvent = {
-                                action: actionMsg,
-                                user: currentUser?.name || 'Admin',
-                                timestamp: new Date().toLocaleString(),
-                                environment: gtmEnvironment,
-                                result: 'Success'
-                              };
-                              setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback('GTM UI state enabled locally only. No GTM script or tracking has been activated.');
-                            }}
+                    try {
+                      const data = await saveGtmSettings(true);
+                      setGtmStatus('Enabled');
+                      addLog('Enabled GTM site-side container injection');
+                      setGtmFeedback('GTM is enabled in production. The site will load the saved container after consent.');
+                      if (data) setGtmContainerId(data.container_id || '');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM enable failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to enable GTM.'}`);
+                    }
+                  }}
                             className="py-2.5 px-3 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 md:col-span-1"
                           >
                             Enable
@@ -8531,30 +8497,16 @@ export default function AdminDashboard({
                           {/* State Control: Disable */}
                           <button
                             onClick={async () => {
-                              try {
-                                await saveGtmSettings(false);
-                                setGtmStatus('Disabled');
-                                setGtmFeedback('GTM site-side injection is disabled in the production database.');
-                              return;
-                            } catch (error: any) {
-                              console.error('[Admin] GTM action failed:', error);
-                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
-                              return;
-                            }
-                            
-                              setGtmStatus('Disabled');
-                              const actionMsg = 'Disabled GTM Tag Container (UI Local)';
-                              addLog(actionMsg);
-                              const auditEvent = {
-                                action: actionMsg,
-                                user: currentUser?.name || 'Admin',
-                                timestamp: new Date().toLocaleString(),
-                                environment: gtmEnvironment,
-                                result: 'Success'
-                              };
-                              setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback('GTM UI state disabled locally. No external tracking was changed.');
-                            }}
+                    try {
+                      await saveGtmSettings(false);
+                      setGtmStatus('Disabled');
+                      addLog('Disabled GTM site-side container injection');
+                      setGtmFeedback('GTM site-side injection is disabled in the production database.');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM disable failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to disable GTM.'}`);
+                    }
+                  }}
                             className="py-2.5 px-3 bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 text-xs font-mono font-semibold uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2"
                           >
                             Disable
@@ -8563,43 +8515,26 @@ export default function AdminDashboard({
                           {/* Advanced/Publishing Milestone */}
                           <button
                             onClick={async () => {
-                              try {
-                                const activated = await saveGtmSettings(true);
-                                setGtmStatus('Enabled');
-                                setGtmFeedback('GTM site configuration is active. This action does not publish a version inside the Google Tag Manager workspace.');
-                              return;
-                            } catch (error: any) {
-                              console.error('[Admin] GTM action failed:', error);
-                              setGtmFeedback(`Error: ${error?.message || 'Unable to update GTM configuration.'}`);
-                              return;
-                            }
-                            
-                              if (!gtmContainerId) {
-                                setGtmFeedback('Error: Container ID is required to publish.');
-                                return;
-                              }
-                              setGtmStatus('Enabled');
-                              const newVerNum = gtmVersions.length + 1;
-                              const newVer = {
-                                version: `v${newVerNum}`,
-                                status: 'Draft Snapshot',
-                                createdBy: currentUser?.name || 'Admin',
-                                createdAt: new Date().toLocaleString(),
-                                publishedAt: new Date().toLocaleString()
-                              };
-                              setGtmVersions(prev => [newVer, ...prev]);
-                              const actionMsg = `Created GTM Configuration Snapshot v${newVerNum}`;
-                              addLog(actionMsg);
-                              const auditEvent = {
-                                action: actionMsg,
-                                user: currentUser?.name || 'Admin',
-                                timestamp: new Date().toLocaleString(),
-                                environment: gtmEnvironment,
-                                result: 'Snapshot Created'
-                              };
-                              setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                              setGtmFeedback(`GTM configuration snapshot created locally as UI preview Version v${newVerNum}. It is not published to production GTM.`);
-                            }}
+                    try {
+                      const data = await saveGtmSettings(true);
+                      setGtmStatus('Enabled');
+                      const newVerNum = gtmVersions.length + 1;
+                      setGtmVersions(prev => [{
+                        version: `v${newVerNum}`,
+                        status: 'Site Activated',
+                        containerId: data.container_id,
+                        environment: data.environment,
+                        createdBy: currentUser?.name || 'Admin',
+                        createdAt: new Date().toLocaleString(),
+                        publishedAt: new Date().toLocaleString()
+                      }, ...prev]);
+                      addLog(`Activated GTM site configuration v${newVerNum}`);
+                      setGtmFeedback('GTM site configuration is active. This action does not publish a version inside the Google Tag Manager workspace.');
+                    } catch (error: any) {
+                      console.error('[Admin] GTM activation failed:', error);
+                      setGtmFeedback(`Error: ${error?.message || 'Unable to activate GTM.'}`);
+                    }
+                  }}
                             className="py-3 px-3 bg-gradient-to-r from-amber-400 via-gold-pure to-amber-500 text-black font-extrabold text-xs font-mono uppercase tracking-wider rounded-xs cursor-pointer text-center transition-all col-span-2 mt-1 shadow-lg hover:brightness-110"
                           >
                             Activate Site Configuration
