@@ -356,6 +356,24 @@ export default function AdminDashboard({
     await loadThirdPartyIntegrations();
     setIntegrationFeedback(payload?.message || 'Credential integrity verified.');
   };
+  const updateThirdPartyStatus = async (id: string, status: 'active' | 'inactive') => {
+    const headers = await getThirdPartyAuthHeaders();
+    const response = await fetch(`/api/admin/third-party/${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status }) });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || 'Unable to update integration status.');
+    await loadThirdPartyIntegrations();
+    setIntegrationFeedback(status === 'active' ? 'Integration enabled.' : 'Integration disabled.');
+  };
+
+  const deleteThirdPartyIntegration = async (id: string, name: string) => {
+    const headers = await getThirdPartyAuthHeaders();
+    const response = await fetch(`/api/admin/third-party/${id}`, { method: 'DELETE', headers });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error || 'Unable to delete integration.');
+    await loadThirdPartyIntegrations();
+    setIntegrationFeedback(`Deleted integration configuration: ${name}`);
+  };
+
 
 
   useEffect(() => {
