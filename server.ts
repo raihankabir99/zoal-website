@@ -3062,6 +3062,14 @@ app.post('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'm
 app.get('/api/staff/duty-status', authenticateRequest, requireRole(['staff', 'manager', 'admin', 'owner']), staffModule.getDutyStatus);
 
 // -------------------------------------------------------------
+// SECURE 3RD-PARTY INTEGRATIONS API ROUTES
+app.get('/api/admin/third-party', authenticateRequest, thirdPartyIntegrationsModule.listThirdPartyIntegrations);
+app.post('/api/admin/third-party', authenticateRequest, thirdPartyIntegrationsModule.createThirdPartyIntegration);
+app.patch('/api/admin/third-party/:id', authenticateRequest, thirdPartyIntegrationsModule.updateThirdPartyIntegration);
+app.delete('/api/admin/third-party/:id', authenticateRequest, thirdPartyIntegrationsModule.deleteThirdPartyIntegration);
+app.post('/api/admin/third-party/:id/test', authenticateRequest, thirdPartyIntegrationsModule.testThirdPartyIntegration);
+
+// -------------------------------------------------------------
 // SUPPORT CENTER API ROUTES
 // Customer and Staff accessible ticket routes (supportModule handles internal role scoping and IDOR protection)
 app.get('/api/support/tickets', authenticateRequest, supportModule.getTickets);
