@@ -8893,27 +8893,21 @@ export default function AdminDashboard({
                                       Edit
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        setIntegrationFeedback("Connection testing will be available after backend integration is implemented.");
+                                      onClick={async () => {
+                                        try { await testThirdPartyIntegration(item.id); }
+                                        catch (error: any) { setIntegrationFeedback(`Error: ${error?.message || 'Integration test failed.'}`); }
                                       }}
                                       className="text-zinc-400 hover:text-white cursor-pointer px-1.5 py-1"
                                     >
                                       Test
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        const updated = integrationsList.map(i => i.id === item.id ? { ...i, status: i.status === 'Disabled' ? 'Connected' : 'Disabled' } : i);
-                                        setIntegrationsList(updated);
-                                        const newStatus = item.status === 'Disabled' ? 'Connected' : 'Disabled';
-                                        addLog(`${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`);
-                                        const auditEvent = {
-                                          action: `${newStatus === 'Connected' ? 'Enabled' : 'Disabled'} integration ${item.name}`,
-                                          user: currentUser?.name || 'Admin',
-                                          timestamp: new Date().toLocaleString(),
-                                          environment: item.environment,
-                                          result: 'Success'
-                                        };
-                                        setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
+                                      onClick={async () => {
+                                        try {
+                                          await updateThirdPartyStatus(item.id, item.status === 'Disabled' ? 'active' : 'inactive');
+                                        } catch (error: any) {
+                                          setIntegrationFeedback(`Error: ${error?.message || 'Unable to update integration status.'}`);
+                                        }
                                       }}
                                       className="text-zinc-400 hover:text-white cursor-pointer px-1.5 py-1"
                                     >
@@ -8925,19 +8919,14 @@ export default function AdminDashboard({
                                           title: 'DELETE INTEGRATION CONFIG?',
                                           message: `This removes the integration configuration only. It does not delete products, customers, orders, inventory, or other ZOAL data. Are you sure you want to delete "${item.name}"?`,
                                           confirmLabel: 'DELETE CONFIG',
-                                          onConfirm: () => {
-                                            setIntegrationsList(prev => prev.filter(i => i.id !== item.id));
-                                            addLog(`Deleted integration ${item.name}`);
-                                            const auditEvent = {
-                                              action: `Deleted integration ${item.name}`,
-                                              user: currentUser?.name || 'Admin',
-                                              timestamp: new Date().toLocaleString(),
-                                              environment: item.environment,
-                                              result: 'Deleted'
-                                            };
-                                            setIntegrationAuditLogs(prev => [auditEvent, ...prev]);
-                                            setConfirmConfig(null);
-                                            setIntegrationFeedback(`Successfully removed integration configuration: ${item.name}`);
+                                          onConfirm: async () => {
+                                            try {
+                                              await deleteThirdPartyIntegration(item.id, item.name);
+                                            } catch (error: any) {
+                                              setIntegrationFeedback(`Error: ${error?.message || 'Unable to delete integration.'}`);
+                                            } finally {
+                                              setConfirmConfig(null);
+                                            }
                                           }
                                         });
                                       }}
