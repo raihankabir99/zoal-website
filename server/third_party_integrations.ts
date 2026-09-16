@@ -80,8 +80,7 @@ export async function listThirdPartyIntegrations(req: Request, res: Response) {
     await client.connect();
     try {
       const result = await client.query(
-        `select id,provider,display_name,category,auth_type,status,last_error,created_at,updated_at,last_verified_at,rotated_at,
-                right(encrypted_secret, 0) as secret_marker
+        `select id,provider,display_name,category,auth_type,status,last_error,created_at,updated_at,last_verified_at,rotated_at
          from public.zoal_third_party_integrations order by display_name asc`
       );
       return res.json({ ok: true, integrations: result.rows.map((row: any) => ({ ...row, secretConfigured: true })) });
@@ -148,7 +147,7 @@ export async function updateThirdPartyIntegration(req: Request, res: Response) {
     try {
       const result = await client.query(`update public.zoal_third_party_integrations set ${sets.join(', ')} where id = $${values.length} returning id,provider,display_name,category,auth_type,status,created_at,updated_at,last_verified_at,rotated_at`, values);
       if (!result.rows[0]) return res.status(404).json({ ok: false, error: 'Integration not found' });
-      await audit(req, 'THIRD_PARTY_INTEGRATION_UPDATE', id, { credentialRotated: secret !== undefined });
+      await audit(req, 'THIRD_PARTY_INTEGRATION_UPDATE', id, { credentialRotated: secret !== undefined, statusChanged: status !== undefined });
       return res.json({ ok: true, integration: { ...result.rows[0], secretConfigured: true } });
     } finally { await client.end(); }
   } catch (error: any) {
@@ -180,18 +179,32 @@ export async function testThirdPartyIntegration(req: Request, res: Response) {
     const client = getPgClient();
     await client.connect();
     try {
-      const result = await client.query(`select id,provider,encrypted_secret,iv,auth_tag from public.zoal_third_party_integrations where id = $1`, [id]);
+      const result = await client.query(`select id,provider,encrypted_secret,iv,auth_tag,status from public.zoal_third_party_integrations where id = $1`, [id]);
       const row = result.rows[0];
       if (!row) return res.status(404).json({ ok: false, error: 'Integration not found' });
       if (row.provider !== 'metricool') return res.status(400).json({ ok: false, error: 'No provider adapter is available for this integration yet' });
-      // Metricool is intentionally not called blindly here: its credential/auth contract
-      // must be validated against the exact account/API flow before production activation.
+
+      // IMPORTANT: decrypting proves only that the stored credential can be recovered.
+      // It is not an external Metricool API connectivity test. Metricool API calls require
+      // an API access token plus userId/blogId and must be routed through the backend.
       decryptSecret(row.encrypted_secret, row.iv, row.auth_tag);
-      await client.query(`update public.zoal_third_party_integrations set last_verified_at = now(), status = 'active', last_error = null where id = $1`, [id]);
-      await audit(req, 'THIRD_PARTY_INTEGRATION_TEST', id, { provider: row.provider, adapter: 'credential-integrity' });
-      return res.json({ ok: true, verified: true, mode: 'credential-integrity', message: 'Credential is encrypted and readable by the server. Provider API activation requires its supported adapter.' });
+
+      // Never promote an integration to active from a credential-integrity check.
+      // Activation remains manual until a real provider adapter has completed a successful API call.
+      if (row.status === 'active') {
+        await client.query(`update public.zoal_third_party_integrations set status = 'inactive', last_error = 'Provider API adapter has not completed a live connectivity test' where id = $1`, [id]);
+      }
+
+      await audit(req, 'THIRD_PARTY_INTEGRATION_CREDENTIAL_CHECK', id, { provider: row.provider, adapter: 'credential-integrity', apiCalled: false });
+      return res.json({
+        ok: true,
+        verified: false,
+        mode: 'credential-integrity',
+        active: false,
+        message: 'Credential encryption integrity verified. No provider API call was made, so this integration remains inactive.'
+      });
     } finally { await client.end(); }
   } catch (error: any) {
-    return res.status(error?.statusCode || 500).json({ ok: false, verified: false, error: error?.message || 'Integration test failed' });
+    return res.status(error?.statusCode || 500).json({ ok: false, verified: false, active: false, error: error?.message || 'Integration test failed' });
   }
 }
