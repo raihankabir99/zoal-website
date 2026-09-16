@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { logAuditEvent } from './audit';
 
 function getClient() {
-  return getServiceSupabaseClient() || getSupabaseClient();
+  return getServiceSupabaseClient();
 }
 
 async function requireMarketingReadAccess(req: Request, res: Response): Promise<boolean> {
