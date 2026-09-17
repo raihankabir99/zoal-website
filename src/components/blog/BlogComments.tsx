@@ -13,6 +13,7 @@ export function BlogComments({ postId, currentUser }: BlogCommentsProps) {
   const { t, i18n } = useTranslation();
   const [comments, setComments] = useState<BlogComment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [content, setContent] = useState('');
   const [replyingTo, setReplyingTo] = useState<BlogComment | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -21,10 +22,12 @@ export function BlogComments({ postId, currentUser }: BlogCommentsProps) {
   const fetchComments = async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       const data = await blogService.getComments(postId);
       setComments(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load comments:', err);
+      setFetchError(err.message || 'Failed to load comments.');
     } finally {
       setLoading(false);
     }
@@ -240,6 +243,20 @@ export function BlogComments({ postId, currentUser }: BlogCommentsProps) {
             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
               {t('blog.curating_editorials')}
             </span>
+          </div>
+        ) : fetchError ? (
+          <div className="text-center py-6 sm:py-12 border border-red-500/20 bg-red-950/10 rounded-xs px-4 space-y-3">
+            <ShieldAlert className="w-7 h-7 sm:w-8 sm:h-8 text-red-400 mx-auto" />
+            <p className="text-red-400 text-xs tracking-wider font-mono">
+              {fetchError}
+            </p>
+            <button
+              type="button"
+              onClick={fetchComments}
+              className="text-[10px] font-bold uppercase tracking-widest px-4 py-2 bg-white/5 border border-white/10 hover:border-gold-pure/50 text-white rounded-xs transition-all cursor-pointer"
+            >
+              {t('blog.retry', { defaultValue: 'Retry' })}
+            </button>
           </div>
         ) : rootComments.length === 0 ? (
           <div className="text-center py-6 sm:py-12 border border-dashed border-white/5 rounded-xs px-4">

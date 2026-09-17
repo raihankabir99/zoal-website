@@ -2986,7 +2986,7 @@ app.post('/api/blog/tags', authenticateRequest, requireRole(['staff', 'editor', 
 app.delete('/api/blog/tags/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteTag);
 
 app.get('/api/blog/comments', blogModule.getComments);
-app.post('/api/blog/comments', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.createComment);
+app.post('/api/blog/comments', authenticateRequest, blogModule.createComment);
 app.put('/api/blog/comments/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.updateCommentStatus);
 app.delete('/api/blog/comments/:id', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.deleteComment);
 
@@ -3011,8 +3011,12 @@ app.post('/api/blog/revisions', authenticateRequest, requireRole(['staff', 'edit
 app.get('/api/blog/schedule', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.getSchedules);
 app.post('/api/blog/schedule', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.scheduleBlogPost);
 app.post('/api/blog/schedule/cancel', authenticateRequest, requireRole(['staff', 'editor', 'manager', 'admin', 'owner']), blogModule.cancelPostSchedule);
+app.post('/api/blog/cron/process-schedules', blogModule.handleCronProcessSchedules);
+app.get('/api/blog/cron/process-schedules', blogModule.handleCronProcessSchedules);
 app.post('/api/blog/posts/:id/view', blogModule.trackBlogPostView);
 app.post('/api/blog/:id/view', blogModule.trackBlogPostView);
+app.get('/api/blog/posts/:id/like', blogModule.getPostLikeStatus);
+app.post('/api/blog/posts/:id/like', blogModule.togglePostLike);
 
 // -------------------------------------------------------------
 // ENTERPRISE PRODUCTION PRODUCT IMPORT ENGINE API ROUTES

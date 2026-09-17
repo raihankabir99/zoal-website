@@ -11,7 +11,7 @@ import { blogService } from '../../services/blogService';
 import { SafeImage } from '../../imageRegistry';
 
 interface BlogGridPageProps {
-  type: 'category' | 'tag' | 'author' | 'archive';
+  type: 'category' | 'tag' | 'author' | 'archive' | 'trending';
   id?: string;
   onBack: () => void;
   onPostClick: (post: BlogPost) => void;
@@ -42,16 +42,17 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
         if (type === 'category' && id) {
           fetchedPosts = await blogService.getPosts({ category: id });
           const categories = await blogService.getCategories();
-          info = categories.find(c => c.id === id);
+          info = categories.find(c => c.id === id || c.slug === id);
         } else if (type === 'tag' && id) {
           fetchedPosts = await blogService.getPosts({ tag: id });
           const tags = await blogService.getTags();
-          info = tags.find(t => t.id === id);
+          info = tags.find(t => t.id === id || t.slug === id);
         } else if (type === 'author' && id) {
-          fetchedPosts = await blogService.getPosts();
-          fetchedPosts = fetchedPosts.filter(p => p.author_id === id);
+          fetchedPosts = await blogService.getPosts({ author: id });
           const authors = await blogService.getAuthors();
           info = authors.find(a => a.id === id);
+        } else if (type === 'trending') {
+          fetchedPosts = await blogService.getPosts({ sortBy: 'trending' });
         } else {
           fetchedPosts = await blogService.getPosts();
         }
@@ -73,12 +74,15 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
       return localized(metaInfo, 'name') || t('blog.archive.category');
     }
     if (type === 'tag') {
-      const tagName = localized(metaInfo, 'name') || 'Tag';
+      const tagName = localized(metaInfo, 'name') || id || 'Tag';
       return `#${tagName}`;
     }
     if (type === 'author') {
       const authorName = localized(metaInfo, 'name') || t('blog.author');
       return t('blog.archive.author', { name: authorName });
+    }
+    if (type === 'trending') {
+      return t('blog.trending_title', { defaultValue: 'Trending Dispatches' });
     }
     return t('blog.archive.general');
   };
@@ -89,6 +93,9 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
     }
     if (type === 'author') {
       return localized(metaInfo, 'bio') || t('blog.archive.author_desc');
+    }
+    if (type === 'trending') {
+      return t('blog.trending_desc', { defaultValue: 'Most engaging and widely read editorial publications.' });
     }
     return t('blog.archive.general_desc');
   };

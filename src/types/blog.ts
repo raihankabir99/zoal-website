@@ -21,6 +21,10 @@ export interface BlogPost {
   view_count?: number;
   like_count?: number;
   published_at?: string;
+  canonical_url?: string;
+  meta_title?: string;
+  meta_description?: string;
+  meta_keywords?: string;
   status: 'draft' | 'in_review' | 'published' | 'scheduled' | 'archived';
   created_at: string;
   updated_at: string;

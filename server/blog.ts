@@ -75,7 +75,7 @@ export async function getBlogPosts(req: Request, res: Response) {
   const supabase = getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
-  const { category, tag, search, status, limit = '50', page = '1' } = req.query;
+  const { category, tag, author, search, status, sortBy, limit = '50', page = '1' } = req.query;
 
   // Verify status access
   let targetStatus = 'published';
@@ -101,8 +101,50 @@ export async function getBlogPosts(req: Request, res: Response) {
 
   query = query.eq('status', targetStatus);
 
-  if (category) {
+  if (category && typeof category === 'string') {
     query = query.eq('category_id', category);
+  }
+
+  if (author && typeof author === 'string') {
+    let authorId = author;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(author);
+    if (!isUuid) {
+      const { data: authorRow } = await supabase
+        .from('zoal_blog_authors')
+        .select('id')
+        .or(`name.eq.${author},email.eq.${author}`)
+        .maybeSingle();
+      if (authorRow) {
+        authorId = authorRow.id;
+      }
+    }
+    query = query.eq('author_id', authorId);
+  }
+
+  if (tag && typeof tag === 'string') {
+    let tagId = tag;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tag);
+    if (!isUuid) {
+      const { data: tagRow } = await supabase
+        .from('zoal_blog_tags')
+        .select('id')
+        .or(`slug.eq.${tag},name.eq.${tag}`)
+        .maybeSingle();
+      if (tagRow) {
+        tagId = tagRow.id;
+      }
+    }
+
+    const { data: postTagRows } = await supabase
+      .from('zoal_blog_post_tags')
+      .select('post_id')
+      .eq('tag_id', tagId);
+
+    const matchingPostIds = postTagRows ? postTagRows.map((r: any) => r.post_id) : [];
+    if (matchingPostIds.length === 0) {
+      return res.json({ posts: [], page: parseInt(page as string, 10) || 1, limit: parseInt(limit as string, 10) || 50, total: 0 });
+    }
+    query = query.in('id', matchingPostIds);
   }
 
   if (search && typeof search === 'string') {
@@ -112,11 +154,24 @@ export async function getBlogPosts(req: Request, res: Response) {
     }
   }
 
+  if (sortBy === 'trending') {
+    query = query
+      .order('view_count', { ascending: false })
+      .order('like_count', { ascending: false })
+      .order('created_at', { ascending: false });
+  } else if (sortBy === 'popular') {
+    query = query.order('view_count', { ascending: false });
+  } else if (sortBy === 'oldest') {
+    query = query.order('created_at', { ascending: true });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+
   const lim = parseInt(limit as string, 10) || 50;
   const pge = parseInt(page as string, 10) || 1;
   const offset = (pge - 1) * lim;
 
-  query = query.order('created_at', { ascending: false }).range(offset, offset + lim - 1);
+  query = query.range(offset, offset + lim - 1);
 
   const { data, error, count } = await query;
   if (error) return res.status(500).json({ error: error.message });
@@ -501,6 +556,16 @@ if (typeof setInterval !== 'undefined') {
   setInterval(() => {
     processScheduledBlogPosts().catch(err => console.error('Interval scheduler run error:', err));
   }, 30000);
+}
+
+export async function handleCronProcessSchedules(req: Request, res: Response) {
+  try {
+    await processScheduledBlogPosts();
+    return res.json({ success: true, message: 'Scheduled blog posts processing completed.' });
+  } catch (err: any) {
+    console.error('[Blog Scheduler Cron Endpoint] Error:', err);
+    return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+  }
 }
 
 export async function scheduleBlogPost(req: Request, res: Response) {
@@ -1409,4 +1474,103 @@ export async function trackBlogPostView(req: Request, res: Response) {
     console.error('[Blog Views] Error tracking view:', err);
     return res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }
+}
+
+export async function getPostLikeStatus(req: Request, res: Response) {
+  const { id } = req.params;
+  const user = await getOptionalUser(req);
+  const userIdentifier = user?.id || (req.query.userIdentifier as string) || req.ip || 'anonymous';
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+
+  const { data: post, error: postErr } = await supabase
+    .from('zoal_blog_posts')
+    .select('like_count')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (postErr || !post) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+
+  const { data: likeRecord } = await supabase
+    .from('zoal_blog_likes')
+    .select('status')
+    .eq('post_id', id)
+    .eq('user_identifier', userIdentifier)
+    .maybeSingle();
+
+  const liked = !!likeRecord && likeRecord.status === 'active';
+  res.json({ liked, like_count: post.like_count || 0 });
+}
+
+export async function togglePostLike(req: Request, res: Response) {
+  const { id } = req.params;
+  const user = await getOptionalUser(req);
+  const userIdentifier = user?.id || req.body.userIdentifier || req.ip || 'anonymous';
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+
+  const { data: post, error: postErr } = await supabase
+    .from('zoal_blog_posts')
+    .select('id, like_count')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (postErr || !post) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+
+  const { data: existingLike } = await supabase
+    .from('zoal_blog_likes')
+    .select('id, status')
+    .eq('post_id', id)
+    .eq('user_identifier', userIdentifier)
+    .maybeSingle();
+
+  let newLiked = false;
+  let newCount = post.like_count || 0;
+
+  if (existingLike && existingLike.status === 'active') {
+    await supabase
+      .from('zoal_blog_likes')
+      .update({ status: 'inactive' })
+      .eq('id', existingLike.id);
+
+    newCount = Math.max(0, newCount - 1);
+    await supabase
+      .from('zoal_blog_posts')
+      .update({ like_count: newCount })
+      .eq('id', id);
+
+    newLiked = false;
+  } else {
+    if (existingLike) {
+      await supabase
+        .from('zoal_blog_likes')
+        .update({ status: 'active' })
+        .eq('id', existingLike.id);
+    } else {
+      await supabase
+        .from('zoal_blog_likes')
+        .insert({
+          post_id: id,
+          user_id: user?.id || null,
+          user_identifier: userIdentifier,
+          status: 'active'
+        });
+    }
+
+    newCount = newCount + 1;
+    await supabase
+      .from('zoal_blog_posts')
+      .update({ like_count: newCount })
+      .eq('id', id);
+
+    newLiked = true;
+  }
+
+  res.json({ liked: newLiked, like_count: newCount });
 }

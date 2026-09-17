@@ -30,6 +30,24 @@ export default function Blog({ onPostSelect, currentUser }: BlogProps) {
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [subscribed, setSubscribed] = useState(false);
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [isSubmittingNewsletter, setIsSubmittingNewsletter] = useState(false);
+  const [newsletterError, setNewsletterError] = useState<string | null>(null);
+
+  const handleNewsletterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterEmail || !newsletterEmail.includes('@')) return;
+    setIsSubmittingNewsletter(true);
+    setNewsletterError(null);
+    try {
+      await blogService.subscribeNewsletter(newsletterEmail);
+      setSubscribed(true);
+    } catch (err: any) {
+      setNewsletterError(err.message || 'Failed to subscribe to newsletter.');
+    } finally {
+      setIsSubmittingNewsletter(false);
+    }
+  };
 
   // Notify parent of selected post for SEO
   useEffect(() => {
@@ -68,7 +86,7 @@ export default function Blog({ onPostSelect, currentUser }: BlogProps) {
   };
 
   return (
-    <div className="bg-black text-white min-h-screen pt-[50px] sm:pt-[84px] md:pt-[88px] lg:pt-[92px] relative">
+    <div className="bg-black text-white min-h-screen pt-[50px] sm:pt-[84px] md:pt-[88px] lg:pt-[92px] relative" dir={i18n.language === 'ar' ? 'rtl' : 'ltr'}>
       {/* View Controller */}
       <div className="pb-1 sm:pb-20">
         {currentView === 'home' && (
@@ -96,7 +114,7 @@ export default function Blog({ onPostSelect, currentUser }: BlogProps) {
 
         {['category', 'tag', 'author', 'archive', 'trending'].includes(currentView) && (
           <BlogGridPage 
-            type={currentView as any}
+            type={currentView as 'category' | 'tag' | 'author' | 'archive' | 'trending'}
             id={selectedId}
             onBack={() => setCurrentView('home')}
             onPostClick={handlePostClick}
@@ -124,16 +142,28 @@ export default function Blog({ onPostSelect, currentUser }: BlogProps) {
               {t('blog.success_message')}
             </div>
           ) : (
-            <form onSubmit={(e) => { e.preventDefault(); setSubscribed(true); }} className="max-w-md mx-auto relative group">
-              <input 
-                type="email" 
-                required
-                placeholder={t('blog.email_placeholder')}
-                className="w-full bg-black border border-white/10 rounded-xs px-4 py-3.5 sm:px-6 sm:py-5 text-xs text-white placeholder:text-zinc-700 outline-none focus:border-gold-pure transition-all pr-40 tracking-widest"
-              />
-              <button type="submit" className="absolute right-2 top-2 bottom-2 bg-gold-pure text-black px-6 rounded-xs text-[10px] font-bold uppercase tracking-widest hover:bg-gold-light transition-all cursor-pointer">
-                {t('blog.subscribe_now')}
-              </button>
+            <form onSubmit={handleNewsletterSubmit} className="max-w-md mx-auto relative group space-y-2">
+              <div className="relative">
+                <input 
+                  type="email" 
+                  required
+                  value={newsletterEmail}
+                  onChange={(e) => setNewsletterEmail(e.target.value)}
+                  placeholder={t('blog.email_placeholder')}
+                  className="w-full bg-black border border-white/10 rounded-xs px-4 py-3.5 sm:px-6 sm:py-5 text-xs text-white placeholder:text-zinc-700 outline-none focus:border-gold-pure transition-all pr-40 tracking-widest disabled:opacity-50"
+                  disabled={isSubmittingNewsletter}
+                />
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingNewsletter}
+                  className="absolute right-2 top-2 bottom-2 bg-gold-pure text-black px-6 rounded-xs text-[10px] font-bold uppercase tracking-widest hover:bg-gold-light transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingNewsletter ? '...' : t('blog.subscribe_now')}
+                </button>
+              </div>
+              {newsletterError && (
+                <p className="text-red-400 text-xs text-left font-mono">{newsletterError}</p>
+              )}
             </form>
           )}
 

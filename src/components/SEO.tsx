@@ -40,10 +40,21 @@ export default function SEO({ currentPage, selectedProduct, selectedPost, authMo
       description = activeExcerpt || `${activeTitle} - Curated luxury article from ${settings.businessName} house of excellence.`;
       
       keywords = `${activeTitle.toLowerCase()}, blog, ${keywords}`;
-      canonical = `${window.location.origin}/blog/${selectedPost.slug}`;
+      canonical = selectedPost.canonical_url || `${window.location.origin}/blog/${selectedPost.slug || selectedPost.id}`;
       ogType = 'article';
       if (selectedPost.featured_image) {
         ogImage = selectedPost.featured_image;
+      }
+
+      // Draft/unpublished articles should not be indexed publicly
+      if (selectedPost.status && selectedPost.status !== 'published') {
+        let robotsTag = document.querySelector('meta[name="robots"]');
+        if (!robotsTag) {
+          robotsTag = document.createElement('meta');
+          robotsTag.setAttribute('name', 'robots');
+          document.head.appendChild(robotsTag);
+        }
+        robotsTag.setAttribute('content', 'noindex, nofollow');
       }
     } else if (selectedProduct) {
       title = `${selectedProduct.name} | ${settings.businessName} Luxury Selection`;

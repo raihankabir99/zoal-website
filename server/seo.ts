@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
 import { ARTICLES } from '../src/data';
 import { friendlyToUUID } from '../src/lib/uuidMapper';
+import { getSupabaseClient } from './supabase';
 
 // Cache to prevent calling Gemini API or Database repeatedly for same static requests
 const seoCache = new Map<string, any>();
@@ -155,7 +156,8 @@ export async function generateSEOMetadata(pathUrl: string, query: Record<string,
   const brandSettings = await getBrandingSettings();
   const brandName = brandSettings.businessName.split(' ')[0];
   const baseUrl = `https://${host}`;
-  const canonicalUrl = `${baseUrl}${pathUrl}`;
+  let canonicalUrl = `${baseUrl}${pathUrl}`;
+  const isAr = query.lang === 'ar' || query.hl === 'ar' || pathUrl.startsWith('/ar');
 
   // Default values
   let seoTitle = `${brandSettings.businessName} | Premium Coffee, Pastry, Couture, & Sandstone Accessories`;
@@ -415,22 +417,45 @@ Ensure:
     if (!blogId && pathUrl.includes('/blog/')) {
       blogId = pathUrl.split('/blog/')[1]?.split('?')[0];
     }
-    const article = ARTICLES.find(art => art.id === blogId);
-    if (article) {
-      seoTitle = `${article.title} | ${brandSettings.businessName} Blog`;
-      seoDesc = article.excerpt || article.content.slice(0, 150);
-      seoKeywords = `${article.category.toLowerCase()}, blog, ${seoKeywords}`;
-      if (article.image) ogImage = article.image;
-      ogType = 'article';
+    
+    let dbArticle: any = null;
+    if (blogId) {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(blogId);
+        const field = isUuid ? 'id' : 'slug';
+        const { data } = await supabase
+          .from('zoal_blog_posts')
+          .select('*, zoal_blog_authors(*)')
+          .eq(field, blogId)
+          .eq('status', 'published')
+          .maybeSingle();
+        if (data) dbArticle = data;
+      }
+    }
 
-      // Gemini generation for dynamic blog article
-      if (process.env.GEMINI_API_KEY) {
+    const article = dbArticle || ARTICLES.find(art => art.id === blogId);
+    if (article) {
+      const activeTitle = (isAr && article.title_ar) ? article.title_ar : (article.title || '');
+      const activeExcerpt = (isAr && article.excerpt_ar) ? article.excerpt_ar : (article.excerpt || article.content?.slice(0, 150) || '');
+
+      seoTitle = `${activeTitle} | ${brandSettings.businessName} Blog`;
+      if (activeExcerpt) seoDesc = activeExcerpt;
+      seoKeywords = `${activeTitle.toLowerCase()}, blog, ${seoKeywords}`;
+      if (article.featured_image || article.image) ogImage = article.featured_image || article.image;
+      ogType = 'article';
+      if (article.canonical_url) {
+        canonicalUrl = article.canonical_url;
+      } else {
+        canonicalUrl = `${baseUrl}/blog/${article.slug || article.id}`;
+      }
+
+      // Gemini generation for dynamic blog article if needed
+      if (process.env.GEMINI_API_KEY && activeTitle) {
         try {
-          const aiPrompt = `Generate optimized Enterprise SEO meta tags (Title, Description, Keywords) in English for this cultural and luxury Saudi blog article:
-Title: ${article.title}
-Category: ${article.category}
-Excerpt: ${article.excerpt}
-Content Summary: ${article.content.slice(0, 500)}...
+          const aiPrompt = `Generate optimized Enterprise SEO meta tags (Title, Description, Keywords) in ${isAr ? 'Arabic' : 'English'} for this cultural and luxury Saudi blog article:
+Title: ${activeTitle}
+Excerpt: ${activeExcerpt}
 
 Ensure:
 1. Title is highly optimized, engaging, under 60 characters.
@@ -458,9 +483,8 @@ Ensure:
           if (geminiData.title) seoTitle = geminiData.title;
           if (geminiData.description) seoDesc = geminiData.description;
           if (geminiData.keywords) seoKeywords = geminiData.keywords;
-          console.log(`✨ Server SEO: Generated metadata automatically via Gemini for Blog Post "${article.title}"`);
         } catch (err: any) {
-          console.warn(`⚠️ Server SEO: Gemini generation failed for blog ${article.title}:`, err.message || err);
+          console.warn(`⚠️ Server SEO: Gemini generation failed for blog ${activeTitle}:`, err.message || err);
         }
       }
 
@@ -473,8 +497,22 @@ Ensure:
       breadcrumbs.push({
         '@type': 'ListItem',
         'position': 3,
-        'name': article.title,
-        'item': `${baseUrl}/blog?post=${article.id}`
+        'name': activeTitle,
+        'item': canonicalUrl
+      });
+    } else {
+      seoTitle = isAr 
+        ? `مدونة زُؤَال | أصالة الأحساء ورؤى الفخامة`
+        : `Al-Ahsa Chronicles & Luxury Insights | ${brandSettings.businessName} Blog`;
+      seoDesc = isAr
+        ? `مقالات حصرية في بروتوكولات القهوة السعودية، فن خياطة الزري الألماني، والتصاميم التراثية الفاخرة.`
+        : `Read stories on saudi coffee protocols, the artistry of German gold wire zari sewing, Al-Ahsa architectural details, and seasonal designer launches.`;
+      canonicalUrl = `${baseUrl}/blog`;
+      breadcrumbs.push({
+        '@type': 'ListItem',
+        'position': 2,
+        'name': 'Blog',
+        'item': `${baseUrl}/blog`
       });
     }
   } else {

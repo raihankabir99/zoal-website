@@ -147,37 +147,42 @@ const FALLBACK_BLOG_POSTS: BlogPost[] = ARTICLES.map((art, idx) => {
 });
 
 export const blogService = {
-  async getPosts(params?: { category?: string; tag?: string; search?: string; status?: string }): Promise<BlogPost[]> {
-    try {
-      let url = '/api/blog';
-      const queryParams = new URLSearchParams();
-      if (params?.category) queryParams.set('category', params.category);
-      if (params?.tag) queryParams.set('tag', params.tag);
-      if (params?.search) queryParams.set('search', params.search);
-      if (params?.status) queryParams.set('status', params.status);
-      if (queryParams.toString()) url += `?${queryParams.toString()}`;
+  async getPosts(params?: { 
+    category?: string; 
+    tag?: string; 
+    author?: string; 
+    search?: string; 
+    status?: string; 
+    sortBy?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<BlogPost[]> {
+    let url = '/api/blog';
+    const queryParams = new URLSearchParams();
+    if (params?.category) queryParams.set('category', params.category);
+    if (params?.tag) queryParams.set('tag', params.tag);
+    if (params?.author) queryParams.set('author', params.author);
+    if (params?.search) queryParams.set('search', params.search);
+    if (params?.status) queryParams.set('status', params.status);
+    if (params?.sortBy) queryParams.set('sortBy', params.sortBy);
+    if (params?.page) queryParams.set('page', String(params.page));
+    if (params?.limit) queryParams.set('limit', String(params.limit));
+    if (queryParams.toString()) url += `?${queryParams.toString()}`;
 
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Failed to fetch blog posts');
-      const data = await res.json();
-      const rawPosts = Array.isArray(data.posts) ? data.posts : FALLBACK_BLOG_POSTS;
-      return rawPosts.map((post: BlogPost) => ({
-        ...post,
-        zoal_blog_categories: post.zoal_blog_categories ? {
-          ...post.zoal_blog_categories,
-          name: mapCategoryName(post.zoal_blog_categories.name)
-        } : undefined
-      }));
-    } catch (e) {
-      console.warn('Backend blog service getPosts using fallback articles:', e);
-      return FALLBACK_BLOG_POSTS.map((post: BlogPost) => ({
-        ...post,
-        zoal_blog_categories: post.zoal_blog_categories ? {
-          ...post.zoal_blog_categories,
-          name: mapCategoryName(post.zoal_blog_categories.name)
-        } : undefined
-      }));
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Failed to fetch blog posts');
     }
+    const data = await res.json();
+    const rawPosts = Array.isArray(data.posts) ? data.posts : (Array.isArray(data) ? data : []);
+    return rawPosts.map((post: BlogPost) => ({
+      ...post,
+      zoal_blog_categories: post.zoal_blog_categories ? {
+        ...post.zoal_blog_categories,
+        name: mapCategoryName(post.zoal_blog_categories.name)
+      } : undefined
+    }));
   },
 
   async createPost(payload: Partial<BlogPost>): Promise<BlogPost> {
@@ -212,22 +217,17 @@ export const blogService = {
   },
 
   async getCategories(): Promise<BlogCategory[]> {
-    try {
-      const res = await fetch('/api/blog/categories');
-      if (!res.ok) throw new Error('Failed to fetch categories');
-      const data = await res.json();
-      const rawCategories = Array.isArray(data) ? data : FALLBACK_CATEGORIES;
-      return rawCategories.map(cat => ({
-        ...cat,
-        name: mapCategoryName(cat.name)
-      }));
-    } catch (e) {
-      console.warn('Backend blog service getCategories using fallbacks:', e);
-      return FALLBACK_CATEGORIES.map(cat => ({
-        ...cat,
-        name: mapCategoryName(cat.name)
-      }));
+    const res = await fetch('/api/blog/categories');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Failed to fetch categories');
     }
+    const data = await res.json();
+    const rawCategories = Array.isArray(data) ? data : [];
+    return rawCategories.map(cat => ({
+      ...cat,
+      name: mapCategoryName(cat.name)
+    }));
   },
 
   async createCategory(payload: Partial<BlogCategory>): Promise<BlogCategory> {
@@ -262,15 +262,13 @@ export const blogService = {
   },
 
   async getTags(): Promise<BlogTag[]> {
-    try {
-      const res = await fetch('/api/blog/tags');
-      if (!res.ok) throw new Error('Failed to fetch tags');
-      const data = await res.json();
-      return Array.isArray(data) && data.length > 0 ? data : FALLBACK_TAGS;
-    } catch (e) {
-      console.warn('Backend blog service getTags using fallbacks:', e);
-      return FALLBACK_TAGS;
+    const res = await fetch('/api/blog/tags');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Failed to fetch tags');
     }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   },
 
   async createTag(payload: Partial<BlogTag>): Promise<BlogTag> {
@@ -362,15 +360,13 @@ export const blogService = {
   },
 
   async getAuthors(): Promise<BlogAuthor[]> {
-    try {
-      const res = await fetch('/api/blog/authors');
-      if (!res.ok) throw new Error('Failed to fetch authors');
-      const data = await res.json();
-      return Array.isArray(data) && data.length > 0 ? data : FALLBACK_AUTHORS;
-    } catch (e) {
-      console.warn('Backend blog service getAuthors using fallbacks:', e);
-      return FALLBACK_AUTHORS;
+    const res = await fetch('/api/blog/authors');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Failed to fetch authors');
     }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   },
 
   async getMedia(): Promise<BlogMedia[]> {
@@ -438,16 +434,39 @@ export const blogService = {
   },
 
   async subscribeNewsletter(email: string): Promise<void> {
-    try {
-      const res = await fetch('/api/blog/newsletter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      if (!res.ok) throw new Error('Failed to subscribe to newsletter');
-    } catch (e) {
-      console.warn('Backend newsletter subscription fallback used:', e);
+    const res = await fetch('/api/blog/newsletter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Failed to subscribe to newsletter');
     }
+  },
+
+  async getLikeStatus(postId: string, userIdentifier?: string): Promise<{ liked: boolean; like_count: number }> {
+    try {
+      const query = userIdentifier ? `?userIdentifier=${encodeURIComponent(userIdentifier)}` : '';
+      const res = await fetch(`/api/blog/posts/${postId}/like${query}`);
+      if (!res.ok) return { liked: false, like_count: 0 };
+      return res.json();
+    } catch {
+      return { liked: false, like_count: 0 };
+    }
+  },
+
+  async toggleLike(postId: string, userIdentifier?: string): Promise<{ liked: boolean; like_count: number }> {
+    const res = await fetch(`/api/blog/posts/${postId}/like`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIdentifier })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || err.error || 'Failed to update article like status');
+    }
+    return res.json();
   },
 
   async getRevisions(postId: string): Promise<BlogRevision[]> {

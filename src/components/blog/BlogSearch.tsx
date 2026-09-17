@@ -68,25 +68,12 @@ export function BlogSearch({ onPostClick }: BlogSearchProps) {
           search: searchTerm,
           category: selectedCategory !== 'all' ? selectedCategory : undefined,
           tag: selectedTag !== 'all' ? selectedTag : undefined,
+          author: selectedAuthor !== 'all' ? selectedAuthor : undefined,
+          sortBy: sortBy,
           status: 'published'
         });
 
-        // Client side filtering for author since service might not support it yet
-        let filtered = posts;
-        if (selectedAuthor !== 'all') {
-          filtered = posts.filter(p => p.author_id === selectedAuthor);
-        }
-
-        // Sorting
-        if (sortBy === 'newest') {
-          filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        } else if (sortBy === 'popular') {
-          filtered.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-        } else if (sortBy === 'oldest') {
-          filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        }
-
-        setResults(filtered);
+        setResults(posts);
       } catch (err) {
         console.error('Search failed:', err);
       } finally {
