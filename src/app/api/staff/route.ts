@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, validateFields } from '../helpers';
+import { paymentStatusForOrderStatus } from '../../../lib/orderPaymentStatus.mjs';
 
 /**
  * GET /api/staff
@@ -62,8 +63,8 @@ export async function PUT(req: NextRequest) {
       const normalizedStatus = statusMap[body.status.trim()] || statusMap[body.status.trim().toLowerCase()];
       if (!normalizedStatus) return apiError('Invalid status value.', 400);
       updateFields.status = normalizedStatus;
-      if (normalizedStatus === 'delivered') updateFields.payment_status = 'paid';
-      if (normalizedStatus === 'refunded') updateFields.payment_status = 'refunded';
+      const paymentStatus = paymentStatusForOrderStatus(body.status.trim());
+      if (paymentStatus) updateFields.payment_status = paymentStatus;
     }
 
     if (typeof body.trackingNumber === 'string') {
