@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, validateFields } from '../helpers';
 import { paymentStatusForOrderStatus } from '../../../lib/orderPaymentStatus.mjs';
+import { canTransitionOrderStatus } from '../../../lib/orderStatusTransition.mjs';
 
 /**
  * GET /api/staff
@@ -60,10 +61,24 @@ export async function PUT(req: NextRequest) {
 
     const updateFields: Record<string, any> = {};
     if (typeof body.status === 'string' && body.status.trim()) {
-      const normalizedStatus = statusMap[body.status.trim()] || statusMap[body.status.trim().toLowerCase()];
+      const requestedStatus = body.status.trim();
+      const normalizedStatus = statusMap[requestedStatus] || statusMap[requestedStatus.toLowerCase()];
       if (!normalizedStatus) return apiError('Invalid status value.', 400);
+
+      const { data: currentOrder, error: currentOrderError } = await supabase
+        .from('zoal_orders')
+        .select('id, status')
+        .eq('id', body.orderId)
+        .maybeSingle();
+      if (currentOrderError) return apiError(currentOrderError.message, 500);
+      if (!currentOrder) return apiError('Order not found.', 404);
+
+      if (!canTransitionOrderStatus(currentOrder.status, normalizedStatus)) {
+        return apiError(`Invalid order status transition: ${currentOrder.status} -> ${normalizedStatus}.`, 409);
+      }
+
       updateFields.status = normalizedStatus;
-      const paymentStatus = paymentStatusForOrderStatus(body.status.trim());
+      const paymentStatus = paymentStatusForOrderStatus(requestedStatus);
       if (paymentStatus) updateFields.payment_status = paymentStatus;
     }
 
@@ -120,7 +135,7 @@ export async function PUT(req: NextRequest) {
 
     if (error) return apiError(error.message, 500);
 
-    await supabase.from('zoal_activity_logs').insert({
+    const { error: activityError } = await supabase.from('zoal_activity_logs').insert({
       id: randomUUID(),
       user_id: auth.user.id,
       email: auth.user.email,
@@ -129,6 +144,8 @@ export async function PUT(req: NextRequest) {
       resource_id: body.orderId,
       metadata: { fields: Object.keys(updateFields).filter(k => k !== 'updated_at') }
     });
+
+    if (activityError) return apiError(`Order updated, but activity log failed: ${activityError.message}`, 500);
 
     return apiResponse(updatedOrder);
   } catch (err: any) {
