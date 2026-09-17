@@ -6,7 +6,7 @@ import { logAuditEvent } from './audit';
 const { Client: PgClient } = pg;
 
 function getClient() {
-  return getServiceSupabaseClient() || getSupabaseClient();
+  return getServiceSupabaseClient();
 }
 
 /**
