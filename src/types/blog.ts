@@ -25,7 +25,7 @@ export interface BlogPost {
   created_at: string;
   updated_at: string;
   tag_ids?: string[];
-  zoal_blog_authors?: { name: string; name_ar?: string; avatar_url?: string; bio?: string; bio_ar?: string; expertise?: string; expertise_ar?: string; id?: string };
+  zoal_blog_authors?: { name: string; name_ar?: string; avatar_url?: string; bio?: string; bio_ar?: string; expertise?: string; expertise_ar?: string; id?: string; twitter_url?: string; linkedin_url?: string };
   zoal_blog_categories?: { name: string; name_ar?: string; slug: string };
   zoal_blog_tags?: BlogTag[];
 }
@@ -77,6 +77,8 @@ export interface BlogAuthor {
   status: string;
   expertise?: string;
   expertise_ar?: string;
+  twitter_url?: string;
+  linkedin_url?: string;
   joined_date?: string;
 }
 

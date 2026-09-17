@@ -33,10 +33,6 @@ export default React.memo(function Store({
   wishlist,
   initialCategoryFilter = 'all'
 }: StoreProps) {
-  const renderTime = performance.now();
-  console.count("[Audit] Store render");
-  console.log(`[Audit] Store rendering. time: ${renderTime.toFixed(2)}ms`);
-
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === 'ar';
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,8 +48,6 @@ export default React.memo(function Store({
   // Hook subscriptions
   const allProducts = useGlobalProducts();
   const globalImages = useGlobalImages();
-
-  console.log(`[Audit] Store hook products: ${allProducts.length}, time: ${performance.now().toFixed(2)}ms`);
 
   // Authoritative CMS lists. null means the request has not completed or failed; an empty array is valid server state.
   const [serverCategories, setServerCategories] = useState<any[] | null>(null);
@@ -162,16 +156,25 @@ export default React.memo(function Store({
 
   // Compute filtered & sorted product list with strict validation of elements
   const filteredProducts = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
     const rawFiltered = allProducts.filter((product) => {
       const matchSearch =
-        (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.story || '').toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        (product.name || '').toLowerCase().includes(term) ||
+        (product.nameEn || '').toLowerCase().includes(term) ||
+        (product.nameAr || '').toLowerCase().includes(term) ||
+        (product.title_ar || '').toLowerCase().includes(term) ||
+        (product.description || '').toLowerCase().includes(term) ||
+        (product.description_ar || '').toLowerCase().includes(term) ||
+        (product.shortDescription || '').toLowerCase().includes(term) ||
+        (product.short_description_ar || '').toLowerCase().includes(term) ||
+        (product.story || '').toLowerCase().includes(term);
       
       const matchCategory = activeCategory === 'all' || normalizeCategory(product.category) === normalizeCategory(activeCategory);
+      const isProductInStock = product.inventory === undefined || product.inventory > 0;
       const matchFilter = 
         activeFilter === 'all' ||
-        (activeFilter === 'in_stock' && product.inventory > 0) ||
+        (activeFilter === 'in_stock' && isProductInStock) ||
         (activeFilter === 'featured' && (product.isFeatured || product.is_featured || product.featured)) ||
         (activeFilter === 'popular' && (product.isPopular || product.is_popular || product.popular)) ||
         (activeFilter === 'new_arrivals' && (product.isNewArrival || product.is_new_arrival)) ||
@@ -197,7 +200,16 @@ export default React.memo(function Store({
     });
   }, [allProducts, searchTerm, activeCategory, activeFilter, sortBy]);
 
-  // Determine standard configuration options per category
+  // Keyboard Escape dismissal for quick view modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && quickViewProduct) {
+        setQuickViewProduct(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [quickViewProduct]);
   const getProductOptions = (category: BusinessCategory) => {
     switch (category) {
       case 'coffee': return ['Whole Beans', 'Infused Ground', 'Fine Roasted Espresso'];
@@ -566,12 +578,16 @@ export default React.memo(function Store({
                     product.category === 'market' ? 'aspect-[16/9]' : 'aspect-square'
                   }`}>
                     
-                    {/* Floating popular badge */}
-                    {product.popular && (
+                    {/* Floating popular or out of stock badge */}
+                    {product.inventory !== undefined && product.inventory <= 0 ? (
+                      <span className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 z-10 text-[6.5px] sm:text-[9px] uppercase font-display tracking-widest text-white bg-zinc-800/90 font-medium px-1.5 py-0.5 sm:px-2.5 sm:py-1 border border-white/10 select-none">
+                        {isAr ? 'نفد المخزون' : 'Out of Stock'}
+                      </span>
+                    ) : product.popular ? (
                       <span className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 z-10 text-[6.5px] sm:text-[9px] uppercase font-display tracking-widest text-black bg-gold-pure font-bold px-1.5 py-0.5 sm:px-3 sm:py-1 bg-gradient-to-r from-gold-dark to-gold-pure select-none">
                         {t('store.popular_choice')}
                       </span>
-                    )}
+                    ) : null}
 
                     <div className={`w-full h-full transition-transform duration-700 ease-out ${
                       product.category === 'market' ? '' : 'group-hover:scale-105'

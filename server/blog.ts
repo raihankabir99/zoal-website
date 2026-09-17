@@ -64,6 +64,12 @@ async function validateAuthorExists(supabase: any, authorId: string): Promise<bo
   return !!data;
 }
 
+// Helper to sanitize search strings for safe PostgREST filter queries
+function sanitizeSearchTerm(term: string): string {
+  if (!term || typeof term !== 'string') return '';
+  return term.replace(/[,().":\\%]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // --- BLOG POSTS ---
 export async function getBlogPosts(req: Request, res: Response) {
   const supabase = getSupabaseClient();
@@ -99,8 +105,11 @@ export async function getBlogPosts(req: Request, res: Response) {
     query = query.eq('category_id', category);
   }
 
-  if (search) {
-    query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+  if (search && typeof search === 'string') {
+    const cleanSearch = sanitizeSearchTerm(search);
+    if (cleanSearch) {
+      query = query.or(`title.ilike.%${cleanSearch}%,title_ar.ilike.%${cleanSearch}%,content.ilike.%${cleanSearch}%,content_ar.ilike.%${cleanSearch}%`);
+    }
   }
 
   const lim = parseInt(limit as string, 10) || 50;
@@ -1100,13 +1109,15 @@ export async function searchBlog(req: Request, res: Response) {
   const supabase = getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
-  if (!q) return res.json([]);
+  if (!q || typeof q !== 'string') return res.json([]);
+  const cleanQ = sanitizeSearchTerm(q);
+  if (!cleanQ) return res.json([]);
 
   const { data, error } = await supabase
     .from('zoal_blog_posts')
     .select('id, title, title_ar, slug, excerpt, excerpt_ar, published_at')
     .eq('status', 'published')
-    .or(`title.ilike.%${q}%,content.ilike.%${q}%`)
+    .or(`title.ilike.%${cleanQ}%,title_ar.ilike.%${cleanQ}%,content.ilike.%${cleanQ}%,content_ar.ilike.%${cleanQ}%`)
     .limit(10);
 
   if (error) return res.status(500).json({ error: error.message });
@@ -1378,12 +1389,19 @@ export async function trackBlogPostView(req: Request, res: Response) {
       return res.status(500).json({ error: 'Database Error', message: 'Failed to record view.' });
     }
 
-    // 4. Increment view_count atomically using postgres rpc
+    // 4. Increment view_count atomically using postgres rpc with resilient update fallback
     const { error: rpcErr } = await supabase.rpc('increment_view_count', { post_id: id });
 
     if (rpcErr) {
-      console.error(`[Blog Views] Critical failure: RPC increment_view_count failed for post ${id}:`, rpcErr);
-      return res.status(500).json({ error: 'Database Error', message: 'Failed to record view.' });
+      console.warn(`[Blog Views] RPC increment_view_count failed for post ${id}, applying direct update fallback:`, rpcErr.message);
+      const { error: updateErr } = await supabase
+        .from('zoal_blog_posts')
+        .update({ view_count: (post.view_count || 0) + 1, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (updateErr) {
+        console.error(`[Blog Views] Critical failure: Direct view count update failed for post ${id}:`, updateErr);
+        return res.status(500).json({ error: 'Database Error', message: 'Failed to record view.' });
+      }
     }
 
     return res.json({ success: true, message: 'View tracked successfully.', current_views: (post.view_count || 0) + 1 });

@@ -19,6 +19,44 @@ import { blogService } from '../../services/blogService';
 import { SafeImage } from '../../imageRegistry';
 import { BlogComments } from './BlogComments';
 
+// Deterministic Unicode and Arabic-compatible slug generator
+export function generateHeadingSlug(text: string, existingSlugs?: Set<string>): string {
+  if (!text) return 'section';
+  const plainText = typeof text === 'string' ? text : String(text);
+  let slug = plainText
+    .normalize('NFC')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_]+/g, '-')
+    .replace(/[^\p{L}\p{N}\-]/gu, '')
+    .replace(/^-+|-+$/g, '');
+
+  if (!slug) slug = 'section';
+
+  if (existingSlugs) {
+    let uniqueSlug = slug;
+    let counter = 1;
+    while (existingSlugs.has(uniqueSlug)) {
+      counter++;
+      uniqueSlug = `${slug}-${counter}`;
+    }
+    existingSlugs.add(uniqueSlug);
+    return uniqueSlug;
+  }
+  return slug;
+}
+
+function extractTextFromChildren(children: any): string {
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) {
+    return children.map(extractTextFromChildren).join('');
+  }
+  if (children && typeof children === 'object' && children.props?.children) {
+    return extractTextFromChildren(children.props.children);
+  }
+  return children ? String(children) : '';
+}
+
 interface BlogArticleProps {
   post: BlogPost;
   onBack: () => void;
@@ -222,12 +260,13 @@ export function BlogArticle({ post, onBack, onPostClick, onAuthorClick, currentU
 
     // Generate TOC from content
     const contentToParse = localized(post, 'content');
+    const existingTocSlugs = new Set<string>();
     const extractedHeadings = contentToParse.split('\n')
       .filter((line: string) => line.startsWith('#'))
       .map((line: string) => {
         const level = line.match(/^#+/)?.[0].length || 1;
-        const text = line.replace(/^#+\s*/, '');
-        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const text = line.replace(/^#+\s*/, '').trim();
+        const id = generateHeadingSlug(text, existingTocSlugs);
         return { id, text, level };
       });
     setHeadings(extractedHeadings);
@@ -563,8 +602,16 @@ export function BlogArticle({ post, onBack, onPostClick, onAuthorClick, currentU
                 >
                   <ReactMarkdown 
                     components={{
-                      h1: ({ node, ...props }) => <h1 id={props.children?.toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')} {...props} />,
-                      h2: ({ node, ...props }) => <h2 id={props.children?.toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')} {...props} />,
+                      h1: ({ node, ...props }) => {
+                        const text = extractTextFromChildren(props.children);
+                        const id = generateHeadingSlug(text);
+                        return <h1 id={id} {...props} />;
+                      },
+                      h2: ({ node, ...props }) => {
+                        const text = extractTextFromChildren(props.children);
+                        const id = generateHeadingSlug(text);
+                        return <h2 id={id} {...props} />;
+                      },
                     }}
                   >
                     {activeContent}
@@ -637,21 +684,41 @@ export function BlogArticle({ post, onBack, onPostClick, onAuthorClick, currentU
                   {getAuthorBio(post.zoal_blog_authors)}
                 </p>
                 <div className="flex flex-row items-center justify-start gap-3 sm:gap-4 pt-1 whitespace-nowrap">
-                  <button className="text-white hover:text-gold-pure transition-colors cursor-pointer"><TwitterIcon size={14} round /></button>
-                  <button className="text-white hover:text-gold-pure transition-colors cursor-pointer"><LinkedinIcon size={14} round /></button>
-                  <button 
-                    onClick={() => {
-                      if (onAuthorClick) {
-                        const resolvedAuthorId = post.author_id || 
-                          (post.zoal_blog_authors?.name?.includes('Charles') ? 'a2' : 
-                           post.zoal_blog_authors?.name?.includes('Amal') ? 'a3' : 'a1');
-                        onAuthorClick(resolvedAuthorId);
-                      }
-                    }}
-                    className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-gold-pure border-b border-gold-pure/30 pb-0.5 hover:border-gold-pure transition-all cursor-pointer whitespace-nowrap"
-                  >
-                    {t('blog.explore_profile')}
-                  </button>
+                  {post.zoal_blog_authors?.twitter_url ? (
+                    <a 
+                      href={post.zoal_blog_authors.twitter_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      aria-label="Author Twitter"
+                      className="text-white hover:text-gold-pure transition-colors cursor-pointer"
+                    >
+                      <TwitterIcon size={14} round />
+                    </a>
+                  ) : null}
+                  {post.zoal_blog_authors?.linkedin_url ? (
+                    <a 
+                      href={post.zoal_blog_authors.linkedin_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      aria-label="Author LinkedIn"
+                      className="text-white hover:text-gold-pure transition-colors cursor-pointer"
+                    >
+                      <LinkedinIcon size={14} round />
+                    </a>
+                  ) : null}
+                  {onAuthorClick && (post.author_id || post.zoal_blog_authors?.id) ? (
+                    <button 
+                      onClick={() => {
+                        const resolvedAuthorId = post.author_id || post.zoal_blog_authors?.id;
+                        if (resolvedAuthorId) {
+                          onAuthorClick(resolvedAuthorId);
+                        }
+                      }}
+                      className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-gold-pure border-b border-gold-pure/30 pb-0.5 hover:border-gold-pure transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      {t('blog.explore_profile')}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
