@@ -81,6 +81,18 @@ test('P1: Notification Dispatcher replaces native alert in BlogArticle.tsx', () 
   assert.match(blogArticleSource, /dispatchNotification/);
 });
 
+test('P0: Like writes use server identity and atomic RPC', () => {
+  assert.match(serverBlogSource, /getServiceSupabaseClient\(\)/);
+  assert.match(serverBlogSource, /function getLikeIdentifier/);
+  assert.doesNotMatch(serverBlogSource, /req\.body\.userIdentifier/);
+  assert.match(serverBlogSource, /toggle_blog_like/);
+});
+
+test('P0: Scheduled publishing cron endpoint requires CRON_SECRET', () => {
+  assert.match(serverBlogSource, /process\.env\.CRON_SECRET/);
+  assert.match(serverBlogSource, /status\(401\)/);
+});
+
 test('P1: Database Security Migration 062 includes SET search_path and security_invoker', () => {
   const mig062 = fs.readFileSync(new URL('../migrations/062_blog_cms_final_security_and_hardening.sql', import.meta.url), 'utf8');
   assert.match(mig062, /SET search_path = public, pg_temp/);
