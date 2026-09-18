@@ -215,7 +215,8 @@ export const privacySections: PrivacySection[] = [
         'Request correction, modification, or updating of incomplete or incorrect records',
         'Request the complete deletion of your Customer Account and associated records',
         'Request a portable digital copy of your personal data',
-        'Withdraw your consent for marketing emails, SMS, or WhatsApp campaigns'
+        'Withdraw consent where processing is based on consent, subject to applicable legal requirements',
+        'Submit privacy-rights requests through the official contact channels listed in this policy, including the support email and phone number'
       ],
       ar: [
         'طلب الوصول إلى كافة المعلومات والبيانات التي نحتفظ بها عنك والاطلاع عليها',
@@ -247,7 +248,7 @@ export const privacySections: PrivacySection[] = [
     icon: 'ExternalLink',
     content: {
       en: 'Our digital architecture may use trusted third-party services for payment processing, delivery address and map functionality, analytics, communications, security, and other operational or optional features. The specific providers enabled on the platform may change over time as ZOAL adds, replaces, or removes integrations. Third-party services operate under their own privacy terms, and we advise customers to review the policies of providers that are actually used for the relevant service.',
-      ar: 'تتضمن بنيتنا البرمجية ميزات وواجهات برمجية (APIs) موثوقة لأطراف ثالثة (مثل بوابات الدفع الإلكتروني، وخرائط جوجل لتسهيل تحديد عناوين التوصيل، وإحصائيات تحليلات جوجل لتقييم زيارات الموقع). تعمل هذه الخدمات الخارجية وفقاً لسياسات الخصوصية المستقلة الخاصة بها، وننصح عملاءنا الكرام بمراجعة تلك السياسات الخاصة بكل جهة.'
+      ar: 'قد تتضمن بنيتنا البرمجية خدمات وواجهات برمجية (APIs) لأطراف ثالثة لمعالجة الدفع، وتحديد عناوين التوصيل والخرائط، والتحليلات، والاتصالات، والأمان، أو غيرها من الميزات التشغيلية والاختيارية. قد تتغير الجهات المفعّلة بمرور الوقت، وتعمل هذه الخدمات وفق سياسات الخصوصية الخاصة بها. ننصح العملاء بمراجعة سياسات الجهات المفعّلة فعلياً عند استخدام الخدمة ذات الصلة.'
     }
   },
   {
