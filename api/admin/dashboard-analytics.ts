@@ -122,7 +122,8 @@ export default async function handler(req: any, res: any) {
 
     const orders = ordersResult.data || [];
     const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && normalizeOrderStatus(order.status) !== 'cancelled');
-    const totalRevenue = (allRevenueResult.data || []).reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
+    const allRevenueOrders = (allRevenueResult.data || []).filter((order: any) => normalizeOrderStatus(order.status) !== 'cancelled');
+    const totalRevenue = allRevenueOrders.reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
     const monthlySales = revenueOrders
       .filter((order: any) => new Date(order.created_at) >= currentMonthStart && new Date(order.created_at) < nextMonthStart)
       .reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
