@@ -108,13 +108,16 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
   );
   
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return i18n.language === 'ar' ? 'مارس ٢٠٢٦' : 'March 2026';
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    } catch {
-      return i18n.language === 'ar' ? 'مارس ٢٠٢٦' : 'March 2026';
+    if (!dateStr) return t('blog.date_unavailable', { defaultValue: 'Date unavailable' });
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) {
+      return t('blog.date_unavailable', { defaultValue: 'Date unavailable' });
     }
+    return date.toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   const latestPosts = [...posts]
