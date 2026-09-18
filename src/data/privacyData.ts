@@ -121,7 +121,7 @@ export const privacySections: PrivacySection[] = [
     icon: 'CreditCard',
     content: {
       en: 'ZOAL uses established payment providers to process online payments. ZOAL does not intentionally store complete payment-card credentials on its own application database. Payment processing is subject to the security controls, terms, and certifications applicable to the payment providers enabled for the checkout experience. Available payment methods may change over time.',
-      ar: 'تلتزم "زول" بضمان الحماية المطلقة لعمليات الدفع الإلكتروني. نحن لا نقوم بتخزين بيانات بطاقاتكم الائتمانية أو البنكية الكاملة على خوادمنا نهائياً. تتم معالجة جميع المدفوعات من خلال بوابات دفع آمنة ومعتمدة دولياً وممتثلة لأعلى معايير الأمن الرقمي العالمي (PCI-DSS). يتم تشفير جميع البيانات الحساسة عبر بروتوكولات تشفير SSL آمنة. نقبل الدفع عبر مدى، فيزا، ماستركارد، Apple Pay، و STC Pay.'
+      ar: 'تلتزم "زول" بضمان الحماية المطلقة لعمليات الدفع الإلكتروني. نحن لا نقوم بتخزين بيانات بطاقاتكم الائتمانية أو البنكية الكاملة على خوادمنا نهائياً. تتم معالجة جميع المدفوعات من خلال بوابات دفع آمنة ومعتمدة دولياً وممتثلة لأعلى معايير الأمن الرقمي العالمي (PCI-DSS). يتم تشفير جميع البيانات الحساسة عبر بروتوكولات تشفير SSL آمنة. نقبل الدفع عبر مدى، فيزا، ماستركارد، Apple Pay، و available payment providers.'
     }
   },
   {
