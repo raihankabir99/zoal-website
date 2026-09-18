@@ -559,6 +559,16 @@ if (typeof setInterval !== 'undefined') {
 }
 
 export async function handleCronProcessSchedules(req: Request, res: Response) {
+  const configuredSecret = process.env.CRON_SECRET;
+  if (!configuredSecret) return res.status(503).json({ error: 'Cron endpoint is not configured.' });
+
+  const authHeader = req.headers.authorization;
+  const providedSecret = authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : (req.headers['x-cron-secret'] as string | undefined);
+
+  if (!providedSecret || providedSecret !== configuredSecret) return res.status(401).json({ error: 'Unauthorized' });
+
   try {
     await processScheduledBlogPosts();
     return res.json({ success: true, message: 'Scheduled blog posts processing completed.' });
@@ -1476,12 +1486,20 @@ export async function trackBlogPostView(req: Request, res: Response) {
   }
 }
 
+function getLikeIdentifier(req: Request, user: any, postId: string): string {
+  if (user?.id) return user.id;
+  const ipAddress = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown-ip').split(',')[0].trim();
+  const userAgent = req.headers['user-agent'] || 'unknown-ua';
+  const crypto = require('crypto') as typeof import('crypto');
+  return crypto.createHash('sha256').update(`zoal-blog-like:${postId}:${ipAddress}:${userAgent}`).digest('hex');
+}
+
 export async function getPostLikeStatus(req: Request, res: Response) {
   const { id } = req.params;
   const user = await getOptionalUser(req);
-  const userIdentifier = user?.id || (req.query.userIdentifier as string) || req.ip || 'anonymous';
+  const userIdentifier = getLikeIdentifier(req, user, id);
 
-  const supabase = getSupabaseClient();
+  const supabase = getServiceSupabaseClient() || getSupabaseClient();
   if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
 
   const { data: post, error: postErr } = await supabase
@@ -1508,10 +1526,10 @@ export async function getPostLikeStatus(req: Request, res: Response) {
 export async function togglePostLike(req: Request, res: Response) {
   const { id } = req.params;
   const user = await getOptionalUser(req);
-  const userIdentifier = user?.id || req.body.userIdentifier || req.ip || 'anonymous';
+  const userIdentifier = getLikeIdentifier(req, user, id);
 
-  const supabase = getSupabaseClient();
-  if (!supabase) return res.status(500).json({ error: 'Supabase client not initialized.' });
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) return res.status(500).json({ error: 'Server like service is not configured.' });
 
   const { data: post, error: postErr } = await supabase
     .from('zoal_blog_posts')
@@ -1519,58 +1537,21 @@ export async function togglePostLike(req: Request, res: Response) {
     .eq('id', id)
     .maybeSingle();
 
-  if (postErr || !post) {
-    return res.status(404).json({ error: 'Post not found' });
+  if (postErr || !post) return res.status(404).json({ error: 'Post not found' });
+
+  const { data, error } = await supabase.rpc('toggle_blog_like', {
+    p_post_id: id,
+    p_user_identifier: userIdentifier
+  });
+
+  if (error) {
+    console.error(`[Blog Likes] Failed to toggle like for post ${id}:`, error);
+    return res.status(500).json({ error: 'Database Error', message: 'Failed to update like.' });
   }
 
-  const { data: existingLike } = await supabase
-    .from('zoal_blog_likes')
-    .select('id, status')
-    .eq('post_id', id)
-    .eq('user_identifier', userIdentifier)
-    .maybeSingle();
-
-  let newLiked = false;
-  let newCount = post.like_count || 0;
-
-  if (existingLike && existingLike.status === 'active') {
-    await supabase
-      .from('zoal_blog_likes')
-      .update({ status: 'inactive' })
-      .eq('id', existingLike.id);
-
-    newCount = Math.max(0, newCount - 1);
-    await supabase
-      .from('zoal_blog_posts')
-      .update({ like_count: newCount })
-      .eq('id', id);
-
-    newLiked = false;
-  } else {
-    if (existingLike) {
-      await supabase
-        .from('zoal_blog_likes')
-        .update({ status: 'active' })
-        .eq('id', existingLike.id);
-    } else {
-      await supabase
-        .from('zoal_blog_likes')
-        .insert({
-          post_id: id,
-          user_id: user?.id || null,
-          user_identifier: userIdentifier,
-          status: 'active'
-        });
-    }
-
-    newCount = newCount + 1;
-    await supabase
-      .from('zoal_blog_posts')
-      .update({ like_count: newCount })
-      .eq('id', id);
-
-    newLiked = true;
-  }
-
-  res.json({ liked: newLiked, like_count: newCount });
+  const result = Array.isArray(data) ? data[0] : data;
+  return res.json({
+    liked: result?.liked === true,
+    like_count: Number(result?.like_count ?? post.like_count ?? 0)
+  });
 }
