@@ -24,6 +24,9 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
   const [error, setError] = useState<string | null>(null);
   const [metaInfo, setMetaInfo] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'profile' | 'all'>(type === 'author' ? 'profile' : 'all');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const PAGE_SIZE = 24;
 
   const localized = (obj: any, field: string) => {
     const arField = `${field}_ar`;
@@ -35,31 +38,32 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
     const loadData = async () => {
       setLoading(true);
       setError(null);
+      setPage(1);
       try {
         let fetchedPosts: BlogPost[] = [];
         let info: any = null;
 
         if (type === 'category' && id) {
-          fetchedPosts = await blogService.getPosts({ category: id });
+          fetchedPosts = await blogService.getPosts({ category: id, page: 1, limit: PAGE_SIZE });
           const categories = await blogService.getCategories();
           info = categories.find(c => c.id === id || c.slug === id);
         } else if (type === 'tag' && id) {
-          fetchedPosts = await blogService.getPosts({ tag: id });
+          fetchedPosts = await blogService.getPosts({ tag: id, page: 1, limit: PAGE_SIZE });
           const tags = await blogService.getTags();
           info = tags.find(t => t.id === id || t.slug === id);
         } else if (type === 'author' && id) {
+          // Keep author profile metrics complete; the backend applies the author filter.
           fetchedPosts = await blogService.getPosts({ author: id });
           const authors = await blogService.getAuthors();
           info = authors.find(a => a.id === id);
         } else if (type === 'trending') {
-          // Preserve the backend's engagement ranking; do not apply the archive's
-          // chronological ordering to trending results.
-          fetchedPosts = await blogService.getPosts({ sortBy: 'trending', limit: 24 });
+          fetchedPosts = await blogService.getPosts({ sortBy: 'trending', page: 1, limit: PAGE_SIZE });
         } else {
-          fetchedPosts = await blogService.getPosts({ limit: 24 });
+          fetchedPosts = await blogService.getPosts({ page: 1, limit: PAGE_SIZE });
         }
 
         setPosts(fetchedPosts);
+        setHasMore(type !== 'author' && fetchedPosts.length === PAGE_SIZE);
         setMetaInfo(info);
       } catch (err) {
         console.error('Failed to load grid page:', err);
@@ -70,6 +74,33 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
     };
     loadData();
   }, [type, id]);
+
+  const loadMore = async () => {
+    if (loading || !hasMore) return;
+    const nextPage = page + 1;
+    setLoading(true);
+    setError(null);
+    try {
+      const params =
+        type === 'category' && id ? { category: id, page: nextPage, limit: PAGE_SIZE } :
+        type === 'tag' && id ? { tag: id, page: nextPage, limit: PAGE_SIZE } :
+        type === 'trending' ? { sortBy: 'trending', page: nextPage, limit: PAGE_SIZE } :
+        { page: nextPage, limit: PAGE_SIZE };
+
+      const nextPosts = await blogService.getPosts(params);
+      setPosts(prev => {
+        const existing = new Set(prev.map(post => post.id));
+        return [...prev, ...nextPosts.filter(post => !existing.has(post.id))];
+      });
+      setPage(nextPage);
+      setHasMore(nextPosts.length === PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to load more blog posts:', err);
+      setError('More articles are temporarily unavailable. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getPageTitle = () => {
     if (type === 'category') {
@@ -434,6 +465,18 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
                 </motion.div>
               ))}
             </div>
+            {hasMore && (
+              <div className="flex justify-center pt-4">
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loading}
+                  className="px-8 py-3 bg-zinc-950 border border-white/10 hover:border-gold-pure disabled:opacity-50 disabled:cursor-not-allowed text-gold-pure hover:text-white rounded-xs text-[10px] font-mono uppercase tracking-widest transition-all cursor-pointer"
+                >
+                  {loading ? t('blog.loading', { defaultValue: 'Loading…' }) : t('blog.load_more', { defaultValue: 'Load more' })}
+                </button>
+              </div>
+            )}
           ) : (
             <div className="text-center py-32 space-y-4 bg-zinc-950/30 rounded-sm border border-dashed border-white/10">
               <Grid className="w-12 h-12 text-zinc-800 mx-auto" />
