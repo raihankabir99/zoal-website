@@ -9,7 +9,19 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 ALTER TABLE public.zoal_ticket_attachments
+  ADD COLUMN IF NOT EXISTS ticket_id uuid;
+
+ALTER TABLE public.zoal_ticket_attachments
   ALTER COLUMN message_id DROP NOT NULL;
+
+DO $
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'zoal_ticket_attachments_ticket_id_fkey') THEN
+    ALTER TABLE public.zoal_ticket_attachments
+      ADD CONSTRAINT zoal_ticket_attachments_ticket_id_fkey
+      FOREIGN KEY (ticket_id) REFERENCES public.zoal_support_tickets(id) ON DELETE CASCADE;
+  END IF;
+END $;
 
 ALTER TABLE public.zoal_ticket_attachments ENABLE ROW LEVEL SECURITY;
 
