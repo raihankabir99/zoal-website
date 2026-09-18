@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole } from '../helpers';
+import { getServiceSupabaseClient } from '../../../../server/supabase';
 
 const PRODUCT_MANAGEMENT_ROLES = ['owner', 'admin', 'manager', 'staff'] as const;
 
@@ -55,8 +56,32 @@ export async function GET(req: NextRequest) {
       return apiError(error.message, 500);
     }
 
+    // Inventory is authoritative in zoal_inventory, not zoal_products.inventory.
+    // Enrich only the returned page so storefront stock filters use live relational inventory.
+    let enrichedProducts = products || [];
+    const serviceClient = getServiceSupabaseClient();
+    if (serviceClient && enrichedProducts.length > 0) {
+      const productIds = enrichedProducts.map((product: any) => product.id).filter(Boolean);
+      const { data: inventoryRows } = await serviceClient
+        .from('zoal_inventory')
+        .select('product_id,quantity,reserved_quantity')
+        .in('product_id', productIds);
+
+      if (inventoryRows) {
+        const inventoryByProduct = new Map<string, number>();
+        for (const row of inventoryRows) {
+          const available = Math.max(0, Number(row.quantity || 0) - Number(row.reserved_quantity || 0));
+          inventoryByProduct.set(row.product_id, (inventoryByProduct.get(row.product_id) || 0) + available);
+        }
+        enrichedProducts = enrichedProducts.map((product: any) => ({
+          ...product,
+          inventory: inventoryByProduct.get(product.id) ?? 0
+        }));
+      }
+    }
+
     return apiResponse({
-      products: products || [],
+      products: enrichedProducts,
       pagination: {
         page,
         limit,
