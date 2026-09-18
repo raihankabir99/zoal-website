@@ -136,8 +136,8 @@ export const termsSections: TermsSection[] = [
     },
     icon: 'CreditCard',
     content: {
-      en: 'To maintain the highest level of security for our elite customers, ZOAL uses payment processing partners certified with maximum Level 1 PCI-DSS data compliance. Your sensitive financial card information remains fully encrypted at all times. We support the following secure checkout options: Mada, Visa, Mastercard, Apple Pay, and STC Pay.',
-      ar: 'لضمان أعلى درجات الأمان المالي لعملائنا الكرام، تستخدم "زول" بوابات دفع إلكترونية معتمدة وحائزة على أعلى شهادات أمن المعلومات المصرفية (PCI-DSS). تظل بيانات بطاقاتكم البنكية مشفرة بالكامل طوال الوقت. نقبل الدفع عبر: مدى، فيزا، ماستركارد، Apple Pay، و STC Pay.'
+      en: 'To protect customer payment information, ZOAL uses the payment providers enabled for checkout. ZOAL does not intentionally store complete payment-card credentials in its application database. Payment methods and provider-specific security controls may change over time and are subject to the applicable terms and requirements of the enabled payment services.',
+      ar: 'لحماية معلومات الدفع، تستخدم "زول" مزودي خدمات الدفع المفعّلين في صفحة إتمام الطلب. لا نقوم بتخزين بيانات بطاقات الدفع الكاملة في قاعدة بيانات التطبيق الخاصة بنا، وقد تتغير وسائل الدفع وضوابط الأمان الخاصة بمزودي الخدمة بمرور الوقت وفق الشروط والمتطلبات المعمول بها.'
     }
   },
   {
