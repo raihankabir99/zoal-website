@@ -12,7 +12,6 @@ const dashboardRouteSource = fs.readFileSync(new URL('../src/app/api/admin/dashb
 const legacyDashboardSource = fs.readFileSync(new URL('../api/admin/dashboard-analytics.ts', import.meta.url), 'utf8');
 
 test('P0: Removal of Mock Fallback Data in blogService.ts', () => {
-  // Ensure FALLBACK constants are not returned on API error/empty
   assert.doesNotMatch(blogServiceSource, /return FALLBACK_BLOG_POSTS/);
   assert.doesNotMatch(blogServiceSource, /return FALLBACK_CATEGORIES/);
   assert.doesNotMatch(blogServiceSource, /return FALLBACK_TAGS/);
@@ -101,7 +100,6 @@ test('P1: Database Security Migration 062 includes SET search_path and security_
   assert.match(mig062, /WITH \(security_invoker = true\)/);
 });
 
-
 test('P0: Dashboard analytics normalize order statuses consistently across both endpoints', () => {
   assert.match(dashboardRouteSource, /function normalizeOrderStatus/);
   assert.match(legacyDashboardSource, /function normalizeOrderStatus/);
@@ -111,6 +109,6 @@ test('P0: Dashboard analytics normalize order statuses consistently across both 
   assert.match(legacyDashboardSource, /statusCounts\.cancelled/);
   assert.match(dashboardRouteSource, /statusCounts\.completed \|\| statusCounts\.delivered/);
   assert.match(legacyDashboardSource, /statusCounts\.completed \|\| statusCounts\.delivered/);
-  assert.match(dashboardRouteSource, /normalizeOrderStatus\(order\.status\) !== 'cancelled'/);
-  assert.match(legacyDashboardSource, /normalizeOrderStatus\(order\.status\) !== 'cancelled'/);
+  assert.match(dashboardRouteSource, /const allRevenueOrders = \(allRevenueResult\.data \|\| \[\]\)\.filter\(\(order: any\) => normalizeOrderStatus\(order\.status\) !== 'cancelled'\)/);
+  assert.match(legacyDashboardSource, /const allRevenueOrders = \(allRevenueResult\.data \|\| \[\]\)\.filter\(\(order: any\) => normalizeOrderStatus\(order\.status\) !== 'cancelled'\)/);
 });
