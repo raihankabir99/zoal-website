@@ -50,6 +50,10 @@ function monthLabel(date: Date): string {
   return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
 }
 
+function normalizeOrderStatus(status: unknown): string {
+  return String(status || '').trim().toLowerCase();
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
   if (!rateLimit(req, res)) return;
@@ -107,7 +111,7 @@ export default async function handler(req: any, res: any) {
       adminClient.from('zoal_products').select('id', { count: 'exact', head: true }).eq('is_active', true),
       adminClient.from('zoal_categories').select('id, name').order('name', { ascending: true }),
       adminClient.from('zoal_orders').select('id', { count: 'exact', head: true }),
-      adminClient.from('zoal_orders').select('total_amount').eq('payment_status', 'paid').neq('status', 'Cancelled'),
+      adminClient.from('zoal_orders').select('total_amount, status').eq('payment_status', 'paid'),
       adminClient.from('zoal_orders').select('id, customer_id, status, total_amount, payment_status, created_at').gte('created_at', trendStart.toISOString()).lt('created_at', nextMonthStart.toISOString()),
       adminClient.from('zoal_inventory').select('quantity, min_stock, low_stock_threshold'),
       adminClient.from('zoal_products').select('category_id').eq('is_active', true)
@@ -117,7 +121,7 @@ export default async function handler(req: any, res: any) {
     if (failed?.error) throw failed.error;
 
     const orders = ordersResult.data || [];
-    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && order.status !== 'Cancelled');
+    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && normalizeOrderStatus(order.status) !== 'cancelled');
     const totalRevenue = (allRevenueResult.data || []).reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
     const monthlySales = revenueOrders
       .filter((order: any) => new Date(order.created_at) >= currentMonthStart && new Date(order.created_at) < nextMonthStart)
@@ -143,7 +147,8 @@ export default async function handler(req: any, res: any) {
       .filter((category: any) => category.value > 0);
 
     const statusCounts = orders.reduce((acc: Record<string, number>, order: any) => {
-      acc[order.status] = (acc[order.status] || 0) + 1;
+      const status = normalizeOrderStatus(order.status);
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {});
 
@@ -163,11 +168,11 @@ export default async function handler(req: any, res: any) {
         totalCustomers: customersResult.count || 0,
         totalStaff: staffResult.count || 0,
         totalProductsCount: productsResult.count || 0,
-        pendingOrders: statusCounts.Pending || 0,
-        preparingOrders: statusCounts.Preparing || 0,
-        shippedOrders: statusCounts.Shipped || 0,
-        deliveredOrders: statusCounts.Completed || 0,
-        cancelledOrders: statusCounts.Cancelled || 0,
+        pendingOrders: statusCounts.pending || 0,
+        preparingOrders: statusCounts.preparing || 0,
+        shippedOrders: statusCounts.shipped || 0,
+        deliveredOrders: statusCounts.completed || statusCounts.delivered || 0,
+        cancelledOrders: statusCounts.cancelled || 0,
         lowStockCount,
         outOfStockCount
       },
