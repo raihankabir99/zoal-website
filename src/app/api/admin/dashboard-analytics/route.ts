@@ -11,6 +11,10 @@ function monthLabel(date: Date) {
   return date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
 }
 
+function normalizeOrderStatus(status: unknown): string {
+  return String(status || '').trim().toLowerCase();
+}
+
 export async function GET(req: NextRequest) {
   if (!checkRateLimit(req)) return apiError('Too many requests', 429);
 
@@ -48,7 +52,7 @@ export async function GET(req: NextRequest) {
     if (inventoryResult.error) throw inventoryResult.error;
 
     const orders = ordersResult.data || [];
-    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && !['cancelled', 'Cancelled'].includes(String(order.status || '')));
+    const revenueOrders = orders.filter((order: any) => order.payment_status === 'paid' && normalizeOrderStatus(order.status) !== 'cancelled');
     const allRevenueOrders = (allRevenueResult.data || []).filter((order: any) => !['cancelled', 'Cancelled'].includes(String(order.status || '')));
     const totalRevenue = allRevenueOrders.reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0);
     const monthlySales = revenueOrders
@@ -82,7 +86,8 @@ export async function GET(req: NextRequest) {
       .filter((category: any) => category.value > 0);
 
     const statusCounts = orders.reduce((acc: Record<string, number>, order: any) => {
-      acc[order.status] = (acc[order.status] || 0) + 1;
+      const status = normalizeOrderStatus(order.status);
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {});
 
@@ -104,11 +109,11 @@ export async function GET(req: NextRequest) {
         totalCustomers: customersResult.count ?? uniqueCustomers,
         totalStaff: staffResult.count || 0,
         totalProductsCount: productsResult.count || 0,
-        pendingOrders: statusCounts.Pending || 0,
-        preparingOrders: statusCounts.Preparing || 0,
-        shippedOrders: statusCounts.Shipped || 0,
-        deliveredOrders: statusCounts.Completed || 0,
-        cancelledOrders: statusCounts.Cancelled || 0,
+        pendingOrders: statusCounts.pending || 0,
+        preparingOrders: statusCounts.preparing || 0,
+        shippedOrders: statusCounts.shipped || 0,
+        deliveredOrders: statusCounts.completed || statusCounts.delivered || 0,
+        cancelledOrders: statusCounts.cancelled || 0,
         lowStockCount,
         outOfStockCount
       },
