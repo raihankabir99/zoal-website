@@ -2953,10 +2953,11 @@ app.post('/api/contact', validateContactSecurity, async (req, res) => {
     }
 
     // 4. Return response
-    return res.status(200).json({
-      success: true,
+    return res.status(supabaseSaved ? 200 : 503).json({
+      success: supabaseSaved,
+      id: inquiryId,
       inquiryId,
-      message: 'Your inquiry has been processed successfully.',
+      message: supabaseSaved ? 'Your inquiry has been processed successfully.' : 'We could not securely store your inquiry. Please try again.',
       supabaseSaved,
       emailSent,
       warning: emailWarning || undefined
