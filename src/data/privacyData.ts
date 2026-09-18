@@ -120,7 +120,7 @@ export const privacySections: PrivacySection[] = [
     },
     icon: 'CreditCard',
     content: {
-      en: 'ZOAL is committed to ensuring absolute security during checkout. We do NOT store your complete credit card or debit card credentials on our servers. All financial transactions are safely managed through our payment gateways, which are strictly certified with Level 1 PCI-DSS compliance. All transmissions are encrypted using SSL technology. We accept Mada, Visa, Mastercard, Apple Pay, and STC Pay.',
+      en: 'ZOAL uses established payment providers to process online payments. ZOAL does not intentionally store complete payment-card credentials on its own application database. Payment processing is subject to the security controls, terms, and certifications applicable to the payment providers enabled for the checkout experience. Available payment methods may change over time.',
       ar: 'تلتزم "زول" بضمان الحماية المطلقة لعمليات الدفع الإلكتروني. نحن لا نقوم بتخزين بيانات بطاقاتكم الائتمانية أو البنكية الكاملة على خوادمنا نهائياً. تتم معالجة جميع المدفوعات من خلال بوابات دفع آمنة ومعتمدة دولياً وممتثلة لأعلى معايير الأمن الرقمي العالمي (PCI-DSS). يتم تشفير جميع البيانات الحساسة عبر بروتوكولات تشفير SSL آمنة. نقبل الدفع عبر مدى، فيزا، ماستركارد، Apple Pay، و STC Pay.'
     }
   },
@@ -132,7 +132,7 @@ export const privacySections: PrivacySection[] = [
     },
     icon: 'Cookie',
     content: {
-      en: 'Our platform uses cookies and similar digital identifiers to ensure seamless site functionality. Cookies help us recall your language preference (English or Arabic), maintain your shopping cart items across active sessions, and analyze anonymous web traffic patterns. These include Essential, Performance, Analytics, Functional, and Marketing Cookies. You can manage or disable your cookie preferences in your browser settings.',
+      en: 'Our platform uses cookies and similar digital identifiers to ensure seamless site functionality. Cookies help us recall your language preference (English or Arabic), maintain your shopping cart items across active sessions, and analyze anonymous web traffic patterns. These may include essential, performance, analytics, functional, and marketing cookies or similar technologies, depending on the features and integrations enabled on the platform. You can manage or disable your cookie preferences in your browser settings.',
       ar: 'يستخدم موقعنا ملفات تعريف الارتباط (Cookies) والمعرفات الرقمية المماثلة لضمان تجربة تصفح سلسة ومخصصة. تساعدنا هذه الملفات على تذكر لغتكم المفضلة (العربية أو الإنجليزية)، وحفظ محتويات سلة التسوق الخاصة بكم طوال الجلسة، وتحليل حركات التصفح العامة بشكل مجهول الهوية بالكامل. تشمل هذه الملفات: ملفات تعريف الارتباط الأساسية، والأداء، والتحليل، والوظيفية، والتسويقية. يمكنك تعديل إعدادات هذه الملفات أو تعطيلها تماماً من خلال خيارات متصفحك.'
     }
   },
@@ -246,7 +246,7 @@ export const privacySections: PrivacySection[] = [
     },
     icon: 'ExternalLink',
     content: {
-      en: 'Our digital architecture implements trusted third-party APIs (such as payment gates, secure Google Maps APIs for billing addresses, and Google Analytics to evaluate traffic). These integrated third-party services operate under their own autonomous privacy regulations, and we advise customers to review their respective privacy manuals.',
+      en: 'Our digital architecture may use trusted third-party services for payment processing, delivery address and map functionality, analytics, communications, security, and other operational or optional features. The specific providers enabled on the platform may change over time as ZOAL adds, replaces, or removes integrations. Third-party services operate under their own privacy terms, and we advise customers to review the policies of providers that are actually used for the relevant service.',
       ar: 'تتضمن بنيتنا البرمجية ميزات وواجهات برمجية (APIs) موثوقة لأطراف ثالثة (مثل بوابات الدفع الإلكتروني، وخرائط جوجل لتسهيل تحديد عناوين التوصيل، وإحصائيات تحليلات جوجل لتقييم زيارات الموقع). تعمل هذه الخدمات الخارجية وفقاً لسياسات الخصوصية المستقلة الخاصة بها، وننصح عملاءنا الكرام بمراجعة تلك السياسات الخاصة بكل جهة.'
     }
   },
