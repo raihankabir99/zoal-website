@@ -52,9 +52,11 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
           const authors = await blogService.getAuthors();
           info = authors.find(a => a.id === id);
         } else if (type === 'trending') {
-          fetchedPosts = await blogService.getPosts({ sortBy: 'trending' });
+          // Preserve the backend's engagement ranking; do not apply the archive's
+          // chronological ordering to trending results.
+          fetchedPosts = await blogService.getPosts({ sortBy: 'trending', limit: 24 });
         } else {
-          fetchedPosts = await blogService.getPosts();
+          fetchedPosts = await blogService.getPosts({ limit: 24 });
         }
 
         setPosts(fetchedPosts);
@@ -120,9 +122,11 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
     });
   };
 
-  const latestPosts = [...posts]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 3);
+  const latestPosts = type === 'trending'
+    ? posts.slice(0, 3)
+    : [...posts]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 3);
 
   if (error) {
     return (
