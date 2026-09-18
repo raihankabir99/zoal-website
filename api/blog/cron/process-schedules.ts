@@ -1,3 +1,3 @@
-import { handleCronProcessSchedules } from '../../../../server/blog';
+import { handleCronProcessSchedules } from '../../../server/blog';
 
 export default handleCronProcessSchedules;
