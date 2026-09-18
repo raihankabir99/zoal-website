@@ -561,14 +561,11 @@ if (typeof setInterval !== 'undefined') {
 export async function handleCronProcessSchedules(req: Request, res: Response) {
   const configuredSecret = process.env.CRON_SECRET;
   if (!configuredSecret) return res.status(503).json({ error: 'Cron endpoint is not configured.' });
-
   const authHeader = req.headers.authorization;
   const providedSecret = authHeader && authHeader.startsWith('Bearer ')
     ? authHeader.slice(7)
     : (req.headers['x-cron-secret'] as string | undefined);
-
   if (!providedSecret || providedSecret !== configuredSecret) return res.status(401).json({ error: 'Unauthorized' });
-
   try {
     await processScheduledBlogPosts();
     return res.json({ success: true, message: 'Scheduled blog posts processing completed.' });
