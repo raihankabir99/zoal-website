@@ -57,4 +57,3 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.toggle_blog_like(UUID, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.toggle_blog_like(UUID, TEXT) TO anon, authenticated;
