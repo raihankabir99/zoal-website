@@ -8,6 +8,8 @@ const serverSource = fs.readFileSync(new URL('../server.ts', import.meta.url), '
 const blogArticleSource = fs.readFileSync(new URL('../src/components/blog/BlogArticle.tsx', import.meta.url), 'utf8');
 const blogGridPageSource = fs.readFileSync(new URL('../src/components/blog/BlogGridPage.tsx', import.meta.url), 'utf8');
 const blogSource = fs.readFileSync(new URL('../src/components/Blog.tsx', import.meta.url), 'utf8');
+const dashboardRouteSource = fs.readFileSync(new URL('../src/app/api/admin/dashboard-analytics/route.ts', import.meta.url), 'utf8');
+const legacyDashboardSource = fs.readFileSync(new URL('../api/admin/dashboard-analytics.ts', import.meta.url), 'utf8');
 
 test('P0: Removal of Mock Fallback Data in blogService.ts', () => {
   // Ensure FALLBACK constants are not returned on API error/empty
@@ -97,4 +99,18 @@ test('P1: Database Security Migration 062 includes SET search_path and security_
   const mig062 = fs.readFileSync(new URL('../migrations/062_blog_cms_final_security_and_hardening.sql', import.meta.url), 'utf8');
   assert.match(mig062, /SET search_path = public, pg_temp/);
   assert.match(mig062, /WITH \(security_invoker = true\)/);
+});
+
+
+test('P0: Dashboard analytics normalize order statuses consistently across both endpoints', () => {
+  assert.match(dashboardRouteSource, /function normalizeOrderStatus/);
+  assert.match(legacyDashboardSource, /function normalizeOrderStatus/);
+  assert.match(dashboardRouteSource, /statusCounts\.pending/);
+  assert.match(legacyDashboardSource, /statusCounts\.pending/);
+  assert.match(dashboardRouteSource, /statusCounts\.cancelled/);
+  assert.match(legacyDashboardSource, /statusCounts\.cancelled/);
+  assert.match(dashboardRouteSource, /statusCounts\.completed \|\| statusCounts\.delivered/);
+  assert.match(legacyDashboardSource, /statusCounts\.completed \|\| statusCounts\.delivered/);
+  assert.match(dashboardRouteSource, /normalizeOrderStatus\(order\.status\) !== 'cancelled'/);
+  assert.match(legacyDashboardSource, /normalizeOrderStatus\(order\.status\) !== 'cancelled'/);
 });
