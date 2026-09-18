@@ -264,13 +264,30 @@ export async function triggerProductFetch(forceUpdate = false): Promise<Product[
       throw new Error(`Expected JSON response but received ${contentType || 'unknown'} (Body starts with: ${text.substring(0, 50)}...)`);
     }
 
-    const data = await res.json();
-    const productsList = Array.isArray(data) ? data : (data && Array.isArray(data.products) ? data.products : null);
+    const firstData = await res.json();
+    const firstPage = Array.isArray(firstData) ? firstData : (firstData && Array.isArray(firstData.products) ? firstData.products : null);
+    if (!Array.isArray(firstPage)) throw new Error('Product API returned an invalid payload.');
+
+    // The API is paginated. Fetch every page so the customer collection does not
+    // silently stop at the first 20 products.
+    const allProducts: Product[] = [...firstPage];
+    const firstPagination = firstData && firstData.pagination;
+    const totalPages = Number(firstPagination?.totalPages || 1);
+    for (let nextPage = 2; nextPage <= totalPages; nextPage++) {
+      const pageRes = await fetch(`/api/products?page=${nextPage}&limit=100`, { cache: 'no-store' });
+      if (!pageRes.ok) throw new Error('Product API returned status ' + pageRes.status + ' while loading page ' + nextPage);
+      const pageType = pageRes.headers.get('content-type');
+      if (!pageType || !pageType.includes('application/json')) throw new Error('Product API returned a non-JSON page ' + nextPage);
+      const pageData = await pageRes.json();
+      const pageProducts = Array.isArray(pageData) ? pageData : (pageData && Array.isArray(pageData.products) ? pageData.products : null);
+      if (!Array.isArray(pageProducts)) throw new Error('Product API returned an invalid payload on page ' + nextPage);
+      allProducts.push(...pageProducts);
+    }
 
     // A successful response, including an empty array, completely replaces the
     // local cache. No static or stale records can be resurrected.
-    if (Array.isArray(productsList)) {
-      const finalProducts = mergeProductsConflictFree(productsList, []);
+    if (Array.isArray(allProducts)) {
+      const finalProducts = mergeProductsConflictFree(allProducts, []);
       localStorage.setItem(CACHE_KEYS.PRODUCTS, JSON.stringify(finalProducts));
       updateCacheMeta({ lastFetched: Date.now() });
       window.dispatchEvent(new Event('storage'));
