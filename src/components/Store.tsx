@@ -37,6 +37,7 @@ export default React.memo(function Store({
   const isAr = i18n.language === 'ar';
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>(initialCategoryFilter);
+  const [activeBrand, setActiveBrand] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'featured' | 'newest' | 'best_sellers' | 'rating' | 'price-low' | 'price-high'>('featured');
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [selectedOption, setSelectedOption] = useState<string>('');
@@ -171,6 +172,13 @@ export default React.memo(function Store({
         (product.story || '').toLowerCase().includes(term);
       
       const matchCategory = activeCategory === 'all' || normalizeCategory(product.category) === normalizeCategory(activeCategory);
+      const productBrandId = String(
+        (product as any).brand_id ??
+        (product as any).brandId ??
+        ((product as any).brand && typeof (product as any).brand === 'object' ? ((product as any).brand.id ?? (product as any).brand.name) : (product as any).brand) ??
+        ''
+      );
+      const matchBrand = activeBrand === 'all' || productBrandId === activeBrand;
       const isProductInStock = product.inventory === undefined || product.inventory > 0;
       const matchFilter = 
         activeFilter === 'all' ||
@@ -186,19 +194,19 @@ export default React.memo(function Store({
         (activeFilter === 'staff_pick' && (product.isStaffPick || product.is_staff_pick)) ||
         (activeFilter === 'luxury_choice' && (product.isLuxuryChoice || product.is_luxury_choice));
 
-      return matchSearch && matchCategory && matchFilter;
+      return matchSearch && matchCategory && matchBrand && matchFilter;
     });
 
     return rawFiltered.sort((a, b) => {
       if (sortBy === 'price-low') return a.price - b.price;
       if (sortBy === 'price-high') return b.price - a.price;
-      if (sortBy === 'rating') return b.rating - a.rating;
-      if (sortBy === 'featured') return (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
+      if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+      if (sortBy === 'featured') return (Boolean((b as any).isFeatured ?? (b as any).is_featured ?? (b as any).featured) ? 1 : 0) - (Boolean((a as any).isFeatured ?? (a as any).is_featured ?? (a as any).featured) ? 1 : 0);
       if (sortBy === 'newest') return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
-      if (sortBy === 'best_sellers') return (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0);
+      if (sortBy === 'best_sellers') return (Boolean((b as any).isBestSeller ?? (b as any).is_best_seller) ? 1 : 0) - (Boolean((a as any).isBestSeller ?? (a as any).is_best_seller) ? 1 : 0);
       return 0; // Default sorting
     });
-  }, [allProducts, searchTerm, activeCategory, activeFilter, sortBy]);
+  }, [allProducts, searchTerm, activeCategory, activeBrand, activeFilter, sortBy]);
 
   // Keyboard Escape dismissal for quick view modal
   useEffect(() => {
@@ -352,6 +360,18 @@ export default React.memo(function Store({
 
             {/* Filters & Sorting Controls */}
             <div className="w-[30%] md:w-auto flex items-center space-x-1.5 md:space-x-3 rtl:space-x-reverse justify-end shrink-0">
+              {brandsList.length > 1 && (
+                <select
+                  value={activeBrand}
+                  onChange={(e) => setActiveBrand(e.target.value)}
+                  aria-label={t('store.brand_filter', { defaultValue: 'Filter by brand' })}
+                  className="hidden md:block bg-black border border-white/5 rounded-sm text-[10px] md:text-[11px] text-zinc-400 py-2 px-2.5 focus:outline-none focus:border-gold-pure/40 md:min-w-[150px]"
+                >
+                  {brandsList.map((brand) => (
+                    <option key={brand.id} value={brand.id}>{brand.name}</option>
+                  ))}
+                </select>
+              )}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
