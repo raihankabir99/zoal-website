@@ -91,11 +91,7 @@ export default function ShippingPolicy() {
         setDeliveryZones(JSON.parse(savedZones));
       } else {
         setDeliveryZones([
-          { id: '1', city: 'Hofuf', fee: 0, method: 'Local Delivery', region: 'Al Hofuf & Nearby Areas' },
-          { id: '2', city: 'Dammam', fee: 25, method: 'Regional Delivery', region: 'Eastern Province' },
-          { id: '3', city: 'Khobar', fee: 25, method: 'Regional Delivery', region: 'Eastern Province' },
-          { id: '4', city: 'Riyadh', fee: 45, method: 'Regional Delivery', region: 'Central Region' },
-          { id: '5', city: 'Jeddah', fee: 50, method: 'Regional Delivery', region: 'Western Region' },
+          { id: '1', city: 'Al Hofuf', fee: 0, method: 'Local Delivery', region: 'Al Hofuf' },
         ]);
       }
     } catch (e) {
@@ -531,37 +527,21 @@ export default function ShippingPolicy() {
                       <div className="space-y-4 text-xs sm:text-[13px] text-zinc-400 font-sans leading-relaxed">
                         <p>
                           {isAr 
-                            ? 'تفخر علامة زول بتقديم خدمات الشحن والتوصيل الفاخرة التي تغطي كافة مناطق ومدن المملكة العربية السعودية الشاسعة. يسعدنا وصول شحنات الضيافة والملابس الأنيقة إلى عتبات بيوتكم بعناية تامة وأعلى مستويات الاحترافية.'
-                            : 'ZOAL takes profound pride in catering its boutique services and luxury shipments across the entire Kingdom of Saudi Arabia. We partner with elite premium regional couriers to ensure that your parcels arrive safely and in immaculate, pristine conditions.'
+                            ? 'تفخر علامة زول بتقديم خدمات الشحن والتوصيل الفاخرة التي تغطي مدينة الهفوف في المملكة العربية السعودية. يسعدنا وصول شحنات الضيافة والملابس الأنيقة إلى عتبات بيوتكم بعناية تامة وأعلى مستويات الاحترافية.'
+                            : 'ZOAL takes profound pride in catering its boutique services and luxury shipments currently within Al Hofuf, Saudi Arabia. We partner with elite premium regional couriers to ensure that your parcels arrive safely and in immaculate, pristine conditions.'
                           }
                         </p>
                         
                         <div className="pt-2">
                           <span className="text-[10px] font-mono uppercase tracking-wider text-gold-pure block mb-2">
-                            {isAr ? 'المدن الرئيسية المشمولة بالتغطية المباشرة:' : 'Major Cities with Direct Premium Coverage:'}
+                            {isAr ? 'نطاق التغطية الحالي:' : 'Current Service Area:'}
                           </span>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono uppercase text-zinc-300">
                             <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
                               <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full shrink-0" />
-                              <span>{isAr ? 'الهفوف والأحساء' : 'Al Hofuf / Al Ahsa'}</span>
+                              <span>{isAr ? 'الهفوف والأحساء' : 'Al Hofuf'}</span>
                             </div>
-                            <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
-                              <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full shrink-0" />
-                              <span>{isAr ? 'الرياض' : 'Riyadh'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
-                              <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full shrink-0" />
-                              <span>{isAr ? 'الدمام' : 'Dammam'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
-                              <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full shrink-0" />
-                              <span>{isAr ? 'الخبر والظهران' : 'Al Khobar / Dhahran'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
-                              <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full shrink-0" />
-                              <span>{isAr ? 'جدة' : 'Jeddah'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
+<div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xs border border-white/5">
                               <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full shrink-0" />
                               <span>{isAr ? 'مكة المكرمة' : 'Makkah'}</span>
                             </div>
@@ -1095,12 +1075,12 @@ export default function ShippingPolicy() {
                               </tr>
                               <tr className="hover:bg-white/2 transition-colors">
                                 <td className="p-3 sm:p-4 font-medium text-white">{isAr ? 'شحن سريع وأولوية' : 'Express Delivery'}</td>
-                                <td className="p-3 sm:p-4 text-zinc-400">{isAr ? 'الرياض، الدمام، الخبر، جدة والمطارات الكبرى' : 'Riyadh, Dammam, Khobar, Jeddah Hubs'}</td>
+                                <td className="p-3 sm:p-4 text-zinc-400">{isAr ? 'مدينة الهفوف والمناطق القريبة' : 'Al Hofuf City & Nearby Areas'}</td>
                                 <td className="p-3 sm:p-4 text-[#D4AF37] font-mono font-semibold">{isAr ? shippingConfig.expressDaysAr : shippingConfig.expressDaysEn}</td>
                               </tr>
                               <tr className="hover:bg-white/2 transition-colors">
                                 <td className="p-3 sm:p-4 font-medium text-white">{isAr ? 'شحن قياسي عادي' : 'Standard Delivery'}</td>
-                                <td className="p-3 sm:p-4 text-zinc-400">{isAr ? 'كافة مدن ومحافظات المملكة العربية السعودية' : 'All urban & regional areas across KSA'}</td>
+                                <td className="p-3 sm:p-4 text-zinc-400">{isAr ? 'مدينة الهفوف والمناطق القريبة' : 'Al Hofuf City & Nearby Areas'}</td>
                                 <td className="p-3 sm:p-4 text-[#D4AF37] font-mono font-semibold">{isAr ? shippingConfig.standardDaysAr : shippingConfig.standardDaysEn}</td>
                               </tr>
                             </tbody>
