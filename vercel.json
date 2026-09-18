@@ -51,6 +51,10 @@
       "dest": "/api/customer-orders.ts"
     },
     {
+      "src": "/api/blog/cron/process-schedules",
+      "dest": "/api/blog/cron/process-schedules.ts"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/server.ts"
     },
