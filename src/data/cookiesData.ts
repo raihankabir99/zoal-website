@@ -109,7 +109,7 @@ export const cookiesSections: CookieSection[] = [
       en: [
         'Deliver personalized advertisements on premium social networks',
         'Measure marketing campaign reach and performance metrics',
-        'Remarket curated ZOAL collections on search partners (Google Ads, Meta Pixel, TikTok Pixel)'
+        'Measure or support advertising and campaign activity through optional marketing providers enabled on the platform'
       ],
       ar: [
         'تقديم إعلانات مخصصة تليق بأسلوب حياتكم على شبكات التواصل الراقية',
@@ -167,16 +167,16 @@ export const cookiesSections: CookieSection[] = [
     },
     list: {
       en: [
-        'Google Analytics (for anonymous traffic analysis)',
-        'Google Maps API (for precise delivery address selection)',
-        'Meta, TikTok, and Google Advertising SDKs (only with active marketing consent)',
-        'Payment providers like Apple Pay, mada, Visa, and Mastercard'
+        'Analytics providers enabled on the platform, where applicable and subject to the selected consent settings',
+        'Map and location providers enabled for delivery address selection, where applicable',
+        'Optional advertising or marketing providers enabled by ZOAL, subject to the required consent settings',
+        'Payment providers enabled for checkout, subject to their applicable security and privacy requirements'
       ],
       ar: [
-        'تحليلات جوجل (Google Analytics) لدراسة حركة المرور مجهولة الهوية',
-        'واجهة خرائط جوجل (Google Maps API) لتسهيل تحديد عناوين التوصيل السريع بدقة',
-        'أكواد التتبع والبيكسل الخاصة بـ Meta، TikTok، وGoogle Ads (فقط بعد موافقتكم الصريحة)',
-        'بوابات الدفع الإلكتروني المصرفية وبوابات Apple Pay، ومدى، وSTC Pay'
+        'مزودو التحليلات المفعّلون على المنصة، عند الاقتضاء، وبما يتوافق مع إعدادات الموافقة المختارة',
+        'مزودو الخرائط والموقع المفعّلون لتحديد عناوين التوصيل، عند الاقتضاء',
+        'مزودو الإعلانات أو التسويق الاختياريون الذين تفعّلهم زول، مع مراعاة إعدادات الموافقة المطلوبة',
+        'مزودو الدفع المفعّلون في صفحة إتمام الشراء، وفقاً لمتطلبات الأمان والخصوصية المعمول بها لديهم'
       ]
     }
   },
