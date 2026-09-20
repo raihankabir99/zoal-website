@@ -78,11 +78,5 @@
       "src": "/(.*)",
       "dest": "/api/server.ts"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/blog/cron/process-schedules",
-      "schedule": "*/5 * * * *"
-    }
   ]
 }
