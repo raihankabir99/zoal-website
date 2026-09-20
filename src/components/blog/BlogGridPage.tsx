@@ -423,8 +423,9 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
               ))}
             </div>
           ) : posts.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-              {posts.map((post) => (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
+                {posts.map((post) => (
                 <motion.div
                   key={post.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -463,9 +464,9 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
                     </div>
                   </div>
                 </motion.div>
-              ))}
-            </div>
-            {hasMore && (
+                ))}
+              </div>
+              {hasMore && (
               <div className="flex justify-center pt-4">
                 <button
                   type="button"
@@ -475,8 +476,9 @@ export function BlogGridPage({ type, id, onBack, onPostClick }: BlogGridPageProp
                 >
                   {loading ? t('blog.loading', { defaultValue: 'Loading…' }) : t('blog.load_more', { defaultValue: 'Load more' })}
                 </button>
-              </div>
-            )}
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-32 space-y-4 bg-zinc-950/30 rounded-sm border border-dashed border-white/10">
               <Grid className="w-12 h-12 text-zinc-800 mx-auto" />
