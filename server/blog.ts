@@ -483,16 +483,9 @@ export async function processScheduledBlogPosts() {
   }
 }
 
-// Run worker interval continuously
-if (typeof setInterval !== 'undefined') {
-  setTimeout(() => {
-    processScheduledBlogPosts().catch(err => console.error('Initial scheduler run error:', err));
-  }, 2000);
-
-  setInterval(() => {
-    processScheduledBlogPosts().catch(err => console.error('Interval scheduler run error:', err));
-  }, 30000);
-}
+// Scheduler execution is intentionally request-driven.
+// Vercel/serverless instances must not rely on process-level timers for production scheduling.
+// The dedicated /api/blog/cron/process-schedules endpoint is the authoritative trigger.
 
 export async function scheduleBlogPost(req: Request, res: Response) {
   const user = (req as any).user;
