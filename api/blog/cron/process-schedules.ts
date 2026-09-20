@@ -1,11 +1,25 @@
-import { getServiceSupabaseClient } from '../../../../backend/supabase';
+import { createClient } from '@supabase/supabase-js';
 
-async function processScheduledBlogPosts() {
-  const supabase = getServiceSupabaseClient();
-  if (!supabase) {
+const DEFAULT_SUPABASE_URL = 'https://jglveforpqhioxpambbq.supabase.co';
+
+function getSupabaseClient() {
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !serviceKey) {
     throw new Error('Supabase service client is not configured.');
   }
 
+  return createClient(url.replace(/\/$/, ''), serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+}
+
+async function processScheduledBlogPosts() {
+  const supabase = getSupabaseClient();
   const nowISO = new Date().toISOString();
 
   const { data: dueSchedules, error } = await supabase
@@ -25,10 +39,7 @@ async function processScheduledBlogPosts() {
 
     const { data: locked, error: lockErr } = await supabase
       .from('zoal_blog_schedules')
-      .update({
-        status: 'executed',
-        updated_at: nowISO
-      })
+      .update({ status: 'executed', updated_at: nowISO })
       .eq('id', schedule.id)
       .in('status', ['pending', 'failed'])
       .select('id');
@@ -45,12 +56,11 @@ async function processScheduledBlogPosts() {
       .eq('id', schedule.post_id);
 
     if (postErr) {
-      const nextRetry = retryCount + 1;
       await supabase
         .from('zoal_blog_schedules')
         .update({
           status: 'failed',
-          retry_count: nextRetry,
+          retry_count: retryCount + 1,
           error_message: postErr.message || 'Unknown publication error',
           updated_at: new Date().toISOString()
         })
