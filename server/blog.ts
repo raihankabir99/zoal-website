@@ -407,8 +407,10 @@ export async function deleteBlogPost(req: Request, res: Response) {
 // --- SCHEDULES & AUTOMATIC PUBLISHER ---
 
 export async function processScheduledBlogPosts() {
-  const supabase = getServiceSupabaseClient() || getSupabaseClient();
-  if (!supabase) return;
+  const supabase = getServiceSupabaseClient();
+  if (!supabase) {
+    throw new Error('Supabase service-role client is not configured for scheduled publishing.');
+  }
 
   try {
     const nowISO = new Date().toISOString();
@@ -567,8 +569,7 @@ export async function scheduleBlogPost(req: Request, res: Response) {
     .update({ status: 'scheduled', updated_at: new Date().toISOString() })
     .eq('id', post_id);
 
-  // Trigger immediate check in case schedule is due right away
-  processScheduledBlogPosts().catch(() => {});
+  // Scheduling is processed by the dedicated authenticated cron endpoint.
 
   await supabase.from('zoal_blog_audit_logs').insert({
     action: 'SCHEDULE_POST',
