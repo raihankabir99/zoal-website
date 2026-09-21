@@ -9,6 +9,12 @@ if (!supabaseUrl || !supabaseKey) {
 }
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
+if (!serviceRoleKey) {
+  throw new Error('Supabase service role credentials are not configured.');
+}
+export const serviceSupabase = createClient(supabaseUrl, serviceRoleKey);
+
 // Basic Rate Limiting Map
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
