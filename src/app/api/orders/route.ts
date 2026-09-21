@@ -167,11 +167,9 @@ export async function POST(req: NextRequest) {
       ? 0
       : Number((taxableAmount * ratePercentage / 100).toFixed(2));
     const totalAmount = Number((taxableAmount + taxAmount + shippingCost).toFixed(2));
-    const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-
     const orderId = 'ORD-' + crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
 
-    const { data: atomicResult, error: atomicError } = await supabase.rpc('create_order_atomic', {
+    const { data: atomicResult, error: atomicError } = await serviceSupabase.rpc('create_order_atomic', {
       p_order_id: orderId,
       p_customer_id: user.id,
       p_items: validatedItems,
