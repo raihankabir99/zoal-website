@@ -180,3 +180,19 @@ test('Order expiry performs reservation release and order failure inside a trans
   assert.match(appSource, /await client\.query\('COMMIT'\)/);
   assert.match(appSource, /await client\.query\('ROLLBACK'/);
 });
+
+
+test('Order creation uses a single atomic database transaction RPC', () => {
+  const orderSource = fs.readFileSync(new URL('../src/app/api/orders/route.ts', import.meta.url), 'utf8');
+  assert.match(orderSource, /rpc\('create_order_atomic'/);
+  assert.doesNotMatch(orderSource, /from\('zoal_orders'\)\.insert/);
+  assert.doesNotMatch(orderSource, /from\('zoal_order_items'\)\.insert/);
+});
+
+test('Atomic order RPC is server-only', () => {
+  const migration = fs.readFileSync(new URL('../migrations/066_atomic_order_creation.sql', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.create_order_atomic/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.create_order_atomic/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.create_order_atomic.*service_role/s);
+  assert.match(migration, /FOR UPDATE/);
+});
