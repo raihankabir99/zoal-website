@@ -4,19 +4,31 @@
 
 ALTER TABLE public.zoal_inventory ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "zoal_inventory_select" ON public.zoal_inventory;
-DROP POLICY IF EXISTS "zoal_inventory_manage" ON public.zoal_inventory;
-DROP POLICY IF EXISTS "zoal_inventory_select_privileged" ON public.zoal_inventory;
-DROP POLICY IF EXISTS "zoal_inventory_manage_privileged" ON public.zoal_inventory;
+-- Remove every existing inventory policy, not only policies with names from one migration.
+DO $$
+DECLARE
+  pol RECORD;
+BEGIN
+  FOR pol IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'zoal_inventory'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.zoal_inventory', pol.policyname);
+  END LOOP;
+END $$;
 
 CREATE POLICY "zoal_inventory_select_privileged"
   ON public.zoal_inventory
   FOR SELECT
+  TO authenticated
   USING (public.is_privileged_role());
 
 CREATE POLICY "zoal_inventory_manage_privileged"
   ON public.zoal_inventory
   FOR ALL
+  TO authenticated
   USING (public.is_privileged_role())
   WITH CHECK (public.is_privileged_role());
 
