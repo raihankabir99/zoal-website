@@ -62,22 +62,13 @@ export async function readLogsAsync():Promise<ActivityLog[]>{const supabase=getS
 
 export async function logActivityAsync(userId:string,email:string,action:string,ip:string,userAgent:string){await logAuditEvent({userId:userId||'unknown',email:email||'unknown',action,ip:ip||'unknown',userAgent:userAgent||'unknown',source:'legacy_bridge'});}
 
-export function seedAccounts(){const users=readUsers();let updated=false;const defaults=[
-{id:'USR-ADMIN-1',firstName:'Abdullah',lastName:'Al-Saudi',email:'alzoal3003@gmail.com',phone:'+966 56 769 9315',passwordHash:hashPassword('Admin123!'),role:'admin' as const,addresses:['Al Shati District, Dammam, KSA','Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361']},
-{id:'USR-STAFF-1',firstName:'Raed',lastName:'Al-Fahad',email:'staff@alzoal.com',phone:'+966 50 123 4567',passwordHash:hashPassword('Staff123!'),role:'staff' as const,addresses:['Al Hofuf boutique, KSA']},
-{id:'USR-OWNER-1',firstName:'Faisal',lastName:'Al-Zoal',email:'owner@alzoal.com',phone:'+966 56 000 0001',passwordHash:hashPassword('Owner123!'),role:'owner' as const,addresses:['HQ Executive Suite, Al Hofuf, KSA']},
-{id:'USR-MANAGER-1',firstName:'Khaled',lastName:'Al-Mansour',email:'manager@alzoal.com',phone:'+966 56 000 0002',passwordHash:hashPassword('Manager123!'),role:'manager' as const,addresses:['Riyadh Branch, KSA']},
-{id:'USR-CUSTOMER-1',firstName:'Sultan',lastName:'Al-Ghamdi',email:'customer@alzoal.com',phone:'+966 55 987 6543',passwordHash:hashPassword('Customer123!'),role:'customer' as const,addresses:['Al Hamra District, Riyadh, KSA']}];
-for(const d of defaults){if(!users.some(u=>u.email.toLowerCase()===d.email.toLowerCase())){users.push({...d,isVerified:true,verificationCode:'VERIFIED',resetCode:'',createdAt:new Date().toISOString()});updated=true;}}
-if(updated)writeUsers(users);}
+export function seedAccounts(){
+  // Demo accounts are intentionally not seeded automatically.
+  // Production authentication is managed by Supabase Auth / database users.
+}
 
-export async function seedAccountsAsync(){const users=await readUsersAsync();let updated=false;const defaults=[
-{id:'USR-ADMIN-1',firstName:'Abdullah',lastName:'Al-Saudi',email:'alzoal3003@gmail.com',phone:'+966 56 769 9315',passwordHash:hashPassword('Admin123!'),role:'admin' as const,addresses:['Al Shati District, Dammam, KSA','Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361']},
-{id:'USR-STAFF-1',firstName:'Raed',lastName:'Al-Fahad',email:'staff@alzoal.com',phone:'+966 50 123 4567',passwordHash:hashPassword('Staff123!'),role:'staff' as const,addresses:['Al Hofuf boutique, KSA']},
-{id:'USR-OWNER-1',firstName:'Faisal',lastName:'Al-Zoal',email:'owner@alzoal.com',phone:'+966 56 000 0001',passwordHash:hashPassword('Owner123!'),role:'owner' as const,addresses:['HQ Executive Suite, Al Hofuf, KSA']},
-{id:'USR-MANAGER-1',firstName:'Khaled',lastName:'Al-Mansour',email:'manager@alzoal.com',phone:'+966 56 000 0002',passwordHash:hashPassword('Manager123!'),role:'manager' as const,addresses:['Riyadh Branch, KSA']},
-{id:'USR-CUSTOMER-1',firstName:'Sultan',lastName:'Al-Ghamdi',email:'customer@alzoal.com',phone:'+966 55 987 6543',passwordHash:hashPassword('Customer123!'),role:'customer' as const,addresses:['Al Hamra District, Riyadh, KSA']}];
-for(const d of defaults){if(!users.some(u=>u.email.toLowerCase()===d.email.toLowerCase())){users.push({...d,isVerified:true,verificationCode:'VERIFIED',resetCode:'',createdAt:new Date().toISOString()});updated=true;}}
-if(updated)await writeUsersAsync(users);}
+export async function seedAccountsAsync(){
+  // Demo accounts are intentionally not seeded automatically.
+  // Production authentication is managed by Supabase Auth / database users.
+}
 
-seedAccounts();
