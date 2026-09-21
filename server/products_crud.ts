@@ -121,15 +121,8 @@ export async function createProduct(req: Request, res: Response) {
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
 
-      // Sync zoal_inventory
-      await supabase.from('zoal_inventory').upsert({
-        product_id: uuid,
-        quantity: body.inventory || 0,
-        warehouse_location: body.warehouseLocation || 'Main Hub',
-        low_stock_threshold: body.lowStockThreshold || 5,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'product_id' });
-
+      // Inventory is initialized by the authoritative database trigger/service.
+      // Do not write quantity here: existing stock must never be reset by product metadata upserts.
       // Sync zoal_product_seo
       await supabase.from('zoal_product_seo').upsert({
         product_id: uuid,
