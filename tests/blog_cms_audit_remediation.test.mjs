@@ -112,3 +112,11 @@ test('P0: Dashboard analytics normalize order statuses consistently across both 
   assert.match(dashboardRouteSource, /const allRevenueOrders = \(allRevenueResult\.data \|\| \[\]\)\.filter\(\(order: any\) => normalizeOrderStatus\(order\.status\) !== 'cancelled'\)/);
   assert.match(legacyDashboardSource, /const allRevenueOrders = \(allRevenueResult\.data \|\| \[\]\)\.filter\(\(order: any\) => normalizeOrderStatus\(order\.status\) !== 'cancelled'\)/);
 });
+
+test('P0: Inventory RLS does not expose inventory rows to arbitrary clients', () => {
+  const inventoryRls = fs.readFileSync(new URL('../migrations/064_inventory_rls_hardening.sql', import.meta.url), 'utf8');
+  assert.doesNotMatch(inventoryRls, /zoal_inventory.*FOR SELECT USING \(true\)/s);
+  assert.match(inventoryRls, /CREATE POLICY \"zoal_inventory_select_privileged\"/);
+  assert.match(inventoryRls, /USING \(public\.is_privileged_role\(\)\)/);
+  assert.match(inventoryRls, /CREATE POLICY \"zoal_inventory_manage_privileged\"/);
+});
