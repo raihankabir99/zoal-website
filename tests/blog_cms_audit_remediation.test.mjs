@@ -196,3 +196,21 @@ test('Atomic order RPC is server-only', () => {
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.create_order_atomic.*service_role/s);
   assert.match(migration, /FOR UPDATE/);
 });
+
+
+test('Order API delegates order creation to the atomic order creation RPC', () => {
+  const orderSource = fs.readFileSync(new URL('../src/app/api/orders/route.ts', import.meta.url), 'utf8');
+  assert.match(orderSource, /rpc\('create_order_atomic'/);
+  assert.doesNotMatch(orderSource, /from\('zoal_orders'\)\.insert/);
+  assert.doesNotMatch(orderSource, /from\('zoal_order_items'\)\.insert/);
+});
+
+test('Atomic order migration reserves stock and redeems coupons inside one transaction', () => {
+  const migration = fs.readFileSync(new URL('../migrations/066_atomic_order_creation.sql', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.create_order_atomic/);
+  assert.match(migration, /FOR UPDATE/);
+  assert.match(migration, /reserved_quantity/);
+  assert.match(migration, /redeem_coupon_for_order/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.create_order_atomic/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.create_order_atomic.*service_role/s);
+});
