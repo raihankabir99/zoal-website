@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const ROLLING_MONTHS = 6;
 const DEFAULT_SUPABASE_URL = 'https://jglveforpqhioxpambbq.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_usAlnI8l2JjcgwOIiWbgRw_ZUKVJ2C3';
+const DEFAULT_SUPABASE_ANON_KEY = '';
 
 const rateLimitCache = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT = 120;
@@ -35,7 +35,7 @@ function rateLimit(req: any, res: any): boolean {
 }
 
 function getSupabaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/$/, '');
+  return (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 }
 
 function getServiceKey(): string {
@@ -78,7 +78,7 @@ export default async function handler(req: any, res: any) {
     const authResponse = await fetch(`${url}/auth/v1/user`, {
       method: 'GET',
       headers: {
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '',
         Authorization: `Bearer ${token}`
       }
     });
