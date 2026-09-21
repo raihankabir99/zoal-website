@@ -214,3 +214,19 @@ test('Atomic order migration reserves stock and redeems coupons inside one trans
   assert.match(migration, /REVOKE ALL ON FUNCTION public\.create_order_atomic/);
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.create_order_atomic.*service_role/s);
 });
+
+
+test('P0: Cancellation and expiry use reservation ledger release instead of direct reserved_quantity writes', () => {
+  const staffSource = fs.readFileSync(new URL('../src/app/api/staff/route.ts', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../app.ts', import.meta.url), 'utf8');
+  assert.match(staffSource, /cancel_order_and_release_inventory/);
+  assert.doesNotMatch(staffSource, /from\(['"]zoal_inventory['"]\)[\s\S]*reserved_quantity/);
+  assert.match(appSource, /release_order_inventory/);
+  assert.doesNotMatch(appSource, /UPDATE zoal_inventory[\s\S]*reserved_quantity = reserved_quantity -/);
+});
+
+test('P0: Staff order status handler uses the validated orderId variable', () => {
+  const staffSource = fs.readFileSync(new URL('../src/app/api/staff/route.ts', import.meta.url), 'utf8');
+  assert.match(staffSource, /const orderId = body\.orderId/);
+  assert.doesNotMatch(staffSource, /eq\('id', orderId\)/);
+});
