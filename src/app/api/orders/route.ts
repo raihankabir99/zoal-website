@@ -169,43 +169,37 @@ export async function POST(req: NextRequest) {
     const totalAmount = Number((taxableAmount + taxAmount + shippingCost).toFixed(2));
     const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
-    const { data: order, error: orderErr } = await supabase.from('zoal_orders').insert({
-      id: orderId,
-      customer_id: user.id,
-      status: 'pending',
-      coupon_id: appliedCoupon?.id || null,
-      subtotal,
-      discount_amount: discountAmount,
-      shipping_cost: shippingCost,
-      tax_amount: taxAmount,
-      total_amount: totalAmount,
-      payment_status: 'unpaid',
-      payment_method: body.payment_method || 'card',
-      notes: body.notes || '',
-      order_data: { ...(body.order_data || {}), shipping_address: body.shipping_address }
-    }).select().single();
+    const orderId = 'ORD-' + crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
 
-    if (orderErr) return apiError(orderErr.message, 500);
+    const { data: atomicResult, error: atomicError } = await supabase.rpc('create_order_atomic', {
+      p_order_id: orderId,
+      p_customer_id: user.id,
+      p_items: validatedItems,
+      p_subtotal: subtotal,
+      p_discount_amount: discountAmount,
+      p_shipping_cost: shippingCost,
+      p_tax_amount: taxAmount,
+      p_total_amount: totalAmount,
+      p_coupon_id: appliedCoupon?.id || null,
+      p_coupon_code: appliedCoupon?.code || null,
+      p_coupon_discount: discountAmount,
+      p_payment_method: body.payment_method || 'card',
+      p_notes: body.notes || '',
+      p_order_data: { ...(body.order_data || {}), shipping_address: body.shipping_address }
+    });
 
-    if (appliedCoupon) {
-      const { error: redemptionErr } = await supabase.rpc('redeem_coupon_for_order', {
-        p_coupon_id: appliedCoupon.id,
-        p_order_id: orderId,
-        p_customer_id: user.id,
-        p_discount_amount: discountAmount
-      });
-
-      if (redemptionErr) {
-        await supabase.from('zoal_orders').delete().eq('id', orderId);
-        return apiError(
-          redemptionErr.message?.includes('COUPON_REDEMPTION_NOT_AVAILABLE')
-            ? 'Coupon usage limit has been reached'
-            : `Failed to redeem coupon: ${redemptionErr.message}`,
-          400
-        );
+    if (atomicError) {
+      const message = atomicError.message || '';
+      if (message.includes('INSUFFICIENT_INVENTORY')) {
+        return apiError('One or more products are out of stock or do not have enough available stock.', 409);
       }
+      if (message.includes('COUPON_REDEMPTION_NOT_AVAILABLE')) {
+        return apiError('Coupon usage limit has been reached.', 409);
+      }
+      return apiError(message || 'Unable to create order.', 500);
     }
 
+    const order = atomicResult?.order || null;
     const orderItems = validatedItems.map(item => ({
       order_id: orderId,
       product_id: item.product_id,
@@ -214,17 +208,6 @@ export async function POST(req: NextRequest) {
       unit_cost: item.unit_cost,
       total_price: item.total_price
     }));
-
-    const { error: itemsErr } = await supabase.from('zoal_order_items').insert(orderItems);
-    if (itemsErr) {
-      // Redemption is removed explicitly so the database rollback trigger can
-      // restore usage_count before the partially-created order is removed.
-      if (appliedCoupon) {
-        await supabase.from('zoal_coupon_redemptions').delete().eq('order_id', orderId);
-      }
-      await supabase.from('zoal_orders').delete().eq('id', orderId);
-      return apiError(`Failed to save order detail components: ${itemsErr.message}`, 500);
-    }
 
     return apiResponse({
       order,
