@@ -89,7 +89,7 @@ export async function PUT(req: NextRequest) {
         failed: ['failed', 'pending_payment']
       };
       if (!allowed[current]?.includes(normalized)) {
-        return apiError(`Invalid order status transition: \${current || 'unknown'} → \${normalized}`, 409);
+        return apiError(`Invalid order status transition: ${current || 'unknown'} → ${normalized}`, 409);
       }
 
       updateFields.status = normalized;
