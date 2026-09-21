@@ -61,27 +61,38 @@ export async function PUT(req: NextRequest) {
 
     const updateFields: Record<string, any> = {};
     if (typeof body.status === 'string' && body.status.trim()) {
-      const requestedStatus = body.status.trim();
-      const normalizedStatus = statusMap[requestedStatus] || statusMap[requestedStatus.toLowerCase()];
-      if (!normalizedStatus) return apiError('Invalid status value.', 400);
+      const normalized = statusMap[body.status.trim()] || statusMap[body.status.trim().toLowerCase()];
+      if (!normalized) return res.status(400).json({ error: 'Invalid status value.' });
 
+      // Do not allow staff to bypass the order lifecycle.
       const { data: currentOrder, error: currentOrderError } = await supabase
         .from('zoal_orders')
-        .select('id, status')
-        .eq('id', body.orderId)
+        .select('id, status, payment_status')
+        .eq('id', orderId)
         .maybeSingle();
-      if (currentOrderError) return apiError(currentOrderError.message, 500);
-      if (!currentOrder) return apiError('Order not found.', 404);
+      if (currentOrderError) return res.status(500).json({ error: currentOrderError.message });
+      if (!currentOrder) return res.status(404).json({ error: 'Order not found.' });
 
-      if (!canTransitionOrderStatus(currentOrder.status, normalizedStatus)) {
-        return apiError(`Invalid order status transition: ${currentOrder.status} -> ${normalizedStatus}.`, 409);
+      const current = String(currentOrder.status || '').toLowerCase();
+      const allowed: Record<string, string[]> = {
+        pending: ['pending', 'processing', 'cancelled', 'failed'],
+        draft: ['draft', 'pending', 'cancelled', 'failed'],
+        pending_payment: ['pending_payment', 'processing', 'cancelled', 'failed'],
+        processing: ['processing', 'shipped', 'cancelled'],
+        shipped: ['shipped', 'delivered'],
+        delivered: ['delivered', 'refunded'],
+        cancelled: ['cancelled'],
+        refunded: ['refunded'],
+        failed: ['failed', 'pending_payment']
+      };
+      if (!allowed[current]?.includes(normalized)) {
+        return res.status(409).json({ error: `Invalid order status transition: ${current || 'unknown'} → ${normalized}` });
       }
 
-      updateFields.status = normalizedStatus;
-      const paymentStatus = paymentStatusForOrderStatus(requestedStatus);
-      if (paymentStatus) updateFields.payment_status = paymentStatus;
+      updateFields.status = normalized;
+      if (normalized === 'delivered') updateFields.payment_status = 'paid';
+      if (normalized === 'refunded') updateFields.payment_status = 'refunded';
     }
-
     if (typeof body.trackingNumber === 'string') {
       updateFields.tracking_number = body.trackingNumber.trim() || null;
     }
