@@ -238,3 +238,69 @@ $$;
 
 REVOKE ALL ON FUNCTION public.release_order_inventory(text,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.release_order_inventory(text,text) TO service_role;
+
+
+-- Atomically cancel an order and release all ledger-backed reservations.
+CREATE OR REPLACE FUNCTION public.cancel_order_and_release_inventory(
+  p_order_id text,
+  p_reason text DEFAULT 'cancelled'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  r record;
+  v_status text;
+  v_released integer := 0;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.zoal_orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ORDER_NOT_FOUND';
+  END IF;
+
+  IF v_status NOT IN ('draft','pending_payment','pending','processing') THEN
+    RAISE EXCEPTION 'ORDER_NOT_ELIGIBLE_FOR_CANCELLATION:%', v_status;
+  END IF;
+
+  FOR r IN
+    SELECT id, inventory_id, quantity
+    FROM public.zoal_order_inventory_reservations
+    WHERE order_id = p_order_id
+      AND released_at IS NULL
+    ORDER BY inventory_id
+    FOR UPDATE
+  LOOP
+    UPDATE public.zoal_inventory
+       SET reserved_quantity = GREATEST(reserved_quantity - r.quantity, 0),
+           updated_at = NOW()
+     WHERE id = r.inventory_id;
+
+    UPDATE public.zoal_order_inventory_reservations
+       SET released_at = NOW()
+     WHERE id = r.id;
+
+    v_released := v_released + r.quantity;
+  END LOOP;
+
+  UPDATE public.zoal_orders
+     SET status = 'cancelled',
+         updated_at = NOW()
+   WHERE id = p_order_id;
+
+  RETURN jsonb_build_object(
+    'order_id', p_order_id,
+    'status', 'cancelled',
+    'released_quantity', v_released,
+    'reason', p_reason
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cancel_order_and_release_inventory(text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_order_and_release_inventory(text,text) TO service_role;
