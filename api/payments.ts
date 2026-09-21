@@ -84,15 +84,19 @@ async function verifyPayment(req: VercelRequest, res: VercelResponse) {
   verifyGatewayPayment(payment, order);
   if (order.payment_status === 'paid') return send(res, 200, { success: true, verified: true, orderId: order.id, paymentStatus: 'paid', amount: Number(order.total_amount) });
   if (['paid', 'captured'].includes(String(payment.status))) {
-    const { error: txError } = await supabase.from('zoal_payment_transactions').update({ payment_status: 'paid', gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() }).eq('order_id', order.id).in('payment_status', ['initiated', 'pending', 'unpaid']);
-    if (txError) return send(res, 500, { error: txError.message });
-    const { error: orderError } = await supabase.from('zoal_orders').update({ payment_status: 'paid', status: 'processing', updated_at: new Date().toISOString() }).eq('id', order.id).neq('payment_status', 'paid');
-    if (orderError) return send(res, 500, { error: orderError.message });
+    const { error: transitionError } = await supabase.rpc('finalize_order_payment', {
+      p_order_id: String(order.id),
+      p_gateway_payment_id: String(payment.id)
+    });
+    if (transitionError) return send(res, 409, { error: transitionError.message });
     return send(res, 200, { success: true, verified: true, orderId: order.id, paymentStatus: 'paid', amount: Number(order.total_amount), gatewayPaymentId: payment.id });
   }
   if (String(payment.status) === 'failed') {
-    await supabase.from('zoal_payment_transactions').update({ payment_status: 'failed', gateway_payment_id: payment.id, gateway_response: payment, updated_at: new Date().toISOString() }).eq('order_id', order.id).in('payment_status', ['initiated', 'pending', 'unpaid']);
-    await supabase.from('zoal_orders').update({ payment_status: 'failed', status: 'failed', updated_at: new Date().toISOString() }).eq('id', order.id);
+    const { error: transitionError } = await supabase.rpc('fail_order_payment', {
+      p_order_id: String(order.id),
+      p_gateway_payment_id: String(payment.id)
+    });
+    if (transitionError) return send(res, 409, { error: transitionError.message });
     return send(res, 200, { success: false, verified: true, orderId: order.id, paymentStatus: 'failed', message: 'Payment authorization failed.' });
   }
   return send(res, 202, { success: false, verified: true, orderId: order.id, paymentStatus: payment.status, message: 'Payment is not final yet.' });
@@ -144,10 +148,24 @@ async function webhook(req: VercelRequest, res: VercelResponse) {
   if (tx) {
     const status = String(payment.status);
     const mapped = status === 'refunded' ? 'refunded' : status === 'captured' || status === 'paid' ? 'paid' : status === 'failed' ? 'failed' : tx.payment_status;
-    await supabase.from('zoal_payment_transactions').update({ payment_status: mapped, refund_amount: Number(payment.refunded || tx.refund_amount || 0) / 100, gateway_response: payment, updated_at: new Date().toISOString() }).eq('id', tx.id);
-    if (mapped === 'paid') await supabase.from('zoal_orders').update({ payment_status: 'paid', status: 'processing', updated_at: new Date().toISOString() }).eq('id', tx.order_id);
-    if (mapped === 'refunded') await supabase.from('zoal_orders').update({ payment_status: 'refunded', status: 'refunded', updated_at: new Date().toISOString() }).eq('id', tx.order_id);
-    if (mapped === 'failed') await supabase.from('zoal_orders').update({ payment_status: 'failed', status: 'failed', updated_at: new Date().toISOString() }).eq('id', tx.order_id);
+    if (mapped === 'paid') {
+      const { error: transitionError } = await supabase.rpc('finalize_order_payment', {
+        p_order_id: String(tx.order_id),
+        p_gateway_payment_id: paymentId
+      });
+      if (transitionError) return send(res, 409, { error: transitionError.message });
+      await supabase.from('zoal_payment_transactions').update({ refund_amount: Number(payment.refunded || tx.refund_amount || 0) / 100, gateway_response: payment, updated_at: new Date().toISOString() }).eq('id', tx.id);
+    } else if (mapped === 'failed') {
+      const { error: transitionError } = await supabase.rpc('fail_order_payment', {
+        p_order_id: String(tx.order_id),
+        p_gateway_payment_id: paymentId
+      });
+      if (transitionError) return send(res, 409, { error: transitionError.message });
+      await supabase.from('zoal_payment_transactions').update({ gateway_response: payment, updated_at: new Date().toISOString() }).eq('id', tx.id);
+    } else {
+      await supabase.from('zoal_payment_transactions').update({ payment_status: mapped, refund_amount: Number(payment.refunded || tx.refund_amount || 0) / 100, gateway_response: payment, updated_at: new Date().toISOString() }).eq('id', tx.id);
+      if (mapped === 'refunded') await supabase.from('zoal_orders').update({ payment_status: 'refunded', status: 'refunded', updated_at: new Date().toISOString() }).eq('id', tx.order_id);
+    }
   }
   await supabase.from('zoal_payment_webhook_logs').update({ processed_status: 'processed', updated_at: new Date().toISOString() }).eq('gateway_event_id', eventId);
   return send(res, 200, { received: true });
