@@ -208,17 +208,8 @@ export async function updateProduct(req: Request, res: Response) {
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
 
-      // Sync zoal_inventory
-      if (body.inventory !== undefined) {
-        await supabase.from('zoal_inventory').upsert({
-          product_id: uuid,
-          quantity: body.inventory,
-          warehouse_location: body.warehouseLocation || 'Main Hub',
-          low_stock_threshold: body.lowStockThreshold || 5,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'product_id' });
-      }
-
+      // Inventory is authoritative in zoal_inventory and must be changed through the inventory service.
+      // Product metadata updates intentionally do not overwrite quantity/reserved_quantity.
       // Sync zoal_product_seo
       await supabase.from('zoal_product_seo').upsert({
         product_id: uuid,
