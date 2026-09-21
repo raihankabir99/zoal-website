@@ -197,6 +197,16 @@ test('Atomic order RPC is server-only', () => {
   assert.match(migration, /FOR UPDATE/);
 });
 
+test('P0: Atomic cancellation RPC releases ledger reservations and is server-only', () => {
+  const migration = fs.readFileSync(new URL('../migrations/066_atomic_order_creation.sql', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.cancel_order_and_release_inventory/);
+  assert.match(migration, /released_at IS NULL/);
+  assert.match(migration, /SET reserved_quantity = GREATEST\(reserved_quantity - r\.quantity, 0\)/);
+  assert.match(migration, /SET status = 'cancelled'/);
+  assert.match(migration, /REVOKE ALL ON FUNCTION public\.cancel_order_and_release_inventory/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.cancel_order_and_release_inventory.*service_role/s);
+});
+
 
 test('Order API delegates order creation to the atomic order creation RPC', () => {
   const orderSource = fs.readFileSync(new URL('../src/app/api/orders/route.ts', import.meta.url), 'utf8');
