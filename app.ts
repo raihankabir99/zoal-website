@@ -2099,35 +2099,12 @@ setInterval(async () => {
           continue;
         }
 
-        const itemsRes = await client.query(
-          `SELECT product_id, quantity
-             FROM zoal_order_items
-            WHERE order_id = $1
-            ORDER BY product_id`,
-          [row.id]
+        // Release only ledger-backed reservations. The function locks the order
+        // and reservation rows and is idempotent via released_at.
+        await client.query(
+          `SELECT public.release_order_inventory($1, $2)`,
+          [row.id, 'payment_timeout']
         );
-
-        for (const item of itemsRes.rows) {
-          const invRes = await client.query(
-            `SELECT id, reserved_quantity
-               FROM zoal_inventory
-              WHERE product_id = $1
-                AND reserved_quantity >= $2
-              ORDER BY warehouse_id NULLS LAST
-              LIMIT 1
-              FOR UPDATE`,
-            [item.product_id, item.quantity]
-          );
-          if (invRes.rows[0]) {
-            await client.query(
-              `UPDATE zoal_inventory
-                  SET reserved_quantity = reserved_quantity - $1,
-                      updated_at = NOW()
-                WHERE id = $2`,
-              [item.quantity, invRes.rows[0].id]
-            );
-          }
-        }
 
         await client.query(
           `UPDATE zoal_orders
