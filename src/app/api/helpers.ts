@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // Lazily read Supabase credentials
-const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder-project.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Supabase public credentials are not configured.');
+}
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Basic Rate Limiting Map
