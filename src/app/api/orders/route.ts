@@ -76,7 +76,10 @@ export async function POST(req: NextRequest) {
 
       const unitPrice = Number(prod.sale_price ?? prod.price);
       const unitCost = prod.cost_price === null || prod.cost_price === undefined ? null : Number(prod.cost_price);
-      const qty = Math.max(1, parseInt(item.quantity || '1', 10));
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 1000) {
+        return apiError(`Invalid quantity for ${pId}. Quantity must be an integer between 1 and 1000.`, 400);
+      }
       if (!Number.isFinite(unitPrice) || unitPrice < 0) return apiError(`Invalid product price for ${pId}`, 400);
       if (unitCost !== null && (!Number.isFinite(unitCost) || unitCost < 0)) return apiError(`Invalid product cost for ${pId}`, 400);
 
@@ -86,8 +89,19 @@ export async function POST(req: NextRequest) {
 
     let shippingCost = 0;
     if (body.shippingMethodId) {
-      const { data: shipping } = await supabase.from('zoal_shipping').select('cost').eq('id', body.shippingMethodId).maybeSingle();
-      if (shipping) shippingCost = Number(shipping.cost);
+      const { data: shipping, error: shippingErr } = await supabase
+        .from('zoal_shipping')
+        .select('cost, is_active')
+        .eq('id', body.shippingMethodId)
+        .maybeSingle();
+      if (shippingErr) return apiError(shippingErr.message, 500);
+      if (!shipping || shipping.is_active !== true) {
+        return apiError('Selected shipping method is unavailable.', 400);
+      }
+      shippingCost = Number(shipping.cost);
+      if (!Number.isFinite(shippingCost) || shippingCost < 0) {
+        return apiError('Invalid shipping configuration.', 500);
+      }
     } else shippingCost = subtotal >= 500 ? 0 : 35;
 
     let discountAmount = 0;
@@ -128,7 +142,30 @@ export async function POST(req: NextRequest) {
     }
 
     const taxableAmount = Math.max(0, subtotal - discountAmount);
-    const taxAmount = Number((taxableAmount * 0.15).toFixed(2));
+    const now = new Date().toISOString();
+    const { data: activeTaxRate, error: taxRateError } = await supabase
+      .from('zoal_tax_rates')
+      .select('id, name, rate_percentage, tax_type, start_date, end_date, is_active')
+      .eq('is_active', true)
+      .lte('start_date', now)
+      .or(`end_date.is.null,end_date.gte.${now}`)
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (taxRateError) return apiError(`Unable to resolve tax configuration: ${taxRateError.message}`, 500);
+    if (!activeTaxRate) {
+      return apiError('Tax configuration is not available. Order creation is temporarily unavailable until an active tax rate is configured.', 503);
+    }
+
+    const ratePercentage = Number(activeTaxRate.rate_percentage);
+    if (!Number.isFinite(ratePercentage) || ratePercentage < 0 || ratePercentage > 100) {
+      return apiError('Invalid tax configuration.', 500);
+    }
+
+    const taxAmount = activeTaxRate.tax_type === 'Exempt' || activeTaxRate.tax_type === 'Zero Rated'
+      ? 0
+      : Number((taxableAmount * ratePercentage / 100).toFixed(2));
     const totalAmount = Number((taxableAmount + taxAmount + shippingCost).toFixed(2));
     const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
