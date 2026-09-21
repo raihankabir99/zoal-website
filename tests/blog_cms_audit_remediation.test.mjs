@@ -121,9 +121,12 @@ test('P0: Inventory RLS does not expose inventory rows to arbitrary clients', ()
   assert.match(inventoryRls, /CREATE POLICY \"zoal_inventory_manage_privileged\"/);
 });
 
-test('P0: Product updates do not overwrite authoritative inventory', () => {
+test('P0: Product CRUD does not overwrite authoritative inventory', () => {
   const productCrudSource = fs.readFileSync(new URL('../server/products_crud.ts', import.meta.url), 'utf8');
+  const createSection = productCrudSource.slice(productCrudSource.indexOf('export async function createProduct'), productCrudSource.indexOf('export async function updateProduct'));
   const updateSection = productCrudSource.slice(productCrudSource.indexOf('export async function updateProduct'), productCrudSource.indexOf('export async function patchProduct'));
+  assert.doesNotMatch(createSection, /from\(['\"]zoal_inventory['\"]\)/);
+  assert.doesNotMatch(createSection, /quantity:\s*body\.inventory/);
   assert.doesNotMatch(updateSection, /from\(['\"]zoal_inventory['\"]\)/);
   assert.doesNotMatch(updateSection, /quantity:\s*body\.inventory/);
 });
