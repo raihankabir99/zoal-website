@@ -130,3 +130,26 @@ test('P0: Product CRUD does not overwrite authoritative inventory', () => {
   assert.doesNotMatch(updateSection, /from\(['\"]zoal_inventory['\"]\)/);
   assert.doesNotMatch(updateSection, /quantity:\s*body\.inventory/);
 });
+
+
+test('P0: Inventory RLS migration removes every pre-existing inventory policy', () => {
+  const inventoryRls = fs.readFileSync(new URL('../migrations/064_inventory_rls_hardening.sql', import.meta.url), 'utf8');
+  assert.match(inventoryRls, /FOR pol IN\s+SELECT policyname\s+FROM pg_policies/);
+  assert.match(inventoryRls, /DROP POLICY IF EXISTS/);
+  assert.match(inventoryRls, /CREATE POLICY "zoal_inventory_select_privileged"/);
+});
+
+test('P0: Payment finalization is delegated to atomic database transitions', () => {
+  const paymentSource = fs.readFileSync(new URL('../api/payments.ts', import.meta.url), 'utf8');
+  assert.match(paymentSource, /rpc\('finalize_order_payment'/);
+  assert.match(paymentSource, /rpc\('fail_order_payment'/);
+  assert.doesNotMatch(paymentSource, /from\('zoal_inventory'\)/);
+});
+
+test('P0: Payment transition RPCs are server-only', () => {
+  const paymentMigration = fs.readFileSync(new URL('../migrations/065_payment_inventory_and_function_execute_hardening.sql', import.meta.url), 'utf8');
+  assert.match(paymentMigration, /REVOKE ALL ON FUNCTION public\.finalize_order_payment/);
+  assert.match(paymentMigration, /REVOKE ALL ON FUNCTION public\.fail_order_payment/);
+  assert.match(paymentMigration, /GRANT EXECUTE ON FUNCTION public\.finalize_order_payment.*service_role/s);
+  assert.match(paymentMigration, /GRANT EXECUTE ON FUNCTION public\.fail_order_payment.*service_role/s);
+});
