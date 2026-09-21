@@ -59,13 +59,13 @@ export async function PUT(req: NextRequest) {
       failed: 'failed', 'Failed': 'failed'
     };
 
-    const orderId = String(orderId).trim();
+    const orderId = String(body.orderId).trim();
     if (!orderId) return apiError('Order ID is required.', 400);
 
     const updateFields: Record<string, any> = {};
     if (typeof body.status === 'string' && body.status.trim()) {
       const normalized = statusMap[body.status.trim()] || statusMap[body.status.trim().toLowerCase()];
-      if (!normalized) return res.status(400).json({ error: 'Invalid status value.' });
+      if (!normalized) return apiError('Invalid status value.', 400);
 
       // Do not allow staff to bypass the order lifecycle.
       const { data: currentOrder, error: currentOrderError } = await supabase
@@ -73,8 +73,8 @@ export async function PUT(req: NextRequest) {
         .select('id, status, payment_status')
         .eq('id', orderId)
         .maybeSingle();
-      if (currentOrderError) return res.status(500).json({ error: currentOrderError.message });
-      if (!currentOrder) return res.status(404).json({ error: 'Order not found.' });
+      if (currentOrderError) return apiError(currentOrderError.message, 500);
+      if (!currentOrder) return apiError('Order not found.', 404);
 
       const current = String(currentOrder.status || '').toLowerCase();
       const allowed: Record<string, string[]> = {
@@ -89,7 +89,7 @@ export async function PUT(req: NextRequest) {
         failed: ['failed', 'pending_payment']
       };
       if (!allowed[current]?.includes(normalized)) {
-        return res.status(409).json({ error: `Invalid order status transition: ${current || 'unknown'} → ${normalized}` });
+        return apiError(`Invalid order status transition: \${current || 'unknown'} → \${normalized}`, 409);
       }
 
       updateFields.status = normalized;
