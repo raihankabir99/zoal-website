@@ -4,7 +4,7 @@ let supabaseClient: SupabaseClient | null = null;
 let serviceSupabaseClient: SupabaseClient | null = null;
 
 const DEFAULT_SUPABASE_URL = 'https://jglveforpqhioxpambbq.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_usAlnI8l2JjcgwOIiWbgRw_ZUKVJ2C3';
+const DEFAULT_SUPABASE_ANON_KEY = '';
 
 /**
  * Cleans the SUPABASE_URL by stripping trailing slashes or /rest/v1 suffixes.
@@ -29,8 +29,7 @@ export function getCleanSupabaseUrl(): string {
  */
 export function isSupabaseConfigured(): boolean {
   const url = getCleanSupabaseUrl();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
               process.env.SUPABASE_ANON_KEY ||
               DEFAULT_SUPABASE_ANON_KEY;
   return !!(url && key && url.trim() !== '' && key.trim() !== '' && (url.startsWith('http://') || url.startsWith('https://')));
@@ -47,9 +46,8 @@ export function getSupabaseClient(): SupabaseClient | null {
 
   if (!supabaseClient) {
     const url = getCleanSupabaseUrl();
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-                process.env.SUPABASE_ANON_KEY || 
-                process.env.SUPABASE_SERVICE_ROLE_KEY || 
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+                process.env.SUPABASE_ANON_KEY ||
                 DEFAULT_SUPABASE_ANON_KEY;
     try {
       supabaseClient = createClient(url, key, {
@@ -73,10 +71,7 @@ export function getSupabaseClient(): SupabaseClient | null {
  */
 export function getServiceSupabaseClient(): SupabaseClient | null {
   const url = getCleanSupabaseUrl();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-                     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-                     process.env.SUPABASE_ANON_KEY || 
-                     DEFAULT_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
   if (!url || !serviceKey) {
     return null;
