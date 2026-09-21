@@ -78,6 +78,8 @@ export default async function handler(req: any, res: any) {
       .from('zoal_inventory')
       .update(updatePayload)
       .eq('id', current.id)
+      .eq('product_id', productId)
+      .eq('warehouse_id', warehouseId)
       .eq('quantity', current.quantity)
       .select('*')
       .maybeSingle();
