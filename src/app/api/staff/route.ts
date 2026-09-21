@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
-import { supabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, validateFields } from '../helpers';
+import { supabase, serviceSupabase, checkRateLimit, apiResponse, apiError, verifyAuthAndRole, validateFields } from '../helpers';
 import { paymentStatusForOrderStatus } from '../../../lib/orderPaymentStatus.mjs';
 import { canTransitionOrderStatus } from '../../../lib/orderStatusTransition.mjs';
 
@@ -58,6 +58,9 @@ export async function PUT(req: NextRequest) {
       'partially refunded': 'partially_refunded', 'Partially Refunded': 'partially_refunded',
       failed: 'failed', 'Failed': 'failed'
     };
+
+    const orderId = String(orderId).trim();
+    if (!orderId) return apiError('Order ID is required.', 400);
 
     const updateFields: Record<string, any> = {};
     if (typeof body.status === 'string' && body.status.trim()) {
@@ -137,22 +140,49 @@ export async function PUT(req: NextRequest) {
     if (Object.keys(updateFields).length === 0) return apiError('No mutable order fields supplied.', 400);
     updateFields.updated_at = new Date().toISOString();
 
-    const { data: updatedOrder, error } = await supabase
-      .from('zoal_orders')
-      .update(updateFields)
-      .eq('id', body.orderId)
-      .select()
-      .single();
+    let updatedOrder: any = null;
 
-    if (error) return apiError(error.message, 500);
+    if (updateFields.status === 'cancelled') {
+      const { data: cancelResult, error: cancelError } = await serviceSupabase.rpc(
+        'cancel_order_and_release_inventory',
+        { p_order_id: orderId, p_reason: 'staff_cancelled' }
+      );
+      if (cancelError) {
+        const message = cancelError.message || '';
+        if (message.includes('ORDER_NOT_FOUND')) return apiError('Order not found.', 404);
+        if (message.includes('ORDER_NOT_ELIGIBLE_FOR_CANCELLATION')) return apiError('Order is no longer eligible for cancellation.', 409);
+        return apiError(message || 'Unable to cancel order.', 500);
+      }
+      updatedOrder = cancelResult || { id: orderId, status: 'cancelled' };
+
+      const { data: refreshedOrder, error: refreshError } = await supabase
+        .from('zoal_orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+      if (refreshError) return apiError(refreshError.message, 500);
+      updatedOrder = refreshedOrder;
+      delete updateFields.status;
+    }
+
+    if (Object.keys(updateFields).filter(k => k !== 'updated_at').length > 0) {
+      const { data, error } = await supabase
+        .from('zoal_orders')
+        .update(updateFields)
+        .eq('id', orderId)
+        .select()
+        .single();
+      if (error) return apiError(error.message, 500);
+      updatedOrder = data;
+    }
 
     const { error: activityError } = await supabase.from('zoal_activity_logs').insert({
       id: randomUUID(),
       user_id: auth.user.id,
       email: auth.user.email,
-      action: `Updated order ${body.orderId}: ${Object.keys(updateFields).filter(k => k !== 'updated_at').join(', ')}`,
+      action: `Updated order ${orderId}: ${Object.keys(updateFields).filter(k => k !== 'updated_at').join(', ')}`,
       resource_type: 'order',
-      resource_id: body.orderId,
+      resource_id: orderId,
       metadata: { fields: Object.keys(updateFields).filter(k => k !== 'updated_at') }
     });
 
