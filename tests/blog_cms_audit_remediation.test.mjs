@@ -153,3 +153,30 @@ test('P0: Payment transition RPCs are server-only', () => {
   assert.match(paymentMigration, /GRANT EXECUTE ON FUNCTION public\.finalize_order_payment.*service_role/s);
   assert.match(paymentMigration, /GRANT EXECUTE ON FUNCTION public\.fail_order_payment.*service_role/s);
 });
+
+
+test('Order API rejects non-integer and out-of-range quantities', () => {
+  const orderSource = fs.readFileSync(new URL('../src/app/api/orders/route.ts', import.meta.url), 'utf8');
+  assert.match(orderSource, /Number\.isInteger\(qty\)/);
+  assert.match(orderSource, /qty < 1/);
+  assert.match(orderSource, /qty > 1000/);
+});
+
+test('Order API resolves tax from active tax configuration', () => {
+  const orderSource = fs.readFileSync(new URL('../src/app/api/orders/route.ts', import.meta.url), 'utf8');
+  assert.match(orderSource, /from\('zoal_tax_rates'\)/);
+  assert.doesNotMatch(orderSource, /taxableAmount \* 0\.15/);
+});
+
+test('Staff order updates enforce explicit lifecycle transitions', () => {
+  const staffSource = fs.readFileSync(new URL('../src/app/api/staff/route.ts', import.meta.url), 'utf8');
+  assert.match(staffSource, /allowed: Record<string, string\[\]>/);
+  assert.match(staffSource, /Invalid order status transition/);
+});
+
+test('Order expiry performs reservation release and order failure inside a transaction', () => {
+  const appSource = fs.readFileSync(new URL('../app.ts', import.meta.url), 'utf8');
+  assert.match(appSource, /await client\.query\('BEGIN'\)/);
+  assert.match(appSource, /await client\.query\('COMMIT'\)/);
+  assert.match(appSource, /await client\.query\('ROLLBACK'/);
+});
