@@ -1,6 +1,28 @@
 -- Atomic order creation: order, items, inventory reservation and coupon redemption
 -- are committed together. Payment gateway integration remains separate.
 
+CREATE TABLE IF NOT EXISTS public.zoal_order_inventory_reservations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id text NOT NULL REFERENCES public.zoal_orders(id) ON DELETE CASCADE,
+  inventory_id uuid NOT NULL REFERENCES public.zoal_inventory(id),
+  product_id text NOT NULL,
+  warehouse_id uuid,
+  quantity integer NOT NULL CHECK (quantity > 0),
+  created_at timestamptz NOT NULL DEFAULT NOW(),
+  released_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_inventory_reservations_order
+  ON public.zoal_order_inventory_reservations(order_id);
+
+ALTER TABLE public.zoal_order_inventory_reservations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "order_inventory_reservations_service_only" ON public.zoal_order_inventory_reservations;
+CREATE POLICY "order_inventory_reservations_service_only"
+  ON public.zoal_order_inventory_reservations
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
 CREATE OR REPLACE FUNCTION public.create_order_atomic(
   p_order_id text,
   p_customer_id text,
@@ -117,6 +139,12 @@ BEGIN
             updated_at = NOW()
         WHERE id = v_inventory.id;
 
+        INSERT INTO public.zoal_order_inventory_reservations (
+          order_id, inventory_id, product_id, warehouse_id, quantity
+        ) VALUES (
+          p_order_id, v_inventory.id, v_item.product_id, v_inventory.warehouse_id, v_take
+        );
+
         v_reserved := v_reserved || jsonb_build_object(
           'product_id', v_item.product_id,
           'warehouse_id', v_inventory.warehouse_id,
@@ -157,3 +185,56 @@ GRANT EXECUTE ON FUNCTION public.create_order_atomic(
   text, text, jsonb, numeric, numeric, numeric, numeric, numeric,
   uuid, text, numeric, text, text, jsonb
 ) TO service_role;
+
+
+CREATE OR REPLACE FUNCTION public.release_order_inventory(
+  p_order_id text,
+  p_reason text DEFAULT 'cancelled'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  r record;
+  v_released integer := 0;
+  v_order_status text;
+BEGIN
+  SELECT status INTO v_order_status
+  FROM public.zoal_orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'ORDER_NOT_FOUND'; END IF;
+
+  IF v_order_status NOT IN ('cancelled','failed','pending','pending_payment','draft') THEN
+    RAISE EXCEPTION 'ORDER_NOT_ELIGIBLE_FOR_RESERVATION_RELEASE:%', v_order_status;
+  END IF;
+
+  FOR r IN
+    SELECT id, inventory_id, quantity
+    FROM public.zoal_order_inventory_reservations
+    WHERE order_id = p_order_id
+      AND released_at IS NULL
+    ORDER BY inventory_id
+    FOR UPDATE
+  LOOP
+    UPDATE public.zoal_inventory
+       SET reserved_quantity = GREATEST(reserved_quantity - r.quantity, 0),
+           updated_at = NOW()
+     WHERE id = r.inventory_id;
+
+    UPDATE public.zoal_order_inventory_reservations
+       SET released_at = NOW()
+     WHERE id = r.id;
+
+    v_released := v_released + r.quantity;
+  END LOOP;
+
+  RETURN jsonb_build_object('order_id', p_order_id, 'released_quantity', v_released, 'reason', p_reason);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.release_order_inventory(text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.release_order_inventory(text,text) TO service_role;
