@@ -256,3 +256,14 @@ test('P0: Inventory reservation RPC is server-only and writes reservation ledger
   assert.match(migration, /INSERT INTO public\.zoal_order_inventory_reservations/);
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.reserve_order_inventory\(text,jsonb\).*service_role/s);
 });
+
+
+test('P0: Post-payment order persistence is idempotent and does not insert a duplicate order', () => {
+  const appSource = fs.readFileSync(new URL('../app.ts', import.meta.url), 'utf8');
+  const routeStart = appSource.indexOf("app.post('/api/orders/create'");
+  const routeEnd = appSource.indexOf('// ==========================================', routeStart);
+  const route = appSource.slice(routeStart, routeEnd);
+  assert.match(route, /\.from\(['"]zoal_orders['"]\)[\s\S]*\.maybeSingle\(\)/);
+  assert.match(route, /idempotent:\s*true/);
+  assert.match(route, /You do not have permission to finalize this order/);
+});
