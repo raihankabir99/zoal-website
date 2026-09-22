@@ -1725,6 +1725,35 @@ app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) 
   }
 
   try {
+    // The payment-initiation flow may already have created this order.
+    // This endpoint is an idempotent persistence/finalization callback, not a
+    // second order-creation path. Never duplicate inventory or order rows.
+    const { data: existingOrder, error: existingOrderError } = await supabase
+      .from('zoal_orders')
+      .select('id, customer_id, status, payment_status')
+      .eq('id', order.id)
+      .maybeSingle();
+
+    if (existingOrderError) throw existingOrderError;
+
+    if (existingOrder) {
+      if (existingOrder.customer_id && existingOrder.customer_id !== resolvedCustomerId) {
+        return res.status(403).json({ error: 'You do not have permission to finalize this order.' });
+      }
+
+      const terminalStatuses = new Set(['cancelled', 'failed']);
+      if (terminalStatuses.has(String(existingOrder.status).toLowerCase())) {
+        return res.status(409).json({ error: 'This order is no longer available for finalization.' });
+      }
+
+      return res.json({
+        success: true,
+        persisted: true,
+        idempotent: true,
+        orderId: existingOrder.id
+      });
+    }
+
     // 1. Insert into zoal_orders
     // P0 Financial Security: Server-Authoritative Order Total Calculation
     const calculatedTotals = await calculateOrderTotalServerSide(
