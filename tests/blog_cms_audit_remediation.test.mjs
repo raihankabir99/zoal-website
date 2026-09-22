@@ -240,3 +240,19 @@ test('P0: Staff order status handler uses the validated orderId variable', () =>
   assert.match(staffSource, /const orderId = body\.orderId/);
   assert.doesNotMatch(staffSource, /eq\('id', orderId\)/);
 });
+
+
+test('P0: Legacy checkout has no direct reserved_quantity writes', () => {
+  const appSource = fs.readFileSync(new URL('../app.ts', import.meta.url), 'utf8');
+  assert.match(appSource, /reserve_order_inventory/);
+  assert.doesNotMatch(appSource, /reserved_quantity\s*:/);
+  assert.doesNotMatch(appSource, /\.from\(['"]zoal_inventory['"]\)[\s\S]*\.update\(/);
+});
+
+test('P0: Inventory reservation RPC is server-only and writes reservation ledger', () => {
+  const migration = fs.readFileSync(new URL('../migrations/066_atomic_order_creation.sql', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.reserve_order_inventory/);
+  assert.match(migration, /FOR UPDATE/);
+  assert.match(migration, /INSERT INTO public\.zoal_order_inventory_reservations/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.reserve_order_inventory\(text,jsonb\).*service_role/s);
+});
