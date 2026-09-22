@@ -267,3 +267,15 @@ test('P0: Post-payment order persistence is idempotent and does not insert a dup
   assert.match(route, /idempotent:\s*true/);
   assert.match(route, /You do not have permission to finalize this order/);
 });
+
+
+test('P0: Deployed Express order route has duplicate-order idempotency guard', () => {
+  const serverSource = fs.readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
+  const routeStart = serverSource.indexOf("app.post('/api/orders/create'");
+  const routeEnd = serverSource.indexOf("app.post('/api/orders/email'", routeStart);
+  const route = serverSource.slice(routeStart, routeEnd);
+  assert.match(route, /\.from\(['"]zoal_orders['"]\)[\s\S]*\.maybeSingle\(\)/);
+  assert.match(route, /idempotent:\s*true/);
+  assert.match(route, /You do not have permission to finalize this order/);
+  assert.match(route, /This order is no longer available for finalization/);
+});
