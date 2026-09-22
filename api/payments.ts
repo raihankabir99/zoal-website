@@ -171,8 +171,17 @@ async function webhook(req: VercelRequest, res: VercelResponse) {
   return send(res, 200, { received: true });
 }
 
+const PAYMENTS_ENABLED = process.env.MOYASAR_ENABLED === 'true' &&
+  Boolean(process.env.MOYASAR_PUBLISHABLE_KEY?.trim()) &&
+  Boolean(process.env.MOYASAR_SECRET_KEY?.trim());
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    if (!PAYMENTS_ENABLED) {
+      return send(res, 503, {
+        error: 'Payment gateway is disabled. Moyasar must be configured and explicitly enabled before payment processing is available.'
+      });
+    }
     const path = pathName(req);
     if (req.method === 'GET' && path === '/api/payments/config') {
       const publishableKey = process.env.MOYASAR_PUBLISHABLE_KEY?.trim();
