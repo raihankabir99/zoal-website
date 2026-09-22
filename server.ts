@@ -1605,6 +1605,33 @@ app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) 
   }
 
   try {
+    // Idempotency guard: this endpoint can be called again after payment
+    // finalization. Never create a second order for the same order ID.
+    const { data: existingOrder, error: existingOrderError } = await supabase
+      .from('zoal_orders')
+      .select('id, customer_id, status, payment_status')
+      .eq('id', order.id)
+      .maybeSingle();
+
+    if (existingOrderError) throw existingOrderError;
+
+    if (existingOrder) {
+      if (existingOrder.customer_id && existingOrder.customer_id !== resolvedCustomerId) {
+        return res.status(403).json({ error: 'You do not have permission to finalize this order.' });
+      }
+
+      if (['cancelled', 'failed'].includes(String(existingOrder.status).toLowerCase())) {
+        return res.status(409).json({ error: 'This order is no longer available for finalization.' });
+      }
+
+      return res.json({
+        success: true,
+        persisted: true,
+        idempotent: true,
+        orderId: existingOrder.id
+      });
+    }
+
     // Query active published terms version ID for legal consent capture
     let termsAcceptedVersionId: string | null = null;
     try {
