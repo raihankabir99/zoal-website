@@ -2483,92 +2483,35 @@ app.post('/api/payments/create', optionalAuthenticate, async (req: any, res: any
 
       await supabase.from('zoal_order_items').insert(orderItems);
 
-      const reservedTracker: { uuid: string; warehouseId: string; quantity: number }[] = [];
-      for (const item of items) {
-        const uuid = friendlyToUUID(item.productId);
-        const qty = Number(item.quantity);
-        const { data: inv } = await supabase
-          .from('zoal_inventory')
-          .select('quantity, reserved_quantity, warehouse_id')
-          .eq('product_id', uuid)
-          .maybeSingle();
+      const reservationItems = items.map((item) => ({
+      product_id: friendlyToUUID(item.productId),
+      quantity: Number(item.quantity)
+    }));
 
-        const warehouseId = inv?.warehouse_id;
-        const currentQty = inv ? Number(inv.quantity || 0) : 0;
-        const currentReserved = inv ? Number(inv.reserved_quantity || 0) : 0;
+    const { error: reservationError } = await supabase.rpc('reserve_order_inventory', {
+      p_order_id: orderId,
+      p_items: reservationItems
+    });
 
-        if (!warehouseId || currentQty - currentReserved < qty) {
-          for (const reservedItem of reservedTracker) {
-            const { data: rollbackInv } = await supabase
-              .from('zoal_inventory')
-              .select('reserved_quantity')
-              .eq('product_id', reservedItem.uuid)
-              .eq('warehouse_id', reservedItem.warehouseId)
-              .maybeSingle();
-            if (rollbackInv) {
-              await supabase
-                .from('zoal_inventory')
-                .update({
-                  reserved_quantity: Math.max(0, Number(rollbackInv.reserved_quantity || 0) - reservedItem.quantity),
-                  updated_at: new Date().toISOString()
-                })
-                .eq('product_id', reservedItem.uuid)
-                .eq('warehouse_id', reservedItem.warehouseId);
-            }
-          }
+    if (reservationError) {
+      const message = reservationError.message || '';
+      await supabase.from('zoal_order_items').delete().eq('order_id', orderId);
+      await supabase.from('zoal_orders').delete().eq('id', orderId);
 
-          await supabase.from('zoal_order_items').delete().eq('order_id', orderId);
-          await supabase.from('zoal_orders').delete().eq('id', orderId);
-
-          return res.status(400).json({
-            error: `Insufficient available stock for product ${item.name || item.productId}. Reservation failed.`
-          });
-        }
-
-        // Atomic-style update with Optimistic Concurrency Check
-        const { data: updatedInv, error: updateErr } = await supabase
-          .from('zoal_inventory')
-          .update({
-            reserved_quantity: currentReserved + qty,
-            updated_at: new Date().toISOString()
-          })
-          .eq('product_id', uuid)
-          .eq('warehouse_id', warehouseId)
-          .eq('reserved_quantity', currentReserved) // Concurrency guard
-          .select();
-
-        if (updateErr || !updatedInv || updatedInv.length === 0) {
-          // Retry logic could be implemented here, but for now we'll fail to be safe
-          // Rollback prior items in this request
-          for (const reservedItem of reservedTracker) {
-            const { data: rollbackInv } = await supabase
-              .from('zoal_inventory')
-              .select('reserved_quantity')
-              .eq('product_id', reservedItem.uuid)
-              .eq('warehouse_id', reservedItem.warehouseId)
-              .maybeSingle();
-            if (rollbackInv) {
-              await supabase
-                .from('zoal_inventory')
-                .update({
-                  reserved_quantity: Math.max(0, Number(rollbackInv.reserved_quantity || 0) - reservedItem.quantity),
-                  updated_at: new Date().toISOString()
-                })
-                .eq('product_id', reservedItem.uuid)
-                .eq('warehouse_id', reservedItem.warehouseId);
-            }
-          }
-
-          await supabase.from('zoal_order_items').delete().eq('order_id', orderId);
-          await supabase.from('zoal_orders').delete().eq('id', orderId);
-
-          return res.status(409).json({
-            error: `Inventory contention detected for product ${item.name || item.productId}. Please try again.`
-          });
-        }
-
-        reservedTracker.push({ uuid, warehouseId, quantity: qty });
+      if (message.includes('INSUFFICIENT_INVENTORY')) {
+        return res.status(400).json({
+          error: 'Insufficient available stock. Reservation failed.'
+        });
       }
+      if (message.includes('INVENTORY_NOT_FOUND')) {
+        return res.status(400).json({
+          error: 'Inventory is not configured for one or more products.'
+        });
+      }
+      return res.status(409).json({
+        error: 'Inventory reservation failed. Please try again.'
+      });
+    }
 
       const transactionData = {
         order_id: orderId,
