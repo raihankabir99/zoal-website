@@ -1692,121 +1692,68 @@ app.get('/api/orders/email-history', authenticateRequest, requireRole(['admin'])
 
 // Create a new order in Supabase
 app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) => {
-  const { order, termsAccepted: directTermsAccepted } = req.body;
-  if (!order || !order.id || !order.items) {
+  const { order, termsAccepted: directTermsAccepted } = req.body || {};
+  if (!order || !order.id || !Array.isArray(order.items) || order.items.length === 0) {
     return res.status(400).json({ error: 'Invalid order structure.' });
   }
 
-  // P0 Legal Compliance: Explicit Terms & Conditions Acceptance Required
-  const isTermsAccepted = order.termsAccepted === true || order.terms_accepted === true || directTermsAccepted === true || req.body.terms_accepted === true;
+  const isTermsAccepted =
+    order.termsAccepted === true ||
+    order.terms_accepted === true ||
+    directTermsAccepted === true ||
+    req.body.terms_accepted === true;
   if (!isTermsAccepted) {
     return res.status(400).json({ error: 'Explicit acceptance of the Terms & Conditions is required before order submission.' });
   }
 
-  // P0 Legal Compliance: Server-Authoritative Published Terms Version Resolution (Do NOT trust client IDs)
   const termsAcceptedVersionId = await legalModule.getPublishedTermsVersionId();
   if (!termsAcceptedVersionId) {
-    console.error('❌ Active published Terms & Conditions document version not found in database.');
-    return res.status(400).json({ error: 'Active published Terms & Conditions document not found. Order creation cannot proceed.' });
+    return res.status(503).json({ error: 'Active published Terms & Conditions document not found. Order creation cannot proceed.' });
   }
 
-  // Server-Authoritative Customer Identity Resolution (P0 Security)
-  // Authenticated orders MUST use verified session user ID.
-  // Unauthenticated (guest) orders MUST use NULL.
-  // Never trust client-supplied order.customerId or req.body.customerId.
   const resolvedCustomerId = req.user?.id || null;
-
   const supabase = getSupabaseClient();
   if (!supabase) {
-    // If Supabase is not configured, we still return success because handleOrderSuccess 
-    // will fall back to local storage in the frontend, but we log the warning.
-    console.warn('⚠️ Supabase not configured. Order not persisted in cloud database.');
-    return res.json({ success: true, persisted: false, message: 'Order created locally only.' });
+    return res.status(503).json({ error: 'Order persistence service is unavailable.' });
   }
 
   try {
-    // The payment-initiation flow may already have created this order.
-    // This endpoint is an idempotent persistence/finalization callback, not a
-    // second order-creation path. Never duplicate inventory or order rows.
     const { data: existingOrder, error: existingOrderError } = await supabase
       .from('zoal_orders')
-      .select('id, customer_id, status, payment_status')
+      .select('id, customer_id, status, payment_status, terms_accepted_version_id')
       .eq('id', order.id)
       .maybeSingle();
 
     if (existingOrderError) throw existingOrderError;
 
-    if (existingOrder) {
-      if (existingOrder.customer_id && existingOrder.customer_id !== resolvedCustomerId) {
-        return res.status(403).json({ error: 'You do not have permission to finalize this order.' });
-      }
-
-      const terminalStatuses = new Set(['cancelled', 'failed']);
-      if (terminalStatuses.has(String(existingOrder.status).toLowerCase())) {
-        return res.status(409).json({ error: 'This order is no longer available for finalization.' });
-      }
-
-      return res.json({
-        success: true,
-        persisted: true,
-        idempotent: true,
-        orderId: existingOrder.id
+    if (!existingOrder) {
+      return res.status(409).json({
+        error: 'Order must be created through the canonical atomic checkout flow before finalization.'
       });
     }
 
-    // 1. Insert into zoal_orders
-    // P0 Financial Security: Server-Authoritative Order Total Calculation
-    const calculatedTotals = await calculateOrderTotalServerSide(
-      order.items, 
-      order.couponCode || order.coupon, 
-      order.shippingId || order.shippingMethodId
-    );
-
-    const orderData = {
-      id: order.id,
-      customer_id: resolvedCustomerId,
-      status: (order.status || 'pending').toLowerCase(),
-      subtotal: calculatedTotals.subtotal,
-      discount_amount: calculatedTotals.discountAmount,
-      shipping_cost: calculatedTotals.shippingCost,
-      tax_amount: calculatedTotals.taxAmount,
-      total_amount: calculatedTotals.totalAmount,
-      payment_method: order.paymentMethod,
-      payment_status: 'unpaid', // Default
-      terms_accepted_version_id: termsAcceptedVersionId,
-      tracking_number: order.trackingNumber,
-      notes: order.customerNotes || '',
-      created_at: new Date().toISOString()
-    };
-
-    const { error: orderError } = await supabase.from('zoal_orders').insert(orderData);
-    if (orderError) throw orderError;
-
-    // 2. Insert into zoal_order_items
-    const orderItems = order.items.map((item: any) => ({
-      order_id: order.id,
-      product_id: friendlyToUUID(item.productId),
-      quantity: item.quantity,
-      unit_price: item.price,
-      total_price: item.price * item.quantity
-    }));
-
-    // We need to resolve product UUIDs if the IDs coming from frontend are strings like 'coffee-1'
-    // For now, if the ID is not a UUID, this might fail unless we have a mapping or the table accepts text IDs.
-    // The schema says zoal_products.id is UUID. 
-    // If the frontend product IDs are not UUIDs, this will fail.
-    // Let's check if we can handle this by looking up products or using a fallback.
-    // Actually, many product IDs in data.ts are like 'coffee-1'.
-    
-    const { error: itemsError } = await supabase.from('zoal_order_items').insert(orderItems);
-    if (itemsError) {
-      console.warn('⚠️ Could not persist order items (likely due to non-UUID product IDs), but order header was saved.', itemsError.message);
+    if (existingOrder.customer_id && existingOrder.customer_id !== resolvedCustomerId) {
+      return res.status(403).json({ error: 'You do not have permission to finalize this order.' });
     }
 
-    return res.json({ success: true, persisted: true, orderId: order.id });
+    const terminalStatuses = new Set(['cancelled', 'failed']);
+    if (terminalStatuses.has(String(existingOrder.status).toLowerCase())) {
+      return res.status(409).json({ error: 'This order is no longer available for finalization.' });
+    }
+
+    if (existingOrder.terms_accepted_version_id && existingOrder.terms_accepted_version_id !== termsAcceptedVersionId) {
+      return res.status(409).json({ error: 'The accepted Terms & Conditions version no longer matches the active version.' });
+    }
+
+    return res.json({
+      success: true,
+      persisted: true,
+      idempotent: true,
+      orderId: existingOrder.id
+    });
   } catch (err: any) {
-    console.error('❌ Error creating order in Supabase:', err.message);
-    return res.status(500).json({ error: err.message || 'Failed to persist order.' });
+    console.error('❌ Error finalizing order:', err.message || err);
+    return res.status(500).json({ error: 'Failed to finalize order.' });
   }
 });
 
