@@ -304,3 +304,64 @@ $$;
 
 REVOKE ALL ON FUNCTION public.cancel_order_and_release_inventory(text,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.cancel_order_and_release_inventory(text,text) TO service_role;
+
+
+-- Reserve inventory for legacy checkout paths while keeping the reservation ledger authoritative.
+CREATE OR REPLACE FUNCTION public.reserve_order_inventory(
+  p_order_id text,
+  p_items jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  item jsonb;
+  v_product_id text;
+  v_qty integer;
+  v_inv public.zoal_inventory%ROWTYPE;
+  v_reserved integer := 0;
+BEGIN
+  IF p_order_id IS NULL OR p_order_id = '' THEN RAISE EXCEPTION 'ORDER_ID_REQUIRED'; END IF;
+  IF jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN RAISE EXCEPTION 'ITEMS_REQUIRED'; END IF;
+
+  FOR item IN SELECT value FROM jsonb_array_elements(p_items)
+  LOOP
+    v_product_id := item->>'product_id';
+    v_qty := (item->>'quantity')::integer;
+    IF v_product_id IS NULL OR v_qty IS NULL OR v_qty < 1 THEN
+      RAISE EXCEPTION 'INVALID_RESERVATION_ITEM';
+    END IF;
+
+    SELECT * INTO v_inv
+    FROM public.zoal_inventory
+    WHERE product_id = v_product_id
+    ORDER BY warehouse_id NULLS LAST, id
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT FOUND THEN RAISE EXCEPTION 'INVENTORY_NOT_FOUND:%', v_product_id; END IF;
+    IF (v_inv.quantity - v_inv.reserved_quantity) < v_qty THEN
+      RAISE EXCEPTION 'INSUFFICIENT_INVENTORY:%', v_product_id;
+    END IF;
+
+    UPDATE public.zoal_inventory
+       SET reserved_quantity = reserved_quantity + v_qty,
+           updated_at = NOW()
+     WHERE id = v_inv.id;
+
+    INSERT INTO public.zoal_order_inventory_reservations
+      (order_id, inventory_id, product_id, warehouse_id, quantity)
+    VALUES
+      (p_order_id, v_inv.id, v_product_id, v_inv.warehouse_id, v_qty);
+
+    v_reserved := v_reserved + v_qty;
+  END LOOP;
+
+  RETURN jsonb_build_object('order_id', p_order_id, 'reserved_quantity', v_reserved);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.reserve_order_inventory(text,jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reserve_order_inventory(text,jsonb) TO service_role;
