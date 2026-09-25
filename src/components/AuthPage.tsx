@@ -391,9 +391,7 @@ export default function AuthPage({
           sessionStorage.setItem('zoal_auth_token', token);
         }
 
-        setTimeout(() => {
-          onSuccess(data.user, token);
-        }, 1000);
+        onSuccess(data.user, token);
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed.');
