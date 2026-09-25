@@ -30,10 +30,9 @@ export default function Cart({
 }: CartProps) {
   const { t, i18n } = useTranslation();
 
-  // Computations
+  // Checkout is the authoritative source for shipping, tax, coupons and final total.
+  // The cart must not display a different hard-coded shipping/total calculation.
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const shippingFee = subtotal > 350 || subtotal === 0 ? 0 : 35;
-  const finalTotal = parseFloat((subtotal + shippingFee).toFixed(2));
 
   if (cart.length === 0) {
     return (
@@ -242,13 +241,18 @@ export default function Cart({
 
               <div className="flex justify-between text-neutral-300 py-1 sm:py-0">
                 <span>{t('cart.shipping')}</span>
-                <span className="font-sans tabular-nums-fix">{shippingFee === 0 ? t('cart.free_shipping_label', { defaultValue: 'Free' }) : `${formatCurrency(shippingFee)} ${t('app.sar')}`}</span>
+                <span className="font-sans tabular-nums-fix text-zinc-500">{i18n.language === 'ar' ? 'يُحسب عند الدفع' : 'Calculated at checkout'}</span>
               </div>
 
               <div className="border-t border-white/10 pt-3 sm:pt-5 mt-1 sm:mt-2 flex justify-between text-sm sm:text-lg uppercase font-display font-medium text-white tracking-wider">
-                <span>{t('cart.total')}</span>
-                <span className="text-gold-pure font-sans font-bold rtl:text-left tabular-nums-fix">{formatCurrency(finalTotal)} {t('app.sar')}</span>
+                <span>{i18n.language === 'ar' ? 'المجموع الفرعي' : 'Subtotal'}</span>
+                <span className="text-gold-pure font-sans font-bold rtl:text-left tabular-nums-fix">{formatCurrency(subtotal)} {t('app.sar')}</span>
               </div>
+              <p className="text-[9px] text-zinc-600 leading-relaxed">
+                {i18n.language === 'ar'
+                  ? 'سيتم احتساب الشحن والضريبة والخصومات النهائية في صفحة مراجعة الطلب والدفع.'
+                  : 'Shipping, tax and any applicable discount are finalized on Order Review & Checkout.'}
+              </p>
 
             </div>
 
