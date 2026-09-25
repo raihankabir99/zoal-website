@@ -2,6 +2,8 @@
   const DETAIL_QUERY = new URLSearchParams(window.location.search).has('product');
   let seo = null;
   let observerStarted = false;
+  let adminLauncherCheckInFlight = false;
+  let adminLauncherAuthorized = false;
 
   const token = () => localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
   const isAdminPage = () => /^\/admin(?:\/|$)/.test(window.location.pathname);
@@ -80,22 +82,48 @@
     }
   }
 
-  function startObserver() {
-    if (observerStarted) return;
-    observerStarted = true;
-    const observer = new MutationObserver(() => {
-      if (isPublicGeneralPage()) applyPublicSeo();
-      if (isAdminPage()) mountAdminButton();
-    });
-    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'href'] });
+  function removeAdminButton() {
+    document.getElementById('zoal-global-seo-launcher')?.remove();
+  }
+
+  async function authorizeAdminLauncher() {
+    if (!isAdminPage()) {
+      adminLauncherAuthorized = false;
+      removeAdminButton();
+      return false;
+    }
+    const authToken = token();
+    if (!authToken) {
+      adminLauncherAuthorized = false;
+      removeAdminButton();
+      return false;
+    }
+    if (adminLauncherCheckInFlight) return adminLauncherAuthorized;
+    adminLauncherCheckInFlight = true;
+    try {
+      const response = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const data = await response.json().catch(() => null);
+      const role = String(data?.user?.role || '').toLowerCase();
+      adminLauncherAuthorized = response.ok && data?.success === true && ['owner', 'admin', 'manager'].includes(role);
+    } catch (_) {
+      adminLauncherAuthorized = false;
+    } finally {
+      adminLauncherCheckInFlight = false;
+    }
+    if (!adminLauncherAuthorized) removeAdminButton();
+    return adminLauncherAuthorized;
   }
 
   function style(el, styles) {
     Object.assign(el.style, styles);
   }
 
-  function mountAdminButton() {
-    if (!isAdminPage() || document.getElementById('zoal-global-seo-launcher')) return;
+  async function mountAdminButton() {
+    if (!(await authorizeAdminLauncher()) || !isAdminPage() || document.getElementById('zoal-global-seo-launcher')) return;
     const button = document.createElement('button');
     button.id = 'zoal-global-seo-launcher';
     button.type = 'button';
@@ -106,6 +134,7 @@
   }
 
   function openEditor() {
+    if (!adminLauncherAuthorized || !isAdminPage()) return;
     if (document.getElementById('zoal-global-seo-modal')) return;
     const overlay = document.createElement('div');
     overlay.id = 'zoal-global-seo-modal';
@@ -177,6 +206,17 @@
       } catch (e) { status.textContent = `Save failed: ${e.message}`; } finally { save.disabled = false; }
     };
     actions.append(close, save); box.appendChild(actions); overlay.appendChild(box); document.body.appendChild(overlay);
+  }
+
+  function startObserver() {
+    if (observerStarted) return;
+    observerStarted = true;
+    const observer = new MutationObserver(() => {
+      if (isPublicGeneralPage()) applyPublicSeo();
+      if (isAdminPage()) mountAdminButton();
+      else removeAdminButton();
+    });
+    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content', 'href'] });
   }
 
   function boot() {
