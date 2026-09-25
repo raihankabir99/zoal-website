@@ -29,19 +29,41 @@ const lazyWithRetry = (importFn: () => Promise<any>) => {
     return new Promise<any>((resolve) => {
       let retriesLeft = 5;
       let interval = 1000;
+      const recoveryKey = typeof window !== 'undefined'
+        ? `zoal_chunk_recovery:${window.location.pathname}`
+        : '';
 
       function attempt() {
         importFn()
-          .then(resolve)
+          .then((module) => {
+            if (recoveryKey) {
+              try { sessionStorage.removeItem(recoveryKey); } catch (_) {}
+            }
+            resolve(module);
+          })
           .catch((error) => {
             if (retriesLeft <= 0) {
               console.error("Critical: Failed to fetch dynamically imported module after retries.", error);
+
+              // A stale Vite chunk is a common cause after deployment. Recover once by
+              // reloading the current document so the browser gets the latest manifest.
+              if (recoveryKey && typeof window !== 'undefined') {
+                try {
+                  if (!sessionStorage.getItem(recoveryKey)) {
+                    sessionStorage.setItem(recoveryKey, '1');
+                    window.location.reload();
+                    return;
+                  }
+                  sessionStorage.removeItem(recoveryKey);
+                } catch (_) {}
+              }
+
               resolve({
                 default: () => (
                   <div className="flex flex-col items-center justify-center min-h-[50vh] py-20 text-center space-y-4">
-                    <p className="text-zinc-400 text-sm">Unable to load section. Please refresh the page.</p>
+                    <p className="text-zinc-400 text-sm">Unable to load section.</p>
                     <button onClick={() => window.location.reload()} className="bg-gold-pure text-black px-4 py-2 rounded-xs text-xs font-bold uppercase tracking-widest hover:bg-gold-light">
-                      Refresh
+                      Reload
                     </button>
                   </div>
                 )
