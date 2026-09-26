@@ -148,11 +148,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
 
   // Recent changes log inside CMS
-  const [recentChanges, setRecentChanges] = useState<Array<{ id: string; user: string; action: string; time: string }>>([
-    { id: 'chg-1', user: 'Amjad Suliman', action: 'Published Homepage Hero Banner', time: '10 mins ago' },
-    { id: 'chg-2', user: 'Sumaya Bashir', action: 'Enabled Coffee Section Schedule', time: '2 hours ago' },
-    { id: 'chg-3', user: 'System Auto', action: 'Archived Eid Al-Adha Promo Banner', time: '1 day ago' }
-  ]);
+  const [recentChanges, setRecentChanges] = useState<Array<{ id: string; user: string; action: string; time: string }>>([]);
 
   // --- AUTHORITATIVE CMS DATA BOOTSTRAP ---
   const fetchAuthoritativeCmsData = useCallback(async () => {
@@ -858,35 +854,31 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     coffee_heritage: { bgImage: '', bgColor: '#090806', padding: 'large', margin: 'large', animation: 'slide-up', desktopOnly: false, mobileOnly: false }
   });
 
-  const [promotions, setPromotions] = useState(() => {
-    const raw = localStorage.getItem('cms_promotions');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'promo-1', type: 'flash_sale', name: 'Flash Sale countdown event', enabled: true, couponCode: 'FLASHZOAL', discountValue: '20% Off', startDate: '2026-07-01', endDate: '2026-07-20' },
-      { id: 'promo-2', type: 'ramadan', name: 'Ramadan Karim Traditional Gifting', enabled: true, couponCode: 'RAMADAN26', discountValue: '15% Off', startDate: '2026-03-01', endDate: '2026-04-01' },
-      { id: 'promo-3', type: 'eid', name: 'Eid Al-Fitr Elegant Toob Showcase', enabled: true, couponCode: 'EIDFITR', discountValue: '10% Off', startDate: '2026-04-01', endDate: '2026-04-10' },
-      { id: 'promo-4', type: 'national_day', name: 'Saudi National Day Golden Heritage', enabled: false, couponCode: 'ZOAL96', discountValue: '25% Off', startDate: '2026-09-20', endDate: '2026-09-24' }
-    ];
+  const [promotions, setPromotions] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('cms_promotions');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
   });
 
-  const [seoSettings, setSeoSettings] = useState(() => {
-    const raw = localStorage.getItem('cms_seo_settings');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'seo-1', targetType: 'global', targetName: 'Global Portal Settings', seoTitle: 'AL ZOAL | Authentic Sudanese Luxury Sanctuary', seoDesc: 'Discover high-care Sudanese coffee blends, heritage bakery, organic herbs, and hand-tailored luxury apparel.', keywords: 'Sudanese coffee, Toobs, Saudi luxury, Al Hofuf boutique', canonicalUrl: 'https://alzoal.com', ogTitle: 'AL ZOAL Luxury', ogDesc: 'Discover high-care Sudanese artisan crafts.', ogImage: 'https://images.unsplash.com/photo-1541167760496-1628856ab772', twitterTitle: 'AL ZOAL', twitterDesc: 'Discover luxury apparel.', twitterImage: 'https://images.unsplash.com/photo-1541167760496-1628856ab772', schemaMarkup: '{\n  "@context": "https://schema.org",\n  "@type": "Store",\n  "name": "AL ZOAL Sanctuary",\n  "image": "https://alzoal.com/logo.png"\n}' },
-      { id: 'seo-2', targetType: 'homepage', targetName: 'Homepage', seoTitle: 'AL ZOAL Boutique - Dammam & Al Hofuf', seoDesc: 'Exclusive Sudanese heritage hospitality meets refined modern luxury in the Eastern Province.', keywords: 'Al Zoal, premium coffee, premium thobes', canonicalUrl: 'https://alzoal.com/home', ogTitle: 'AL ZOAL Home', ogDesc: 'Sudanese luxury portal.', ogImage: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e', twitterTitle: 'AL ZOAL Home', twitterDesc: 'Premium portal.', twitterImage: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e', schemaMarkup: '{\n  "@context": "https://schema.org",\n  "@type": "WebSite",\n  "name": "AL ZOAL"\n}' }
-    ];
+  const [seoSettings, setSeoSettings] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('cms_seo_settings');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
   });
 
-  const [mediaAssets, setMediaAssets] = useState(() => {
-    const raw = localStorage.getItem('cms_media_assets');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'med-1', name: 'Toob Model 1', type: 'image', url: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=800', folder: 'Apparel Images', tags: ['apparel', 'luxury'], size: '1.2 MB', dimensions: '1600x1200', createdAt: '2026-07-10' },
-      { id: 'med-2', name: 'Yemeni Coffee Roast Grains', type: 'image', url: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&q=80&w=800', folder: 'Coffee Heritage', tags: ['coffee', 'organic'], size: '890 KB', dimensions: '1440x960', createdAt: '2026-07-12' },
-      { id: 'med-3', name: 'Dammam Flagship Interior Tour', type: 'video', url: 'https://images.unsplash.com/photo-1541167760496-1628856ab772', folder: 'Media Streams', tags: ['interior', 'tour'], size: '12.4 MB', createdAt: '2026-07-14' },
-      { id: 'med-4', name: 'Saudi VAT Registration Certificate', type: 'document', url: '#', folder: 'Documents', tags: ['legal', 'pdf'], size: '1.4 MB', createdAt: '2026-07-01' }
-    ];
+  const [mediaAssets, setMediaAssets] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('cms_media_assets');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
   });
 
   const [folders, setFolders] = useState<string[]>(['Apparel Images', 'Coffee Heritage', 'Media Streams', 'Documents']);
