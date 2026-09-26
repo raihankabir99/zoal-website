@@ -1081,10 +1081,10 @@ export default function Checkout({
         selectedOption: item.selectedOption
       })),
       subtotal,
-      shipping: shippingFee,
+      shipping: shippingFee ?? 0,
       discount: discountAmount,
       tax: vatAmount,
-      total: finalTotal,
+      total: finalTotal ?? 0,
       status: 'Pending',
       customerName: name.trim(),
       email: email.trim() || settings.email, // Optional email handled safely
@@ -2478,12 +2478,20 @@ export default function Checkout({
                 </div>
               )}
 
-              {/* VAT (15%) */}
+              {/* VAT — resolved from the active server tax configuration */}
               <div className="flex justify-between text-zinc-400">
                 <div className="flex items-center gap-1.5">
                   <span>{i18n.language === 'ar' ? 'ضريبة القيمة المضافة' : 'VAT'}</span>
-                  <span className="text-[9px] px-1 py-0.5 rounded-xs bg-white/5 border border-white/10 tabular-nums-fix">15%</span>
+                  {authoritativeTaxRate !== null ? (
+                    <span className="text-[9px] px-1 py-0.5 rounded-xs bg-white/5 border border-white/10 tabular-nums-fix">
+                      {authoritativeTaxRate}%
+                    </span>
+                  ) : null}
                 </div>
+                <span className="font-sans text-zinc-200 tabular-nums-fix">
+                  {authoritativeTaxAmount === null ? (i18n.language === 'ar' ? 'يُحسب عند الدفع' : 'Calculated at checkout') : formatCurrency(authoritativeTaxAmount) + ' ' + t('app.sar')}
+                </span>
+              </div>
                 <span className="font-sans text-zinc-200 tabular-nums-fix">{formatCurrency(vatAmount)} {t('app.sar')}</span>
               </div>
 
@@ -2491,7 +2499,7 @@ export default function Checkout({
               <div className="flex justify-between text-zinc-400">
                 <span>{t('cart.shipping', { defaultValue: 'Shipping' })}</span>
                 <span className="font-sans text-[#D4AF37] font-semibold text-right tabular-nums-fix">
-                  {!city ? (i18n.language === 'ar' ? 'يحتسب عند الدفع' : 'Calculated at checkout') : (shippingFee === 0 ? 'Free' : `${formatCurrency(shippingFee)} ${t('app.sar')}`)}
+                  {shippingFee === null ? (i18n.language === 'ar' ? 'جاري الحساب...' : 'Calculating...') : (shippingFee === 0 ? 'Free' : formatCurrency(shippingFee) + ' ' + t('app.sar'))}
                 </span>
               </div>
 
@@ -2501,7 +2509,9 @@ export default function Checkout({
               {/* Final sum */}
               <div className="flex justify-between text-sm sm:text-base uppercase font-display font-medium text-white tracking-wider">
                 <span>{t('cart.total', { defaultValue: 'Total' })}</span>
-                <span className="text-gold-pure font-sans font-bold text-base sm:text-lg rtl:text-left tabular-nums-fix">{formatCurrency(finalTotal)} {t('app.sar')}</span>
+                <span className="text-gold-pure font-sans font-bold text-base sm:text-lg rtl:text-left tabular-nums-fix">
+                  {finalTotal === null ? (i18n.language === 'ar' ? 'يُحسب عند الدفع' : 'Calculated at checkout') : formatCurrency(finalTotal) + ' ' + t('app.sar')}
+                </span>
               </div>
 
             </div>
