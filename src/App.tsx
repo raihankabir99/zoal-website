@@ -393,7 +393,7 @@ function AppContent() {
     const userRole = ((currentUser as any)?.role || 'customer').toLowerCase();
     
     if (['admin', 'manager', 'owner'].includes(userRole)) {
-      setCurrentPage('admin');
+      navigateTo('admin');
       if (targetModule === 'orders') setAdminSubTab('orders');
       else if (targetModule === 'inventory') setAdminSubTab('inventory');
       else if (targetModule === 'crm' || targetModule === 'customers') setAdminSubTab('crm');
@@ -401,7 +401,7 @@ function AppContent() {
       else if (targetModule === 'ai_center' || targetModule === 'ai' || targetModule === 'marketing') setAdminSubTab('ai_center');
       else setAdminSubTab(targetModule);
     } else {
-      setCurrentPage('dashboard');
+      navigateTo('dashboard');
       if (targetModule === 'orders') setDashboardSubTab('orders');
       else if (targetModule === 'track') setDashboardSubTab('track');
       else if (targetModule === 'support' || targetModule === 'tickets') setDashboardSubTab('support');
@@ -522,7 +522,7 @@ function AppContent() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('payment_id') && params.get('order_id')) {
-      setCurrentPage('payment-simulate');
+      navigateTo('payment-simulate');
     }
   }, []);
 
@@ -568,18 +568,13 @@ function AppContent() {
 
     if (!shouldPrefetch()) return;
 
-    // High-priority targets, prefetched in order of priority:
-    // 1. Store, 2. Cart, 3. ProductDetail, 4. WishlistPage, 5. About, 6. Contact, 7. Branches, 8. FAQ, 9. Portfolio, 10. AuthPage
+    // Keep idle prefetch intentionally narrow: only the most common public routes.
+    // Avoid downloading a large chain of chunks after initial paint; route navigation itself
+    // uses lazyWithRetry() and remains the authoritative loading path.
     const targets = [
       { key: 'store', importFn: () => import('./components/Store') },
       { key: 'cart', importFn: () => import('./components/Cart') },
       { key: 'product', importFn: () => import('./components/ProductDetail') },
-      { key: 'wishlist', importFn: () => import('./components/WishlistPage') },
-      { key: 'about', importFn: () => import('./components/About') },
-      { key: 'contact', importFn: () => import('./components/Contact') },
-      { key: 'branches', importFn: () => import('./components/Branches') },
-      { key: 'faq', importFn: () => import('./components/FAQ') },
-      { key: 'portfolio', importFn: () => import('./components/Portfolio') },
       { key: 'auth', importFn: () => import('./components/AuthPage') },
     ];
 
@@ -627,11 +622,21 @@ function AppContent() {
     }
   }, []);
 
-  const handleSetCurrentPage = useCallback((page: string) => {
-    setCurrentPage(page);
+  const navigateTo = useCallback((page: string, options: { replace?: boolean } = {}) => {
+    navigateTo(page);
     setSelectedProduct(null);
     setSelectedPost(null);
+    const nextPath = getPathFromPage(page);
+    if (typeof window !== 'undefined' && window.location.pathname !== nextPath) {
+      if (options.replace) window.history.replaceState(null, '', nextPath);
+      else window.history.pushState(null, '', nextPath);
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
+
+  const handleSetCurrentPage = navigateTo;
 
   const handleLogout = useCallback(() => {
     setLogoutModalStatus('confirm');
@@ -778,7 +783,7 @@ function AppContent() {
 
   const handleLogoutSuccessRedirect = () => {
     setLogoutModalOpen(false);
-    setCurrentPage('home');
+    navigateTo('home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -882,18 +887,10 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (!routeInitializedRef.current) return;
-    const currentPath = getPathFromPage(currentPage);
-    if (window.location.pathname !== currentPath) {
-      window.history.pushState(null, '', currentPath);
-    }
-  }, [currentPage]);
-
-  useEffect(() => {
     const handlePathChange = () => {
       const page = getPageFromPath(window.location.pathname);
       routeInitializedRef.current = true;
-      setCurrentPage(page);
+      navigateTo(page);
     };
 
     window.addEventListener('popstate', handlePathChange);
@@ -910,7 +907,7 @@ function AppContent() {
     const handleRouteChange = (e: Event) => {
       const customEvent = e as CustomEvent<string>;
       if (customEvent.detail) {
-        setCurrentPage(customEvent.detail);
+        navigateTo(customEvent.detail);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     };
@@ -922,7 +919,7 @@ function AppContent() {
   useEffect(() => {
     if (!isAuthLoading) {
       if (currentPage === 'dashboard' && !currentUser) {
-        setCurrentPage('home');
+        navigateTo('home');
         setAuthModalOpen(true);
         dispatchNotification({
           type: 'system',
@@ -934,7 +931,7 @@ function AppContent() {
         const role = currentUser?.role?.toLowerCase();
         const isAdmin = role && ['owner', 'admin', 'manager'].includes(role);
         if (!isAdmin) {
-          setCurrentPage('home');
+          navigateTo('home');
           if (!currentUser) {
             setAuthModalOpen(true);
             dispatchNotification({
@@ -1181,7 +1178,7 @@ function AppContent() {
       // Set success modal states
       setActiveSuccessOrder(newOrder);
       setCheckoutSuccessModalOpen(true);
-      setCurrentPage('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
+      navigateTo('dashboard'); // Transition to dashboard behind the scenes so closing the modal reveals it
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
       // Trigger System Notifications
@@ -1250,12 +1247,12 @@ function AppContent() {
   };
 
   const handleContinueShopping = () => {
-    setCurrentPage('store');
+    navigateTo('store');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleViewOrders = () => {
-    setCurrentPage('dashboard');
+    navigateTo('dashboard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1361,7 +1358,7 @@ function AppContent() {
                 setCurrentPage={setCurrentPage}
                 setSelectedCategoryFilter={(cat) => {
                   setSelectedCategoryFilter(cat);
-                  setCurrentPage('store');
+                  navigateTo('store');
                 }}
               />
 
@@ -1386,7 +1383,7 @@ function AppContent() {
                       <p className="text-zinc-500 text-xs tracking-widest uppercase">{t('home.featured.subtitle')}</p>
                       <button 
                         onClick={() => {
-                          setCurrentPage('store');
+                          navigateTo('store');
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
                         className="absolute right-0 text-[#D4AF37] hover:text-white transition-colors duration-300 text-xs tracking-widest uppercase font-semibold hidden sm:block rtl:right-auto rtl:left-0"
@@ -1405,7 +1402,7 @@ function AppContent() {
                     </span>
                     <button 
                       onClick={() => {
-                        setCurrentPage('store');
+                        navigateTo('store');
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                       className="text-[#D4AF37] hover:text-white transition-colors duration-300 text-[10px] tracking-widest uppercase font-semibold inline-flex items-center gap-1"
@@ -1718,14 +1715,14 @@ function AppContent() {
                     try {
                       const prod = JSON.parse(productStr);
                       setSelectedProduct(prod);
-                      setCurrentPage('store');
+                      navigateTo('store');
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                       return;
                     } catch (e) {
                       console.error("Error restoring checkout product:", e);
                     }
                   }
-                  setCurrentPage('cart');
+                  navigateTo('cart');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 deliveryZones={deliveryZones}
@@ -1776,7 +1773,7 @@ function AppContent() {
                 }}
                 onCancel={() => {
                   window.history.replaceState(null, document.title, window.location.pathname);
-                  setCurrentPage('checkout');
+                  navigateTo('checkout');
                 }}
               />
             </div>
@@ -1868,9 +1865,9 @@ function AppContent() {
                           setCurrentUser(data.user);
                           setDashboardSubTab('overview');
                           if (['owner', 'admin', 'manager'].includes(data.user.role)) {
-                            setCurrentPage('admin');
+                            navigateTo('admin');
                           } else {
-                            setCurrentPage('dashboard');
+                            navigateTo('dashboard');
                           }
                           return;
                         }
@@ -1883,15 +1880,15 @@ function AppContent() {
                   // Fallback
                   setCurrentUser(user);
                   setDashboardSubTab('overview');
-                  setCurrentPage('dashboard');
+                  navigateTo('dashboard');
                 }}
                 onCancel={() => setCurrentPage('home')}
                 setCurrentPage={setCurrentPage}
                 onViewChange={(view) => {
                   if (view === 'register') {
-                    setCurrentPage('register');
+                    navigateTo('register');
                   } else if (view === 'login') {
-                    setCurrentPage('login');
+                    navigateTo('login');
                   }
                 }}
               />
@@ -1949,9 +1946,9 @@ function AppContent() {
                           setAuthModalOpen(false);
                           setDashboardSubTab('overview');
                           if (['owner', 'admin', 'manager'].includes(data.user.role)) {
-                            setCurrentPage('admin');
+                            navigateTo('admin');
                           } else {
-                            setCurrentPage('dashboard');
+                            navigateTo('dashboard');
                           }
                           return;
                         }
@@ -1965,7 +1962,7 @@ function AppContent() {
                   setCurrentUser(user);
                   setAuthModalOpen(false);
                   setDashboardSubTab('overview');
-                  setCurrentPage('dashboard');
+                  navigateTo('dashboard');
                 }}
                 onCancel={() => setAuthModalOpen(false)}
                 setCurrentPage={setCurrentPage}
