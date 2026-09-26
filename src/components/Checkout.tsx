@@ -196,6 +196,12 @@ export default function Checkout({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Authoritative server totals. The checkout UI must never invent tax or shipping
+  // values when the server has not resolved them yet.
+  const [authoritativeTaxRate, setAuthoritativeTaxRate] = useState<number | null>(null);
+  const [authoritativeTaxAmount, setAuthoritativeTaxAmount] = useState<number | null>(null);
+  const [authoritativeTotal, setAuthoritativeTotal] = useState<number | null>(null);
+
   const activeMapRequestIdRef = useRef<string | null>(null);
 
   const handleOpenMapPickerPage = () => {
@@ -726,7 +732,7 @@ export default function Checkout({
       lng: lng,
       accuracy: '3m',
       eta: activeAddress.eta,
-      shippingFee: shippingFee,
+      shippingFee: shippingFee ?? 0,
       available: activeAddress.available
     };
 
@@ -753,9 +759,9 @@ export default function Checkout({
 
   const subtotalAfterDiscount = subtotal - discountAmount;
 
-  // Saudi Arabia VAT (15%)
-  const vatRate = 0.15;
-  const vatAmount = parseFloat((subtotalAfterDiscount * vatRate).toFixed(2));
+  // Tax is resolved from the active server-side tax configuration.
+  // Never hard-code the VAT percentage in the checkout UI.
+  const vatAmount = authoritativeTaxAmount ?? 0;
 
   // Dynamic Shipping rules resolution based on geocoded/selected city and district
   useEffect(() => {
@@ -819,10 +825,76 @@ export default function Checkout({
 
   const shippingFee = useMemo(() => {
     if (subtotal === 0) return 0;
-    return selectedShippingOption ? selectedShippingOption.fee : 25;
+    return selectedShippingOption ? Number(selectedShippingOption.fee) : null;
   }, [selectedShippingOption, subtotal]);
 
-  const finalTotal = parseFloat((subtotalAfterDiscount + vatAmount + shippingFee).toFixed(2));
+  const calculatedFallbackTotal = shippingFee === null
+    ? null
+    : parseFloat((subtotalAfterDiscount + vatAmount + shippingFee).toFixed(2));
+
+  const finalTotal = authoritativeTotal ?? calculatedFallbackTotal;
+
+  // Resolve tax + final total from the same server-side checkout calculator used
+  // for order validation. Guests remain allowed to proceed through the existing
+  // order flow, but the UI does not fabricate a tax rate for them.
+  useEffect(() => {
+    let cancelled = false;
+    const resolveAuthoritativeTotals = async () => {
+      setAuthoritativeTaxRate(null);
+      setAuthoritativeTaxAmount(null);
+      setAuthoritativeTotal(null);
+
+      if (!currentUser?.id || !selectedShippingOption?.id || subtotal <= 0) return;
+
+      try {
+        const token = localStorage.getItem('zoal_auth_token') || sessionStorage.getItem('zoal_auth_token') || '';
+        if (!token) return;
+
+        const response = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            items: cart.map(item => ({
+              product_id: item.product.id,
+              quantity: item.quantity
+            })),
+            shippingMethodId: selectedShippingOption.id,
+            couponCode: couponCode || undefined
+          })
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) return;
+
+        const result = data.data ?? data;
+        if (cancelled) return;
+
+        setAuthoritativeTaxRate(
+          Number.isFinite(Number(result.tax?.ratePercentage))
+            ? Number(result.tax.ratePercentage)
+            : null
+        );
+        setAuthoritativeTaxAmount(
+          Number.isFinite(Number(result.taxAmount))
+            ? Number(result.taxAmount)
+            : null
+        );
+        setAuthoritativeTotal(
+          Number.isFinite(Number(result.totalAmount))
+            ? Number(result.totalAmount)
+            : null
+        );
+      } catch (error) {
+        console.warn('Authoritative checkout totals unavailable; server order validation remains authoritative.', error);
+      }
+    };
+
+    resolveAuthoritativeTotals();
+    return () => { cancelled = true; };
+  }, [currentUser?.id, selectedShippingOption?.id, couponCode, cart, subtotal]);
 
   // Handle GPS Current Location
   const handleUseCurrentLocation = () => {
