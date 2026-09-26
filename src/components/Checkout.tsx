@@ -2492,9 +2492,6 @@ export default function Checkout({
                   {authoritativeTaxAmount === null ? (i18n.language === 'ar' ? 'يُحسب عند الدفع' : 'Calculated at checkout') : formatCurrency(authoritativeTaxAmount) + ' ' + t('app.sar')}
                 </span>
               </div>
-                <span className="font-sans text-zinc-200 tabular-nums-fix">{formatCurrency(vatAmount)} {t('app.sar')}</span>
-              </div>
-
               {/* Shipping calculating message */}
               <div className="flex justify-between text-zinc-400">
                 <span>{t('cart.shipping', { defaultValue: 'Shipping' })}</span>
