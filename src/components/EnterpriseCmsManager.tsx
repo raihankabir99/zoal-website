@@ -128,9 +128,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   const [cmsTab, setCmsTab] = useState<string>('dashboard');
 
   // --- INITIAL CMS STATE SETUP & PERSISTENCE ---
-  const [websiteStatus, setWebsiteStatus] = useState<'active' | 'maintenance'>(() => {
-    return (localStorage.getItem('cms_website_status') as 'active' | 'maintenance') || 'active';
-  });
+  const [websiteStatus, setWebsiteStatus] = useState<'active' | 'maintenance'>('active');
 
   const [homepageSections, setHomepageSections] = useState<HomepageSection[]>([]);
 
@@ -854,15 +852,9 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     coffee_heritage: { bgImage: '', bgColor: '#090806', padding: 'large', margin: 'large', animation: 'slide-up', desktopOnly: false, mobileOnly: false }
   });
 
-  const [promotions, setPromotions] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('cms_promotions');
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
-  });
-
+  // These CMS collections start empty and are populated from authoritative API-backed flows.
+  // Do not hydrate them from browser storage, which can resurrect stale/demo state.
+  const [promotions, setPromotions] = useState<any[]>([]);
   const [seoSettings, setSeoSettings] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem('cms_seo_settings');
@@ -872,14 +864,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     }
   });
 
-  const [mediaAssets, setMediaAssets] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('cms_media_assets');
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
-  });
+  const [mediaAssets, setMediaAssets] = useState<any[]>([]);
 
   const [folders, setFolders] = useState<string[]>(['Apparel Images', 'Coffee Heritage', 'Media Streams', 'Documents']);
 
@@ -912,13 +897,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
     fetchCmsActivityLogs();
   }, [fetchCmsActivityLogs]);
 
-  const [revisions, setRevisions] = useState(() => {
-    const raw = localStorage.getItem('cms_revisions');
-    if (raw) return JSON.parse(raw);
-    return [
-      { id: 'rev-1', version: 'v1.0', author: 'Amjad Suliman', date: '2026-07-15 12:00', changeLog: 'Initial baseline deployment of Al Zoal layout structures.', restorePoint: '' }
-    ];
-  });
+  const [revisions, setRevisions] = useState<any[]>([]);
 
   // Helper to add activity logs inside CMS
   const handleAddCmsActivityLog = (action: string, affected: string, type: 'info' | 'warning' | 'critical' = 'info') => {
@@ -961,14 +940,6 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
   // Sync to localStorage on local state changes & bubble up to parent if needed
   useEffect(() => {
-    localStorage.setItem('cms_website_status', websiteStatus);
-    const nonLegalPages = webPages.filter(p => !p.isLegalDoc && p.key !== 'terms' && p.key !== 'privacy' && p.key !== 'terms-and-conditions' && p.key !== 'privacy-policy');
-    localStorage.setItem('cms_homepage_layout_configs', JSON.stringify(homepageLayoutConfigs));
-    localStorage.setItem('cms_promotions', JSON.stringify(promotions));
-    localStorage.setItem('cms_seo_settings', JSON.stringify(seoSettings));
-    localStorage.setItem('cms_media_assets', JSON.stringify(mediaAssets));
-    localStorage.setItem('cms_revisions', JSON.stringify(revisions));
-
     if (onSave) {
       onSave({
         websiteStatus,
