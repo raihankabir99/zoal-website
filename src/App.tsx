@@ -526,16 +526,13 @@ function AppContent() {
     }
   }, []);
 
-  // Cleanup empty trailing hash after successful authentication (e.g. from OAuth redirects/callbacks)
+  // Keep empty hash fragments out of the URL after any client-side navigation.
   useEffect(() => {
-    if (window.location.hash === '' && window.location.href.endsWith('#')) {
-      window.history.replaceState(
-        null,
-        document.title,
-        window.location.pathname + window.location.search
-      );
+    if (typeof window === 'undefined') return;
+    if (window.location.hash === '#') {
+      window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
     }
-  }, []);
+  }, [currentPage]);
 
   // Track visited/loaded pages to prevent redundant prefetching
   const loadedPagesRef = useRef<Set<string>>(new Set<string>());
