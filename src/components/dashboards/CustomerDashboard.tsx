@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Order } from '../../types';
 import {
@@ -59,6 +60,7 @@ function mapApiOrder(row: any): Order {
 export default function CustomerDashboard({ customerSubTab, setSidebarOpen, selectedOrder, setSelectedOrder, orders }: CustomerDashboardProps) {
   const [authoritativeOrders, setAuthoritativeOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +71,7 @@ export default function CustomerDashboard({ customerSubTab, setSidebarOpen, sele
         return;
       }
       try {
+        if (!cancelled) setOrdersError(null);
         const response = await fetch('/api/orders?limit=100&page=1', { headers: { Authorization: `Bearer ${token}` } });
         if (!response.ok) throw new Error(`Orders request failed (${response.status})`);
         const payload = await response.json();
@@ -76,7 +79,10 @@ export default function CustomerDashboard({ customerSubTab, setSidebarOpen, sele
         if (!cancelled) setAuthoritativeOrders(rows.map(mapApiOrder));
       } catch (error) {
         console.error('Failed to load customer orders from API:', error);
-        if (!cancelled) setAuthoritativeOrders([]);
+        if (!cancelled) {
+          setAuthoritativeOrders([]);
+          setOrdersError(error instanceof Error ? error.message : 'Unable to load orders');
+        }
       } finally { if (!cancelled) setOrdersLoading(false); }
     };
     loadOrders();
@@ -131,7 +137,7 @@ export default function CustomerDashboard({ customerSubTab, setSidebarOpen, sele
         <div className="bg-zinc-950 border border-white/5 rounded-sm p-4"><CheckCircle2 className="w-4 h-4 text-zinc-500" /><p className="text-[9px] uppercase tracking-wider text-zinc-500 mt-3">Completed</p><p className="text-xl font-semibold text-white mt-1">{ordersLoading ? '—' : totals.completed}</p></div>
         <div className="bg-zinc-950 border border-white/5 rounded-sm p-4"><Truck className="w-4 h-4 text-zinc-500" /><p className="text-[9px] uppercase tracking-wider text-zinc-500 mt-3">Total Spent</p><p className="text-xl font-semibold text-[#D4AF37] mt-1">{ordersLoading ? '—' : totals.spent.toFixed(2)}</p></div>
       </div>
-      <div className="bg-zinc-950 border border-white/5 rounded-sm p-5"><div className="flex items-center justify-between gap-3 mb-4"><div><h3 className="text-sm font-semibold text-white">Recent Orders</h3><p className="text-[10px] text-zinc-500 mt-1">Loaded from the authenticated orders API.</p></div><button type="button" onClick={() => setSidebarOpen(true)} className="lg:hidden px-3 py-2 bg-white/5 border border-white/10 text-zinc-300 rounded-sm text-xs">Menu</button></div>{ordersLoading ? <p className="text-sm text-zinc-500 py-5">Loading orders…</p> : customerOrders.slice(0, 5).map((order) => <button key={order.id} type="button" onClick={() => setSelectedOrder(order)} className="w-full flex items-center justify-between gap-3 py-3 border-t border-white/5 text-left hover:bg-white/[0.02]"><div className="min-w-0"><p className="text-xs text-white font-medium truncate">{order.id}</p><p className="text-[9px] text-zinc-500 mt-1">{order.date || 'Date unavailable'}</p></div><div className="flex items-center gap-2 shrink-0"><span className="text-[10px] text-zinc-400">{getStatusLabel(order.status)}</span><span className="text-xs text-[#D4AF37] font-semibold">{Number(order.total || 0).toFixed(2)}</span></div></button>)}{!ordersLoading && customerOrders.length === 0 && <p className="text-sm text-zinc-500 py-5">No orders are available yet.</p>}</div>
+      <div className="bg-zinc-950 border border-white/5 rounded-sm p-5"><div className="flex items-center justify-between gap-3 mb-4"><div><h3 className="text-sm font-semibold text-white">Recent Orders</h3><p className="text-[10px] text-zinc-500 mt-1">Loaded from the authenticated orders API.</p></div><button type="button" onClick={() => setSidebarOpen(true)} className="lg:hidden px-3 py-2 bg-white/5 border border-white/10 text-zinc-300 rounded-sm text-xs">Menu</button></div>{ordersLoading ? <p className="text-sm text-zinc-500 py-5">Loading orders…</p> : ordersError ? <p className="text-sm text-zinc-400 py-5">Unable to load orders right now.</p> : customerOrders.slice(0, 5).map((order) => <button key={order.id} type="button" onClick={() => setSelectedOrder(order)} className="w-full flex items-center justify-between gap-3 py-3 border-t border-white/5 text-left hover:bg-white/[0.02]"><div className="min-w-0"><p className="text-xs text-white font-medium truncate">{order.id}</p><p className="text-[9px] text-zinc-500 mt-1">{order.date || 'Date unavailable'}</p></div><div className="flex items-center gap-2 shrink-0"><span className="text-[10px] text-zinc-400">{getStatusLabel(order.status)}</span><span className="text-xs text-[#D4AF37] font-semibold">{Number(order.total || 0).toFixed(2)}</span></div></button>)}{!ordersLoading && customerOrders.length === 0 && <p className="text-sm text-zinc-500 py-5">No orders are available yet.</p>}</div>
     </section>
   );
 }
