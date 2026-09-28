@@ -22,6 +22,7 @@ import SEO from './components/SEO';
 import { useNotificationEngine } from './lib/notificationStore';
 import EnterpriseNotificationToast from './components/EnterpriseNotificationToast';
 import { filterNotificationsByRole } from './rbac/notificationRbac';
+import AdminDashboardErrorBoundary from './components/common/AdminDashboardErrorBoundary';
 
 // Dynamic / Low Priority Viewport Imports (Code Splitting & Bundle Size Optimization with Robust Retry Logic)
 const lazyWithRetry = (importFn: () => Promise<any>) => {
@@ -314,6 +315,7 @@ function AppContent() {
   const [authModalView, setAuthModalView] = useState<'login' | 'register'>('login');
   const [dashboardSubTab, setDashboardSubTab] = useState<string>('overview');
   const [adminSubTab, setAdminSubTab] = useState<string>('dashboard');
+  const [adminBoundaryKey, setAdminBoundaryKey] = useState(0);
 
   // Synchronize authenticated wishlist from the server of record.
   useEffect(() => {
@@ -1825,17 +1827,22 @@ function AppContent() {
 
           {currentPage === 'admin' && (
             <div className="overflow-x-hidden max-w-full min-w-0">
-              <AdminDashboard
-                currentUser={currentUser}
-                orders={orders}
-                setOrders={setOrders}
-                onUpdateOrderStatus={handleUpdateOrderStatus}
-                onLogout={handleLogout}
-                setCurrentPage={setCurrentPage}
-                initialTab={adminSubTab}
-                notificationEngine={notificationEngine}
-                onOpenNotifications={handleOpenNotifications}
-              />
+              <AdminDashboardErrorBoundary
+                key={adminBoundaryKey}
+                onRetry={() => setAdminBoundaryKey((value) => value + 1)}
+              >
+                <AdminDashboard
+                  currentUser={currentUser}
+                  orders={orders}
+                  setOrders={setOrders}
+                  onUpdateOrderStatus={handleUpdateOrderStatus}
+                  onLogout={handleLogout}
+                  setCurrentPage={setCurrentPage}
+                  initialTab={adminSubTab}
+                  notificationEngine={notificationEngine}
+                  onOpenNotifications={handleOpenNotifications}
+                />
+              </AdminDashboardErrorBoundary>
             </div>
           )}
 
