@@ -206,6 +206,7 @@ export default function Dashboards({
 
   const [authoritativeCustomerOrders, setAuthoritativeCustomerOrders] = useState<Order[]>([]);
   const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+  const [customerOrdersError, setCustomerOrdersError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser?.id || userRole !== 'customer') {
@@ -221,6 +222,7 @@ export default function Dashboards({
 
     let cancelled = false;
     setCustomerOrdersLoading(true);
+    setCustomerOrdersError(null);
 
     const loadCustomerOrders = async () => {
       try {
@@ -275,7 +277,10 @@ export default function Dashboards({
 
         if (!cancelled) setAuthoritativeCustomerOrders(normalized);
       } catch (error) {
-        if (!cancelled) setAuthoritativeCustomerOrders([]);
+        if (!cancelled) {
+          setAuthoritativeCustomerOrders([]);
+          setCustomerOrdersError(error instanceof Error ? error.message : 'Failed to load orders');
+        }
         console.error('Failed to load authoritative customer orders:', error);
       } finally {
         if (!cancelled) setCustomerOrdersLoading(false);
@@ -287,6 +292,7 @@ export default function Dashboards({
   }, [currentUser, userRole, allProducts]);
 
   const customerOrders = useMemo(() => authoritativeCustomerOrders, [authoritativeCustomerOrders]);
+  const customerOrdersStatus = customerOrdersLoading ? 'loading' : customerOrdersError ? 'error' : customerOrders.length === 0 ? 'empty' : 'success';
   
 
   // --- STAFF DASHBOARD INTEGRATIONS ---
