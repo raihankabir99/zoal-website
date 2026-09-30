@@ -622,17 +622,24 @@ function AppContent() {
   }, []);
 
   const navigateTo = useCallback((page: string, options: { replace?: boolean } = {}) => {
-    navigateTo(page);
     setSelectedProduct(null);
     setSelectedPost(null);
+
     const nextPath = getPathFromPage(page);
-    if (typeof window !== 'undefined' && window.location.pathname !== nextPath) {
-      if (options.replace) window.history.replaceState(null, '', nextPath);
-      else window.history.pushState(null, '', nextPath);
-    }
     if (typeof window !== 'undefined') {
+      const currentUrl = window.location.pathname + window.location.search;
+      const nextUrl = nextPath + (page === 'payment-simulate' ? window.location.search : '');
+      if (currentUrl !== nextUrl) {
+        if (options.replace) window.history.replaceState(null, '', nextUrl);
+        else window.history.pushState(null, '', nextUrl);
+      }
+      if (window.location.hash === '#') {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    setCurrentPage(page);
   }, []);
 
   const handleSetCurrentPage = navigateTo;
