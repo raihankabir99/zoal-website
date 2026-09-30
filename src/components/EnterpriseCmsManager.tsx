@@ -855,14 +855,8 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
   // These CMS collections start empty and are populated from authoritative API-backed flows.
   // Do not hydrate them from browser storage, which can resurrect stale/demo state.
   const [promotions, setPromotions] = useState<any[]>([]);
-  const [seoSettings, setSeoSettings] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('cms_seo_settings');
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
-  });
+  // SEO CMS state is database/API authoritative. Do not resurrect stale browser-only settings.
+  const [seoSettings, setSeoSettings] = useState<any[]>([]);
 
   const [mediaAssets, setMediaAssets] = useState<any[]>([]);
 
