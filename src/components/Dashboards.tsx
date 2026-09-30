@@ -1016,7 +1016,23 @@ export default function Dashboards({
                           </div>
 
                           <div className="space-y-3">
-                            {customerOrders.length === 0 ? (
+                            {customerOrdersLoading ? (
+                              <div className="p-8 text-center border border-white/5 rounded-xs">
+                                <Loader2 className="w-5 h-5 text-[#D4AF37] animate-spin mx-auto mb-2" />
+                                <p className="text-[10px] text-zinc-500">{isAr ? 'جارٍ تحميل طلباتك...' : 'Loading your orders...'}</p>
+                              </div>
+                            ) : customerOrdersError ? (
+                              <div className="p-8 text-center border border-rose-500/10 rounded-xs bg-rose-500/[0.02]">
+                                <AlertCircle className="w-5 h-5 text-rose-400 mx-auto mb-2" />
+                                <p className="text-[10px] text-zinc-400">{isAr ? 'تعذر تحميل الطلبات.' : 'Unable to load your orders.'}</p>
+                                <button
+                                  onClick={() => window.location.reload()}
+                                  className="mt-3 px-4 py-1.5 border border-white/10 hover:border-[#D4AF37]/30 text-zinc-300 hover:text-white text-[8px] font-bold uppercase tracking-widest rounded-xs"
+                                >
+                                  {isAr ? 'إعادة المحاولة' : 'Retry'}
+                                </button>
+                              </div>
+                            ) : customerOrders.length === 0 ? (
                               <div className="p-8 text-center border border-dashed border-white/5 rounded-xs">
                                 <p className="text-[10px] text-zinc-500">{isAr ? 'لا توجد طلبات حديثة بعد.' : 'No recent orders yet.'}</p>
                                 <p className="text-[9px] text-zinc-600 mt-1">{isAr ? 'ابدأ التسوق لتسجيل طلبك الأول معنا.' : 'Start shopping to place your first order.'}</p>
