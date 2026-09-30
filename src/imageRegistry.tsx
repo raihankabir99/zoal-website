@@ -1261,6 +1261,55 @@ export function useGlobalProducts(): Product[] {
   return mergedProducts;
 }
 
+/**
+ * Catalog loading state for storefront consumers that must distinguish
+ * "still loading" from a valid empty catalog.
+ */
+export function useGlobalProductsWithStatus(): { products: Product[]; isLoading: boolean; hasLoaded: boolean } {
+  const [products, setProducts] = React.useState<Product[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [hasLoaded, setHasLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+
+    const handleProducts = (event: Event) => {
+      if (!active) return;
+      const detail = (event as CustomEvent<Product[]>).detail;
+      setProducts(Array.isArray(detail) ? detail : []);
+      setIsLoading(false);
+      setHasLoaded(true);
+    };
+
+    window.addEventListener('zoal-products-updated', handleProducts);
+    import('./lib/productSync').then(mod => {
+      mod.triggerProductFetch(true).then((result) => {
+        if (!active) return;
+        setProducts(Array.isArray(result) ? result : []);
+        setIsLoading(false);
+        setHasLoaded(true);
+      }).catch(() => {
+        if (!active) return;
+        setProducts([]);
+        setIsLoading(false);
+        setHasLoaded(true);
+      });
+    }).catch(() => {
+      if (!active) return;
+      setProducts([]);
+      setIsLoading(false);
+      setHasLoaded(true);
+    });
+
+    return () => {
+      active = false;
+      window.removeEventListener('zoal-products-updated', handleProducts);
+    };
+  }, []);
+
+  return { products, isLoading, hasLoaded };
+}
+
 export function updateProductInventory(productId: string, newInventory: number) {
   try {
     const raw = localStorage.getItem('zoal_product_inventories');
