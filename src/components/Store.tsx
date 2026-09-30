@@ -6,7 +6,7 @@ import { Product, BusinessCategory } from '../types';
 import ScrollZoomImage from './ScrollZoomImage';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { SafeImage, useGlobalProducts, useGlobalImages, resolveProductImage, normalizeCategory } from '../imageRegistry';
+import { SafeImage, useGlobalProductsWithStatus, useGlobalImages, resolveProductImage, normalizeCategory } from '../imageRegistry';
 import { formatCurrency } from '../utils';
 import { categoryApi } from '../lib/categoryApi';
 
@@ -47,7 +47,7 @@ export default React.memo(function Store({
   const [successId, setSuccessId] = useState<string | null>(null);
 
   // Hook subscriptions
-  const allProducts = useGlobalProducts();
+  const { products: allProducts, isLoading: productsLoading } = useGlobalProductsWithStatus();
   const globalImages = useGlobalImages();
 
   // Authoritative CMS lists. null means the request has not completed or failed; an empty array is valid server state.
@@ -561,7 +561,19 @@ export default React.memo(function Store({
         )}
 
         {/* Dynamic products list grid */}
-        {filteredProducts.length === 0 ? (
+        {productsLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1 sm:gap-4 mt-2">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="border border-white/5 bg-zinc-950/40 rounded-sm overflow-hidden animate-pulse">
+                <div className="aspect-[4/5] bg-zinc-900/80" />
+                <div className="p-3 space-y-2">
+                  <div className="h-2.5 w-3/4 bg-zinc-900 rounded" />
+                  <div className="h-2 w-1/2 bg-zinc-900 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="text-center py-24 border border-dashed border-white/5 rounded-sm p-8 bg-zinc-950/20">
             <SearchX className="w-10 h-10 text-gold-pure/40 mx-auto mb-4 animate-pulse" />
             <span className="font-display text-sm tracking-widest uppercase text-white block mb-2">
