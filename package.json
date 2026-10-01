@@ -42,7 +42,8 @@
     "react-share": "^5.3.0",
     "recharts": "^3.8.1",
     "vite": "^6.2.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "mapbox-gl": "^3.31.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
