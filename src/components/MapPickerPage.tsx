@@ -86,6 +86,14 @@ export default function MapPickerPage() {
 
     const createLeafletFallback = () => {
       if (!mapContainerRef.current || cancelled) return;
+      if (mapboxMarkerRef.current) {
+        mapboxMarkerRef.current.remove();
+        mapboxMarkerRef.current = null;
+      }
+      if (mapboxMapRef.current) {
+        mapboxMapRef.current.remove();
+        mapboxMapRef.current = null;
+      }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -146,7 +154,7 @@ export default function MapPickerPage() {
         style: 'mapbox://styles/mapbox/dark-v11',
         center: [lng, lat],
         zoom,
-        attributionControl: false,
+        attributionControl: true,
         dragRotate: false,
         pitchWithRotate: false
       });
@@ -177,7 +185,7 @@ export default function MapPickerPage() {
       });
       map.on('error', () => {
         // If Mapbox cannot initialize/render, retain the proven Leaflet path.
-        if (!cancelled && !mapInstanceRef.current) createLeafletFallback();
+        if (!cancelled) createLeafletFallback();
       });
     } catch (error) {
       console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
