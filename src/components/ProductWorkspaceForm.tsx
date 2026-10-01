@@ -11,6 +11,32 @@ import { SafeImage } from '../imageRegistry';
 import { supabaseClient } from '../lib/supabaseClient';
 import { deleteProductStorageImageIfUnused } from '../utils/productStorage';
 
+const getShippingDefaultsForProduct = (category?: string, productType?: string) => {
+  const normalizedCategory = String(category || '').toLowerCase();
+  const normalizedType = String(productType || '').toLowerCase();
+  const isLocalFood = normalizedCategory === 'bakery' || ['food', 'drink'].includes(normalizedType);
+
+  if (isLocalFood) {
+    return {
+      deliveryType: 'LOCAL_ONLY',
+      shipping_scope: ['Local Delivery', 'Pickup'],
+      delivery_zones: ['Al Hofuf', 'Nearby Al Hofuf'],
+      sameDay: true,
+      deliveryDays: 1,
+      temperature_control: normalizedCategory === 'bakery' || ['food', 'drink'].includes(normalizedType)
+    };
+  }
+
+  return {
+    deliveryType: 'NATIONWIDE',
+    shipping_scope: ['Saudi Shipping'],
+    delivery_zones: ['Saudi Arabia'],
+    sameDay: false,
+    deliveryDays: 3,
+    temperature_control: false
+  };
+};
+
 interface ProductWorkspaceFormProps {
   formState: any;
   setFormState: React.Dispatch<React.SetStateAction<any>>;
@@ -318,7 +344,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
                 <span className="text-[9px] text-zinc-500 font-mono">Product Type Engine:</span>
                 <select
                   value={formState.productType}
-                  onChange={(e) => setFormState(prev => ({ ...prev, productType: e.target.value as any }))}
+                  onChange={(e) => setFormState(prev => ({ ...prev, productType: e.target.value as any, ...getShippingDefaultsForProduct(prev.category, e.target.value) }))}
                   className="bg-black border border-gold-pure/30 px-2 py-0.5 rounded-xs text-gold-pure font-mono text-[9px] font-bold outline-none cursor-pointer"
                 >
                   <option value="Coffee">☕ Coffee / Beans</option>
@@ -387,7 +413,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
                 <label className="text-[9px] text-zinc-500 uppercase tracking-wider block">Business Category</label>
                 <select
                   value={formState.category}
-                  onChange={(e) => setFormState(prev => ({ ...prev, category: e.target.value as BusinessCategory }))}
+                  onChange={(e) => setFormState(prev => ({ ...prev, category: e.target.value as BusinessCategory, ...getShippingDefaultsForProduct(e.target.value, prev.productType) }))}
                   className="w-full bg-black border border-white/5 p-2 rounded-xs text-white focus:border-gold-pure outline-none font-sans"
                 >
                   <option value="coffee">Coffee Products</option>
@@ -2225,7 +2251,7 @@ export const ProductWorkspaceForm: React.FC<ProductWorkspaceFormProps> = ({
                 <div className="space-y-2">
                   <label className="text-[9px] text-zinc-400 uppercase tracking-wider block font-mono">Covered Delivery Zones</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {['Al Hofuf', 'Al Ahsa', 'Dammam', 'Riyadh', 'Jeddah', 'Other'].map(zone => {
+                    {['Al Hofuf', 'Nearby Al Hofuf', 'Al Ahsa', 'Dammam', 'Riyadh', 'Jeddah', 'Other'].map(zone => {
                       const arr = Array.isArray(formState.delivery_zones) ? formState.delivery_zones : [];
                       const isChecked = arr.includes(zone);
                       return (
