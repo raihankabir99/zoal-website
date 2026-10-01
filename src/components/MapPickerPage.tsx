@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, ArrowLeft } from 'lucide-react';
 import L from 'leaflet';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import 'leaflet/dist/leaflet.css';
 
 export default function MapPickerPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -21,20 +24,42 @@ export default function MapPickerPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerInstanceRef = useRef<L.Marker | null>(null);
+  const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
+  const mapboxMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
-  // Reverse Geocoding Effect (OpenStreetMap Nominatim)
+  // Reverse geocoding: Mapbox first, Nominatim fallback.
   useEffect(() => {
     let isCancelled = false;
     const fetchAddress = async () => {
       setIsGeocoding(true);
+      const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
       try {
-        const response = await fetch(
+        if (token && token.startsWith('pk.')) {
+          const url = new URL('https://api.mapbox.com/search/geocode/v6/reverse');
+          url.searchParams.set('longitude', String(lng));
+          url.searchParams.set('latitude', String(lat));
+          url.searchParams.set('language', isAr ? 'ar' : 'en');
+          url.searchParams.set('limit', '1');
+          url.searchParams.set('access_token', token);
+          const response = await fetch(url.toString());
+          if (!response.ok) throw new Error('Mapbox reverse geocoding failed');
+          const data = await response.json();
+          const feature = data?.features?.[0];
+          const address = feature?.properties?.full_address || feature?.properties?.place_formatted || feature?.properties?.name;
+          if (address) {
+            if (!isCancelled) setAddressPreview(address);
+            return;
+          }
+        }
+
+        // Keep the existing Nominatim path as a compatibility fallback.
+        const fallbackResponse = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=${isAr ? 'ar' : 'en'}`
         );
-        if (!response.ok) throw new Error('Geocoding network error');
-        const data = await response.json();
-        if (!isCancelled && data && data.display_name) {
-          setAddressPreview(data.display_name);
+        if (!fallbackResponse.ok) throw new Error('Fallback geocoding network error');
+        const fallbackData = await fallbackResponse.json();
+        if (!isCancelled && fallbackData?.display_name) {
+          setAddressPreview(fallbackData.display_name);
         }
       } catch (err) {
         if (!isCancelled) {
@@ -52,75 +77,138 @@ export default function MapPickerPage() {
     };
   }, [lat, lng, isAr]);
 
-  // Leaflet Map Initialization & Mounting
+  // Map initialization: Mapbox is primary; existing Leaflet remains the safe fallback.
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-    }
+    const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
+    let cancelled = false;
 
-    const map = L.map(mapContainerRef.current, {
-      center: [lat, lng],
-      zoom: zoom,
-      zoomControl: false,
-      attributionControl: false
-    });
-
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20,
-      subdomains: 'abcd',
-    }).addTo(map);
-
-    const goldIcon = L.divIcon({
-      html: `
-        <div class="relative flex items-center justify-center">
-          <div class="absolute w-10 h-10 rounded-full bg-[#D4AF37]/30 animate-ping"></div>
-          <div class="w-8 h-8 rounded-full bg-black border-2 border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.6)] flex items-center justify-center">
-            <div class="w-3 h-3 rounded-full bg-[#D4AF37]"></div>
-          </div>
-        </div>
-      `,
-      className: 'custom-map-picker-pin',
-      iconSize: [40, 40],
-      iconAnchor: [20, 20]
-    });
-
-    const marker = L.marker([lat, lng], {
-      icon: goldIcon,
-      draggable: true
-    }).addTo(map);
-
-    markerInstanceRef.current = marker;
-    mapInstanceRef.current = map;
-
-    // Click map to reposition marker
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      const { lat: newLat, lng: newLng } = e.latlng;
-      setLat(newLat);
-      setLng(newLng);
-      marker.setLatLng([newLat, newLng]);
-    });
-
-    // Drag marker to fine-tune position
-    marker.on('dragend', () => {
-      const position = marker.getLatLng();
-      setLat(position.lat);
-      setLng(position.lng);
-    });
-
-    // Clean up on unmount
-    return () => {
+    const createLeafletFallback = () => {
+      if (!mapContainerRef.current || cancelled) return;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
+
+      const map = L.map(mapContainerRef.current, {
+        center: [lat, lng],
+        zoom,
+        zoomControl: false,
+        attributionControl: false
+      });
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 20,
+        subdomains: 'abcd',
+      }).addTo(map);
+
+      const goldIcon = L.divIcon({
+        html: `<div class="relative flex items-center justify-center"><div class="absolute w-10 h-10 rounded-full bg-[#D4AF37]/30 animate-ping"></div><div class="w-8 h-8 rounded-full bg-black border-2 border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.6)] flex items-center justify-center"><div class="w-3 h-3 rounded-full bg-[#D4AF37]"></div></div></div>`,
+        className: 'custom-map-picker-pin',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+      });
+
+      const marker = L.marker([lat, lng], { icon: goldIcon, draggable: true }).addTo(map);
+      markerInstanceRef.current = marker;
+      mapInstanceRef.current = map;
+
+      map.on('zoomend', () => setZoom(map.getZoom()));
+      map.on('click', (e: L.LeafletMouseEvent) => {
+        const { lat: newLat, lng: newLng } = e.latlng;
+        setLat(newLat);
+        setLng(newLng);
+        marker.setLatLng([newLat, newLng]);
+      });
+      marker.on('dragend', () => {
+        const position = marker.getLatLng();
+        setLat(position.lat);
+        setLng(position.lng);
+      });
+    };
+
+    if (!token || !token.startsWith('pk.')) {
+      createLeafletFallback();
+      return () => {
+        cancelled = true;
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
+      };
+    }
+
+    try {
+      mapboxgl.accessToken = token;
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [lng, lat],
+        zoom,
+        attributionControl: false,
+        dragRotate: false,
+        pitchWithRotate: false
+      });
+
+      const markerElement = document.createElement('div');
+      markerElement.className = 'custom-map-picker-pin';
+      markerElement.innerHTML = `<div class="relative flex items-center justify-center"><div class="absolute w-10 h-10 rounded-full bg-[#D4AF37]/30 animate-ping"></div><div class="w-8 h-8 rounded-full bg-black border-2 border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.6)] flex items-center justify-center"><div class="w-3 h-3 rounded-full bg-[#D4AF37]"></div></div></div>`;
+
+      const marker = new mapboxgl.Marker({ element: markerElement, draggable: true })
+        .setLngLat([lng, lat])
+        .addTo(map);
+
+      mapboxMapRef.current = map;
+      mapboxMarkerRef.current = marker;
+
+      map.on('zoomend', () => setZoom(map.getZoom()));
+      map.on('click', (e) => {
+        const newLng = e.lngLat.lng;
+        const newLat = e.lngLat.lat;
+        setLat(newLat);
+        setLng(newLng);
+        marker.setLngLat([newLng, newLat]);
+      });
+      marker.on('dragend', () => {
+        const position = marker.getLngLat();
+        setLat(position.lat);
+        setLng(position.lng);
+      });
+      map.on('error', () => {
+        // If Mapbox cannot initialize/render, retain the proven Leaflet path.
+        if (!cancelled && !mapInstanceRef.current) createLeafletFallback();
+      });
+    } catch (error) {
+      console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
+      createLeafletFallback();
+    }
+
+    return () => {
+      cancelled = true;
+      if (mapboxMarkerRef.current) {
+        mapboxMarkerRef.current.remove();
+        mapboxMarkerRef.current = null;
+      }
+      if (mapboxMapRef.current) {
+        mapboxMapRef.current.remove();
+        mapboxMapRef.current = null;
+      }
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      markerInstanceRef.current = null;
     };
   }, []);
 
-  // Update map pan and marker when lat/lng change externally
+  // Keep either map implementation synchronized with the selected coordinates.
   useEffect(() => {
+    if (mapboxMapRef.current && mapboxMarkerRef.current) {
+      mapboxMapRef.current.panTo([lng, lat]);
+      mapboxMarkerRef.current.setLngLat([lng, lat]);
+      return;
+    }
     if (mapInstanceRef.current && markerInstanceRef.current) {
       mapInstanceRef.current.panTo([lat, lng]);
       markerInstanceRef.current.setLatLng([lat, lng]);
@@ -136,7 +224,10 @@ export default function MapPickerPage() {
           const newLng = position.coords.longitude;
           setLat(newLat);
           setLng(newLng);
-          if (mapInstanceRef.current) {
+          if (mapboxMapRef.current) {
+            mapboxMapRef.current.setCenter([newLng, newLat]);
+            mapboxMapRef.current.setZoom(16);
+          } else if (mapInstanceRef.current) {
             mapInstanceRef.current.setView([newLat, newLng], 16);
           }
         },
@@ -196,17 +287,21 @@ export default function MapPickerPage() {
   };
 
   const handleZoomIn = () => {
-    if (mapInstanceRef.current) {
-      const newZoom = Math.min(20, zoom + 1);
-      setZoom(newZoom);
+    const newZoom = Math.min(20, zoom + 1);
+    setZoom(newZoom);
+    if (mapboxMapRef.current) {
+      mapboxMapRef.current.setZoom(newZoom);
+    } else if (mapInstanceRef.current) {
       mapInstanceRef.current.setZoom(newZoom);
     }
   };
 
   const handleZoomOut = () => {
-    if (mapInstanceRef.current) {
-      const newZoom = Math.max(10, zoom - 1);
-      setZoom(newZoom);
+    const newZoom = Math.max(10, zoom - 1);
+    setZoom(newZoom);
+    if (mapboxMapRef.current) {
+      mapboxMapRef.current.setZoom(newZoom);
+    } else if (mapInstanceRef.current) {
       mapInstanceRef.current.setZoom(newZoom);
     }
   };
