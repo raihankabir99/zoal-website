@@ -52,6 +52,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const { id } = params;
     const body = await req.json();
 
+    const { data: existingProduct, error: existingProductError } = await supabase
+      .from('zoal_products')
+      .select('category, product_type')
+      .eq('id', id)
+      .single();
+    if (existingProductError || !existingProduct) return apiError('Product not found', 404);
+
+    const effectiveCategory = body.category ?? existingProduct.category;
+    const effectiveProductType = body.productType ?? body.product_type ?? existingProduct.product_type;
+    const isLocalFood = effectiveCategory === 'bakery' || ['Food', 'Drink'].includes(effectiveProductType);
+
     const updatePayload: Record<string, any> = {};
 
     if (body.name !== undefined) {
