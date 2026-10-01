@@ -190,9 +190,29 @@ export async function POST(req: NextRequest) {
       ai_product_recommendation: body.aiProductRecommendation || body.ai_product_recommendation || '',
       ai_search_optimization: body.aiSearchOptimization || body.ai_search_optimization || '',
       ai_metadata: body.aiMetadata || body.ai_metadata || {},
-      delivery_type: body.deliveryType || body.delivery_type || 'NATIONWIDE',
+      // Safe fulfillment defaults: perishable/local food must never silently become nationwide.
+      delivery_type: (
+        body.category === 'bakery' || ['Food', 'Drink'].includes(body.productType || body.product_type)
+      ) ? 'LOCAL_ONLY' : (body.deliveryType || body.delivery_type || 'NATIONWIDE'),
+      shipping_scope: Array.isArray(body.shipping_scope)
+        ? body.shipping_scope
+        : (body.category === 'bakery' || ['Food', 'Drink'].includes(body.productType || body.product_type)
+          ? ['Local Delivery', 'Pickup']
+          : ['Saudi Shipping']),
+      delivery_zones: Array.isArray(body.delivery_zones)
+        ? body.delivery_zones
+        : (body.category === 'bakery' || ['Food', 'Drink'].includes(body.productType || body.product_type)
+          ? ['Al Hofuf', 'Nearby Al Hofuf']
+          : ['Saudi Arabia']),
+      same_day: body.sameDay !== undefined
+        ? !!body.sameDay
+        : (body.category === 'bakery' || ['Food', 'Drink'].includes(body.productType || body.product_type)),
       shipping_fee: body.shippingFee !== undefined ? parseFloat(body.shippingFee) : 0,
-      delivery_days: body.deliveryDays !== undefined ? parseInt(body.deliveryDays, 10) : 3,
+      delivery_days: body.deliveryDays !== undefined
+        ? parseInt(body.deliveryDays, 10)
+        : (body.category === 'bakery' || ['Food', 'Drink'].includes(body.productType || body.product_type) ? 1 : 3),
+      pickup_location: body.pickup_location || '',
+      temperature_control: body.temperature_control !== undefined ? !!body.temperature_control : false,
       shipping_class: body.shippingClass || body.shipping_class || 'Standard',
       weight: body.weight !== undefined ? parseFloat(body.weight) : 0.5,
       dimensions: body.dimensions || { length: 10, width: 10, height: 10, unit: 'cm' },
