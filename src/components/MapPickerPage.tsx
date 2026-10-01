@@ -151,12 +151,13 @@ export default function MapPickerPage() {
       mapboxgl.accessToken = token;
       const map = new mapboxgl.Map({
         container: mapContainerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
+        style: 'mapbox://styles/mapbox/streets-v12',
         center: [lng, lat],
         zoom,
         attributionControl: true,
         dragRotate: false,
-        pitchWithRotate: false
+        pitchWithRotate: false,
+        failIfMajorPerformanceCaveat: false
       });
 
       const markerElement = document.createElement('div');
@@ -182,6 +183,11 @@ export default function MapPickerPage() {
         const position = marker.getLngLat();
         setLat(position.lat);
         setLng(position.lng);
+      });
+      map.on('load', () => {
+        if (!cancelled && mapboxMapRef.current !== map) {
+          mapboxMapRef.current = map;
+        }
       });
       map.on('error', () => {
         // If Mapbox cannot initialize/render, retain the proven Leaflet path.
