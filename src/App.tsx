@@ -796,13 +796,19 @@ function AppContent() {
   // DEFAULT DELIVERY ZONES SEATED SCHEMAS
   const [deliveryZones, setDeliveryZones] = useState<any[]>(() => {
     const saved = localStorage.getItem('zoal_delivery_zones');
-    return saved ? JSON.parse(saved) : [
+    const defaults = [
       { id: '1', city: 'Hofuf', fee: 0, method: 'Local Delivery', region: 'Al Hofuf & Nearby Areas' },
-      { id: '2', city: 'Branch B', fee: 25, method: 'Regional Delivery', region: 'Eastern Province' },
       { id: '3', city: 'Khobar', fee: 25, method: 'Regional Delivery', region: 'Eastern Province' },
-      { id: '4', city: 'Branch A', fee: 45, method: 'Regional Delivery', region: 'Central Region' },
       { id: '5', city: 'Jeddah', fee: 50, method: 'Regional Delivery', region: 'Western Region' },
     ];
+    if (!saved) return defaults;
+    try {
+      const parsed = JSON.parse(saved);
+      // Legacy placeholder branch records are not real operating locations.
+      return Array.isArray(parsed) ? parsed.filter((zone: any) => !/^branch\\s+[ab]$/i.test(String(zone?.city || '').trim())) : defaults;
+    } catch {
+      return defaults;
+    }
   });
 
   useEffect(() => {
