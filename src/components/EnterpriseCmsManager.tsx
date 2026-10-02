@@ -4107,7 +4107,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                               value={editorialForm.canonical_url || ''}
                               onChange={(e) => setEditorialForm({ ...editorialForm, canonical_url: e.target.value })}
                               className="w-full bg-black border border-white/10 rounded-xs p-2 text-white outline-none focus:border-gold-pure font-mono text-[9px]"
-                              placeholder="e.g. https://alzoal.com/collections/coffee"
+                              placeholder="e.g. https://alzoal.sa/collections/coffee"
                             />
                           </div>
                           <div className="space-y-1">
@@ -5377,7 +5377,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                       <label className="block text-zinc-400 mb-1">CANONICAL LINK URL</label>
                       <input
                         type="text"
-                        defaultValue="https://alzoal.com"
+                        defaultValue="https://alzoal.sa"
                         className="bg-zinc-900 w-full border border-white/10 text-white p-1 rounded-xs outline-none focus:border-gold-pure font-mono text-[9px]"
                       />
                     </div>
@@ -5405,7 +5405,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
                     <label className="block text-zinc-400 mb-1">ROBOTS.TXT DIRECTIVES</label>
                     <textarea
                       rows={3}
-                      defaultValue={`User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nSitemap: https://alzoal.com/sitemap.xml`}
+                      defaultValue={`User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nSitemap: https://alzoal.sa/sitemap.xml`}
                       className="bg-zinc-900 w-full border border-white/10 text-emerald-400 p-1.5 rounded-xs outline-none focus:border-gold-pure font-mono text-[8.5px] leading-relaxed"
                     />
                   </div>
@@ -5449,13 +5449,13 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 {`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://alzoal.com/</loc>
+    <loc>https://alzoal.sa/</loc>
     <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   ${webPages.map(page => `  <url>
-    <loc>https://alzoal.com/${page.key}</loc>
+    <loc>https://alzoal.sa/${page.key}</loc>
     <lastmod>${page.lastModified.slice(0, 10)}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.80</priority>
@@ -5466,7 +5466,7 @@ export default function EnterpriseCmsManager({ currentUser, addLog, onSave }: En
 
                 <button
                   onClick={() => {
-                    const xmlText = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://alzoal.com/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+                    const xmlText = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://alzoal.sa/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
                     const blob = new Blob([xmlText], { type: 'text/xml' });
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(blob);
