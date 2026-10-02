@@ -148,28 +148,6 @@ export default function MapPickerPage() {
       resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
 
       map.on('zoomend', () => setZoom(map.getZoom()));
-      const tuneGoogleLikeLabels = () => {
-        const style = map.getStyle();
-        if (!style?.layers) return;
-        for (const layer of style.layers) {
-          const id = layer.id.toLowerCase();
-          if (layer.type === 'symbol' && (id.includes('poi') || id.includes('road-label') || id.includes('place-label') || id.includes('transit'))) {
-            try {
-              if (id.includes('poi')) map.setLayoutProperty(layer.id, 'text-optional', true);
-              if (id.includes('road-label')) map.setLayoutProperty(layer.id, 'text-optional', true);
-            } catch {}
-          }
-        }
-      };
-      map.once('load', tuneGoogleLikeLabels);
-      map.on('style.load', () => {
-        tuneGoogleLikeLabels();
-        if (routeGeoJsonRef.current) {
-          const feature = routeGeoJsonRef.current;
-          if (!map.getSource('zoal-route')) map.addSource('zoal-route', { type: 'geojson', data: feature });
-          if (!map.getLayer('zoal-route-line')) map.addLayer({ id: 'zoal-route-line', type: 'line', source: 'zoal-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#D4AF37', 'line-width': 5, 'line-opacity': 0.9 } });
-        }
-      });
       map.on('click', (e: L.LeafletMouseEvent) => {
         const { lat: newLat, lng: newLng } = e.latlng;
         setLat(newLat);
@@ -221,6 +199,27 @@ export default function MapPickerPage() {
       setIsMapboxReady(true);
       mapboxReadyRef.current = true;
 
+      const tuneGoogleLikeLabels = () => {
+        const style = map.getStyle();
+        if (!style?.layers) return;
+        for (const layer of style.layers) {
+          const id = layer.id.toLowerCase();
+          if (layer.type === 'symbol' && (id.includes('poi') || id.includes('road-label') || id.includes('place-label') || id.includes('transit'))) {
+            try {
+              map.setLayoutProperty(layer.id, 'text-optional', true);
+            } catch {}
+          }
+        }
+      };
+      map.on('load', tuneGoogleLikeLabels);
+      map.on('style.load', () => {
+        tuneGoogleLikeLabels();
+        if (routeGeoJsonRef.current) {
+          const feature = routeGeoJsonRef.current;
+          if (!map.getSource('zoal-route')) map.addSource('zoal-route', { type: 'geojson', data: feature });
+          if (!map.getLayer('zoal-route-line')) map.addLayer({ id: 'zoal-route-line', type: 'line', source: 'zoal-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#D4AF37', 'line-width': 5, 'line-opacity': 0.9 } });
+        }
+      });
       map.on('zoomend', () => setZoom(map.getZoom()));
       map.on('click', (e) => {
         const newLng = e.lngLat.lng;
@@ -412,7 +411,6 @@ export default function MapPickerPage() {
       const feature = data?.features?.[0];
       if (feature?.geometry?.coordinates) {
         const [newLng, newLat] = feature.geometry.coordinates;
-        setLng(newLat ? newLat : lat);
         setLng(newLng);
         setAddressPreview(feature?.properties?.full_address || feature?.properties?.name || '');
         mapboxMapRef.current?.flyTo({ center: [newLng, newLat], zoom: 16, duration: 700 });
