@@ -10,6 +10,7 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
   // Configured precisely to not break Vite/HMR in dev, and allow essential connections (Supabase, Google Fonts, Unsplash, and AI Studio Frame Wrapper)
   const cspDirectives = [
     "default-src 'self'",
+    "worker-src 'self' blob:",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.supabase.in https://*.googleapis.com https://www.googletagmanager.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://images.unsplash.com https://i.imgur.com https://*.google.com https://*.run.app https://api.mapbox.com https://*.tiles.mapbox.com https://*.tile.openstreetmap.org",
