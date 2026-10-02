@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, ArrowLeft } from 'lucide-react';
+import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, Layers } from 'lucide-react';
 import L from 'leaflet';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import 'leaflet/dist/leaflet.css';
+
+const MAPBOX_STYLES = {
+  streets: 'mapbox://styles/mapbox/streets-v12',
+  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+  terrain: 'mapbox://styles/mapbox/outdoors-v12',
+} as const;
+
+type MapboxStyleKey = keyof typeof MAPBOX_STYLES;
 
 export default function MapPickerPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -20,6 +28,8 @@ export default function MapPickerPage() {
   const [addressPreview, setAddressPreview] = useState<string>('');
   const [isGeocoding, setIsGeocoding] = useState<boolean>(false);
   const [isConfirmed, setIsConfirmed] = useState<boolean>(false);
+  const [mapboxStyle, setMapboxStyle] = useState<MapboxStyleKey>('streets');
+  const [isStyleMenuOpen, setIsStyleMenuOpen] = useState<boolean>(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -27,7 +37,6 @@ export default function MapPickerPage() {
   const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
   const mapboxMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
-  // Reverse geocoding: Mapbox first, Nominatim fallback.
   useEffect(() => {
     let isCancelled = false;
     const fetchAddress = async () => {
@@ -52,7 +61,6 @@ export default function MapPickerPage() {
           }
         }
 
-        // Keep the existing Nominatim path as a compatibility fallback.
         const fallbackResponse = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=${isAr ? 'ar' : 'en'}`
         );
@@ -77,7 +85,6 @@ export default function MapPickerPage() {
     };
   }, [lat, lng, isAr]);
 
-  // Map initialization: Mapbox is primary; existing Leaflet remains the safe fallback.
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -107,7 +114,6 @@ export default function MapPickerPage() {
         attributionControl: false
       });
 
-      // CSP-safe public fallback: OpenStreetMap tiles remain available when Mapbox token/config is unavailable.
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors',
@@ -124,8 +130,6 @@ export default function MapPickerPage() {
       markerInstanceRef.current = marker;
       mapInstanceRef.current = map;
 
-      // Ensure Leaflet recalculates the fullscreen container after React layout settles.
-      // This is intentionally scoped to this map instance and does not alter checkout/shipping logic.
       requestAnimationFrame(() => map.invalidateSize());
       resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
 
@@ -159,7 +163,7 @@ export default function MapPickerPage() {
       mapboxgl.accessToken = token;
       const map = new mapboxgl.Map({
         container: mapContainerRef.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: MAPBOX_STYLES.streets,
         center: [lng, lat],
         zoom,
         attributionControl: true,
@@ -192,14 +196,6 @@ export default function MapPickerPage() {
         setLat(position.lat);
         setLng(position.lng);
       });
-      map.on('load', () => {
-        if (!cancelled && mapboxMapRef.current !== map) {
-          mapboxMapRef.current = map;
-        }
-      });
-      // Keep Mapbox as the primary renderer. A transient tile/style error should not
-      // tear down the map and switch renderers; initialization failures are handled
-      // by the try/catch above, while Leaflet remains the explicit config fallback.
     } catch (error) {
       console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
       createLeafletFallback();
@@ -207,6 +203,7 @@ export default function MapPickerPage() {
 
     return () => {
       cancelled = true;
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       if (mapboxMarkerRef.current) {
         mapboxMarkerRef.current.remove();
         mapboxMarkerRef.current = null;
@@ -223,7 +220,6 @@ export default function MapPickerPage() {
     };
   }, []);
 
-  // Keep either map implementation synchronized with the selected coordinates.
   useEffect(() => {
     if (mapboxMapRef.current && mapboxMarkerRef.current) {
       mapboxMapRef.current.panTo([lng, lat]);
@@ -236,7 +232,18 @@ export default function MapPickerPage() {
     }
   }, [lat, lng]);
 
-  // Handle Current GPS Location fetch
+  const handleMapboxStyleChange = (styleKey: MapboxStyleKey) => {
+    setMapboxStyle(styleKey);
+    setIsStyleMenuOpen(false);
+
+    const map = mapboxMapRef.current;
+    if (!map) return;
+
+    const nextStyle = MAPBOX_STYLES[styleKey];
+    if (map.getStyle()?.sprite?.includes(nextStyle)) return;
+    map.setStyle(nextStyle);
+  };
+
   const handleUseCurrentGPS = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -260,9 +267,7 @@ export default function MapPickerPage() {
     }
   };
 
-  // Confirm and communicate selected location back to Checkout
   const handleConfirmLocation = () => {
-    // Validate coordinates strictly
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       alert(isAr ? 'إحداثيات غير صالحة' : 'Invalid coordinates selected');
       return;
@@ -277,7 +282,6 @@ export default function MapPickerPage() {
       timestamp: Date.now()
     };
 
-    // 1. Send via BroadcastChannel if available
     if (typeof BroadcastChannel !== 'undefined') {
       try {
         const channel = new BroadcastChannel('zoal_location_channel');
@@ -288,7 +292,6 @@ export default function MapPickerPage() {
       }
     }
 
-    // 2. Write to LocalStorage as safe fallback
     try {
       localStorage.setItem('zoal_confirmed_location', JSON.stringify(payload));
     } catch (e) {
@@ -297,7 +300,6 @@ export default function MapPickerPage() {
 
     setIsConfirmed(true);
 
-    // Attempt to close tab
     setTimeout(() => {
       try {
         window.close();
@@ -329,7 +331,6 @@ export default function MapPickerPage() {
 
   return (
     <div className="relative w-screen h-screen bg-[#0a0a0a] text-white flex flex-col overflow-hidden font-sans select-none" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* Top Floating Control Bar */}
       <header className="absolute top-0 left-0 right-0 z-20 p-3 sm:p-4 bg-gradient-to-b from-black/95 via-black/80 to-transparent backdrop-blur-md flex items-center justify-between border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center">
@@ -361,7 +362,6 @@ export default function MapPickerPage() {
         </button>
       </header>
 
-      {/* Main Fullscreen Leaflet Map */}
       <div className="relative flex-grow w-full h-full z-0">
         <div
           ref={mapContainerRef}
@@ -369,7 +369,47 @@ export default function MapPickerPage() {
           style={{ minHeight: '100%' }}
         />
 
-        {/* Floating Controls Overlay (Zoom & GPS) */}
+        <div className="absolute top-20 sm:top-24 left-3 sm:left-6 z-10">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsStyleMenuOpen((open) => !open)}
+              className="h-10 sm:h-11 px-3 sm:px-4 bg-black/90 hover:bg-zinc-900 text-white border border-[#D4AF37]/40 rounded-lg flex items-center gap-2 shadow-2xl backdrop-blur-md transition-all cursor-pointer"
+              title={isAr ? 'أنماط الخريطة' : 'Map styles'}
+              aria-label={isAr ? 'أنماط الخريطة' : 'Map styles'}
+              aria-expanded={isStyleMenuOpen}
+            >
+              <Layers className="w-4 h-4 text-[#D4AF37]" />
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">
+                {isAr ? 'الخريطة' : 'MAP'}
+              </span>
+            </button>
+
+            {isStyleMenuOpen && (
+              <div className="absolute top-12 left-0 min-w-40 p-1.5 bg-black/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl">
+                {([
+                  ['streets', isAr ? 'الشوارع' : 'Streets'],
+                  ['satellite', isAr ? 'القمر الصناعي' : 'Satellite'],
+                  ['terrain', isAr ? 'التضاريس' : 'Terrain'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleMapboxStyleChange(key)}
+                    className={`w-full px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-colors cursor-pointer ${
+                      mapboxStyle === key
+                        ? 'bg-[#D4AF37] text-black'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="absolute bottom-28 sm:bottom-32 right-3 sm:right-6 z-10 flex flex-col gap-2">
           <button
             type="button"
@@ -379,7 +419,7 @@ export default function MapPickerPage() {
           >
             <Compass className="w-5 h-5" />
           </button>
-          
+
           <div className="flex flex-col bg-black/90 border border-white/10 rounded-lg overflow-hidden shadow-2xl">
             <button
               type="button"
@@ -399,7 +439,6 @@ export default function MapPickerPage() {
         </div>
       </div>
 
-      {/* Confirmation Success Banner (If Tab Remains Open) */}
       {isConfirmed && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -422,9 +461,7 @@ export default function MapPickerPage() {
         </motion.div>
       )}
 
-      {/* Bottom Floating Confirmation Panel */}
       <footer className="absolute bottom-0 left-0 right-0 z-20 p-4 sm:p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md border-t border-white/10 flex flex-col gap-3">
-        {/* Address Preview Box */}
         <div className="bg-zinc-950/90 border border-white/10 p-3 rounded-xs flex items-center justify-between gap-3 text-xs text-zinc-300">
           <div className="flex items-center gap-2.5 min-w-0">
             <Navigation className="w-4 h-4 text-[#D4AF37] shrink-0 animate-pulse" />
@@ -442,7 +479,6 @@ export default function MapPickerPage() {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-3">
           <button
             type="button"
