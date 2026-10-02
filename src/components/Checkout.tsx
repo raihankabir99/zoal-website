@@ -2586,9 +2586,11 @@ export default function Checkout({
               type="submit"
               disabled={isSubmitting || !termsAccepted}
               className={`w-full py-3.5 sm:py-5 font-display font-bold uppercase tracking-widest text-[11px] sm:text-[11.5px] rounded-sm transition-all duration-300 flex items-center justify-center gap-3 min-h-[44px] sm:min-h-[48px] ${
-                !termsAccepted || isSubmitting
-                  ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5 opacity-60'
-                  : 'bg-[#D4AF37] hover:bg-white text-black cursor-pointer shadow-[0_0_20px_rgba(212,175,55,0.25)] active:scale-95'
+                isSubmitting
+                  ? 'bg-zinc-800 text-zinc-500 cursor-wait border border-white/5 opacity-70'
+                  : termsAccepted
+                    ? 'bg-[#D4AF37] hover:bg-[#e2bd44] text-black cursor-pointer border border-[#D4AF37] shadow-[0_0_24px_rgba(212,175,55,0.35)] hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] active:scale-[0.99]'
+                    : 'bg-zinc-800/90 text-zinc-500 cursor-not-allowed border border-white/10 opacity-70'
               }`}
             >
               {isSubmitting ? (
