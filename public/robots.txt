@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://alzoal.com/sitemap.xml
+Sitemap: https://alzoal.sa/sitemap.xml
