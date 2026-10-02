@@ -30,6 +30,7 @@ export default function MapPickerPage() {
   const [isConfirmed, setIsConfirmed] = useState<boolean>(false);
   const [mapboxStyle, setMapboxStyle] = useState<MapboxStyleKey>('streets');
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState<boolean>(false);
+  const [isMapboxReady, setIsMapboxReady] = useState<boolean>(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -94,6 +95,7 @@ export default function MapPickerPage() {
 
     const createLeafletFallback = () => {
       if (!mapContainerRef.current || cancelled) return;
+      setIsMapboxReady(false);
       if (mapboxMarkerRef.current) {
         mapboxMarkerRef.current.remove();
         mapboxMarkerRef.current = null;
@@ -182,6 +184,7 @@ export default function MapPickerPage() {
 
       mapboxMapRef.current = map;
       mapboxMarkerRef.current = marker;
+      setIsMapboxReady(true);
 
       map.on('zoomend', () => setZoom(map.getZoom()));
       map.on('click', (e) => {
@@ -237,10 +240,9 @@ export default function MapPickerPage() {
     setIsStyleMenuOpen(false);
 
     const map = mapboxMapRef.current;
-    if (!map) return;
+    if (!map || mapboxStyle === styleKey) return;
 
     const nextStyle = MAPBOX_STYLES[styleKey];
-    if (map.getStyle()?.sprite?.includes(nextStyle)) return;
     map.setStyle(nextStyle);
   };
 
@@ -369,6 +371,7 @@ export default function MapPickerPage() {
           style={{ minHeight: '100%' }}
         />
 
+        {isMapboxReady && (
         <div className="absolute top-20 sm:top-24 left-3 sm:left-6 z-10">
           <div className="relative">
             <button
@@ -409,6 +412,7 @@ export default function MapPickerPage() {
             )}
           </div>
         </div>
+        )}
 
         <div className="absolute bottom-28 sm:bottom-32 right-3 sm:right-6 z-10 flex flex-col gap-2">
           <button
