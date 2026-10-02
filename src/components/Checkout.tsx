@@ -29,10 +29,9 @@ interface CheckoutProps {
 }
 
 const DEFAULT_ZONES = [
+  // Current operating location: Al Hofuf. Other cities remain delivery zones, not branches.
   { id: '1', city: 'Hofuf', fee: 0, method: 'Local Delivery', region: 'Al Hofuf & Nearby Areas' },
-  { id: '2', city: 'Branch B', fee: 25, method: 'Regional Delivery', region: 'Eastern Province' },
   { id: '3', city: 'Khobar', fee: 25, method: 'Regional Delivery', region: 'Eastern Province' },
-  { id: '4', city: 'Branch A', fee: 45, method: 'Regional Delivery', region: 'Central Region' },
   { id: '5', city: 'Jeddah', fee: 50, method: 'Regional Delivery', region: 'Western Region' },
 ];
 
