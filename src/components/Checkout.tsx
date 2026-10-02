@@ -416,10 +416,30 @@ export default function Checkout({
     return country.includes('saudi') || country.includes('سعودي') || country.includes('المملكة');
   }, [activeAddress.country]);
 
+  // ZOAL local-food coverage: Al Hofuf and nearby Al Hofuf only.
+  // Keep this city-level check conservative; broader Al Ahsa is not treated as 1–2 hour local coverage.
   const isLocalZone = useMemo(() => {
-    const cityLower = (activeAddress.city || '').toLowerCase();
-    return cityLower.includes('hofuf') || (activeAddress.city || '').includes('هفوف');
-  }, [activeAddress.city]);
+    const city = String(activeAddress.city || '').trim().toLowerCase();
+    const district = String(activeAddress.district || '').trim().toLowerCase();
+    const region = String(activeAddress.region || '').trim().toLowerCase();
+    const haystack = [city, district, region].join(' ');
+
+    const isHofuf =
+      haystack.includes('hofuf') ||
+      haystack.includes('al hofuf') ||
+      haystack.includes('al-hofuf') ||
+      haystack.includes('هفوف');
+
+    // Nearby areas can be returned by Nominatim as districts/suburbs rather than "Hofuf".
+    // Explicitly support common local-area markers while avoiding a blanket Al Ahsa match.
+    const isNearbyHofuf =
+      haystack.includes('nearby al hofuf') ||
+      haystack.includes('hofuf nearby') ||
+      haystack.includes('الهفوف') ||
+      haystack.includes('المبرز');
+
+    return isHofuf || isNearbyHofuf;
+  }, [activeAddress.city, activeAddress.district, activeAddress.region]);
 
   const hasLocalOnlyItems = useMemo(() => {
     return cart.some(item => item.product.deliveryType === 'LOCAL_ONLY');
@@ -503,7 +523,9 @@ export default function Checkout({
           if (isSaudi) {
             const cityLower = cityVal.toLowerCase();
             if (cityLower.includes('dammam') || cityVal.includes('دمام') || cityLower.includes('khobar') || cityVal.includes('خبر') || cityLower.includes('hofuf') || cityVal.includes('هفوف')) {
-              etaVal = i18n.language === 'ar' ? 'اليوم • ٢-٤ ساعات' : 'Today • 2–4 Hours';
+              etaVal = (cityLower.includes('hofuf') || cityVal.includes('هفوف'))
+  ? (i18n.language === 'ar' ? 'اليوم • ١-٢ ساعة' : 'Today • 1–2 Hours')
+  : (i18n.language === 'ar' ? 'اليوم • ٢-٣ ساعات' : 'Today • 2–3 Hours');
               originalCity = cityLower.includes('hofuf') ? 'Hofuf' : (cityLower.includes('khobar') ? 'Khobar' : 'Branch B');
             } else if (cityLower.includes('riyadh') || cityVal.includes('رياض')) {
               etaVal = i18n.language === 'ar' ? 'غداً • خلال ٢٤ ساعة' : 'Next Day • 24 Hours';
