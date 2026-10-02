@@ -393,7 +393,7 @@ export default function MapPickerPage() {
   };
 
   return (
-    <div className="relative w-screen h-screen bg-[#0a0a0a] text-white flex flex-col overflow-hidden font-sans select-none" dir={isAr ? 'rtl' : 'ltr'}>
+    <div className="relative w-screen h-[100dvh] min-h-[100svh] bg-[#0a0a0a] text-white flex flex-col overflow-hidden font-sans select-none" dir={isAr ? 'rtl' : 'ltr'}>
       <header className="absolute top-0 left-0 right-0 z-20 p-3 sm:p-4 bg-gradient-to-b from-black/95 via-black/80 to-transparent backdrop-blur-md flex items-center justify-between border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center">
@@ -425,7 +425,7 @@ export default function MapPickerPage() {
         </button>
       </header>
 
-      <div className="relative flex-grow w-full h-full z-0">
+      <div className="relative flex-1 min-h-0 w-full h-full z-0 touch-pan-x touch-pan-y">
         <div
           ref={mapContainerRef}
           className="zoal-map-picker w-full h-full bg-[#0a0a0a]"
@@ -433,7 +433,7 @@ export default function MapPickerPage() {
         />
 
         {isMapboxReady && (
-        <div className="absolute top-20 sm:top-24 left-3 sm:left-6 z-10">
+        <div className="absolute top-[76px] sm:top-24 start-3 sm:start-6 z-10">
           <div className="relative">
             <button
               type="button"
@@ -450,7 +450,7 @@ export default function MapPickerPage() {
             </button>
 
             {isStyleMenuOpen && (
-              <div className="absolute top-12 left-0 min-w-40 p-1.5 bg-black/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl">
+              <div className="absolute top-12 start-0 min-w-40 p-1.5 bg-black/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl">
                 {([
                   ['streets', isAr ? 'الشوارع' : 'Streets'],
                   ['satellite', isAr ? 'القمر الصناعي' : 'Satellite'],
@@ -476,17 +476,17 @@ export default function MapPickerPage() {
         )}
 
         {isMapboxReady && routeInfo && (
-          <div className="absolute top-20 sm:top-24 right-3 sm:right-6 z-10 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
+          <div className="absolute top-[76px] sm:top-24 end-3 sm:end-6 z-10 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
             <div className="flex items-center gap-2 text-xs font-bold text-white"><Route className="w-4 h-4 text-[#D4AF37]" />{routeInfo.distanceKm} km</div>
             <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-400"><Clock3 className="w-3.5 h-3.5" />{routeInfo.durationMin} min</div>
           </div>
         )}
 
-        <div className="absolute bottom-28 sm:bottom-32 right-3 sm:right-6 z-10 flex flex-col gap-2">
+        <div className="absolute bottom-[150px] sm:bottom-32 end-3 sm:end-6 z-10 flex flex-col gap-2">
           <button
             type="button"
             onClick={handleRecenter}
-            className="w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer"
+            className="w-11 h-11 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer"
             title={isAr ? 'الموقع الحالي GPS' : 'Use GPS Location'}
           >
             <Compass className="w-5 h-5" />
@@ -498,7 +498,7 @@ export default function MapPickerPage() {
             </button>
           )}
 
-          <div className="flex flex-col bg-black/90 border border-white/10 rounded-lg overflow-hidden shadow-2xl">
+          <div className="flex flex-col bg-black/90 border border-white/10 rounded-lg overflow-hidden shadow-2xl min-w-[44px]">
             <button
               type="button"
               onClick={handleZoomIn}
@@ -521,7 +521,7 @@ export default function MapPickerPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-16 left-4 right-4 z-30 bg-[#D4AF37] text-black p-3.5 rounded-sm shadow-2xl border border-white/20 flex items-center justify-between"
+          className="absolute top-[68px] sm:top-16 left-3 right-3 sm:left-4 sm:right-4 z-30 bg-[#D4AF37] text-black p-3.5 rounded-sm shadow-2xl border border-white/20 flex items-center justify-between"
         >
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-black shrink-0" />
@@ -539,7 +539,7 @@ export default function MapPickerPage() {
         </motion.div>
       )}
 
-      <footer className="absolute bottom-0 left-0 right-0 z-20 p-4 sm:p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md border-t border-white/10 flex flex-col gap-3">
+      <footer className="absolute bottom-0 left-0 right-0 z-20 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md border-t border-white/10 flex flex-col gap-3">
         <div className="bg-zinc-950/90 border border-white/10 p-3 rounded-xs flex items-center justify-between gap-3 text-xs text-zinc-300">
           <div className="flex items-center gap-2.5 min-w-0">
             <Navigation className="w-4 h-4 text-[#D4AF37] shrink-0 animate-pulse" />
