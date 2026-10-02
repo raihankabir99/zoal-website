@@ -83,6 +83,7 @@ export default function MapPickerPage() {
 
     const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
     let cancelled = false;
+    let resizeTimer: number | null = null;
 
     const createLeafletFallback = () => {
       if (!mapContainerRef.current || cancelled) return;
@@ -126,7 +127,7 @@ export default function MapPickerPage() {
       // Ensure Leaflet recalculates the fullscreen container after React layout settles.
       // This is intentionally scoped to this map instance and does not alter checkout/shipping logic.
       requestAnimationFrame(() => map.invalidateSize());
-      const resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
+      resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
 
       map.on('zoomend', () => setZoom(map.getZoom()));
       map.on('click', (e: L.LeafletMouseEvent) => {
@@ -146,7 +147,7 @@ export default function MapPickerPage() {
       createLeafletFallback();
       return () => {
         cancelled = true;
-        window.clearTimeout(resizeTimer);
+        if (resizeTimer !== null) window.clearTimeout(resizeTimer);
         if (mapInstanceRef.current) {
           mapInstanceRef.current.remove();
           mapInstanceRef.current = null;
@@ -196,10 +197,9 @@ export default function MapPickerPage() {
           mapboxMapRef.current = map;
         }
       });
-      map.on('error', () => {
-        // If Mapbox cannot initialize/render, retain the proven Leaflet path.
-        if (!cancelled) createLeafletFallback();
-      });
+      // Keep Mapbox as the primary renderer. A transient tile/style error should not
+      // tear down the map and switch renderers; initialization failures are handled
+      // by the try/catch above, while Leaflet remains the explicit config fallback.
     } catch (error) {
       console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
       createLeafletFallback();
