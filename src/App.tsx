@@ -1912,7 +1912,7 @@ function AppContent() {
 
       {/* BOUTIQUE FOOTER SECTOR */}
       {currentPage !== 'admin' && (
-        <Footer setCurrentPage={setCurrentPage} setSelectedCategoryFilter={setSelectedCategoryFilter} />
+        <Footer setCurrentPage={navigateTo} setSelectedCategoryFilter={setSelectedCategoryFilter} />
       )}
 
       {/* PRIVILEGED LOGIN MODAL */}
