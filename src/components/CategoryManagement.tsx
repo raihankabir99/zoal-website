@@ -3314,7 +3314,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                   <div className="space-y-0.5">
                     {/* Breadcrumbs URL */}
                     <div className="text-[10px] text-zinc-400 truncate flex items-center gap-1 font-mono">
-                      <span>https://alzoal.com</span>
+                      <span>https://alzoal.sa</span>
                       <span className="text-zinc-600">›</span>
                       <span className="text-zinc-300">shop</span>
                       <span className="text-zinc-600">›</span>
@@ -3387,7 +3387,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                       type="url" 
                       value={formCanonicalUrl}
                       onChange={(e) => setFormCanonicalUrl(e.target.value)}
-                      placeholder="https://alzoal.com/shop/cold-brew"
+                      placeholder="https://alzoal.sa/shop/cold-brew"
                       className="w-full bg-zinc-900 border border-white/5 rounded-xs py-1.5 px-3 text-white focus:outline-none focus:border-gold-pure/30 text-[10.5px] font-mono"
                     />
                   </div>
@@ -3417,7 +3417,7 @@ export const CategoryManagement: React.FC<CategoryManagementProps> = ({
                           "@type": "CollectionPage",
                           "name": formName,
                           "description": formShortDesc || formDesc || "Premium collection at AL ZOAL",
-                          "url": `https://alzoal.com/shop/${formSlug}`
+                          "url": `https://alzoal.sa/shop/${formSlug}`
                         }, null, 2);
                         setFormStructuredData(simulatedJson);
                         addLog(`Generated JSON-LD Structured Schema for Category "${formName}"`, "SEO Engine");
