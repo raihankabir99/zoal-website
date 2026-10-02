@@ -1573,6 +1573,32 @@ app.post('/api/orders/create', optionalAuthenticate, async (req: any, res: any) 
   let resolvedProvider = 'local';
   let resolvedSmsaAllowed = false;
 
+  // Enforce product-level local-food routing server-side.
+  // Client checkout selection must not be able to turn a local-only item into SMSA/nationwide shipping.
+  const hasLocalOnlyItems = Array.isArray(order.items) && order.items.some((item: any) =>
+    item?.product?.deliveryType === 'LOCAL_ONLY' ||
+    item?.product?.delivery_type === 'LOCAL_ONLY' ||
+    item?.deliveryType === 'LOCAL_ONLY' ||
+    item?.delivery_type === 'LOCAL_ONLY'
+  );
+  const normalizedCity = String(clientCity).trim().toLowerCase();
+  const normalizedDistrict = String(clientDistrict).trim().toLowerCase();
+  const localHaystack = [normalizedCity, normalizedDistrict].join(' ');
+  const isHofufLocalArea =
+    localHaystack.includes('hofuf') ||
+    localHaystack.includes('al-hofuf') ||
+    localHaystack.includes('هفوف') ||
+    localHaystack.includes('المبرز') ||
+    localHaystack.includes('nearby al hofuf') ||
+    localHaystack.includes('hofuf nearby');
+
+  if (hasLocalOnlyItems && selectedMethod !== 'local_delivery') {
+    return res.status(400).json({ error: 'Local-only products must use local delivery.' });
+  }
+  if (hasLocalOnlyItems && !isHofufLocalArea) {
+    return res.status(400).json({ error: 'Local-only products are currently available only in Al Hofuf and nearby Al Hofuf areas.' });
+  }
+
   try {
     const resFee = await calculateAuthoritativeShippingFee({
       city: clientCity,
