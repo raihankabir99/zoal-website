@@ -12,8 +12,8 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.supabase.in https://*.googleapis.com https://www.googletagmanager.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://images.unsplash.com https://i.imgur.com https://*.google.com https://*.run.app https://api.mapbox.com https://*.tiles.mapbox.com",
-    "connect-src 'self' ws: wss: https://*.supabase.co https://*.supabase.in https://api.studio https://*.google.com https://*.run.app https://www.googletagmanager.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com",
+    "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://images.unsplash.com https://i.imgur.com https://*.google.com https://*.run.app https://api.mapbox.com https://*.tiles.mapbox.com https://*.tile.openstreetmap.org",
+    "connect-src 'self' ws: wss: https://*.supabase.co https://*.supabase.in https://api.studio https://*.google.com https://*.run.app https://www.googletagmanager.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://*.tile.openstreetmap.org",
     "font-src 'self' data: https://fonts.gstatic.com",
     "frame-src 'self' https://*.supabase.co",
     "frame-ancestors 'self' https://ai.studio https://*.google.com https://*.run.app"
@@ -40,7 +40,7 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
   res.setHeader('X-XSS-Protection', '1; mode=block');
 
   // Permissions Policy
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self)');
 
   next();
 }
