@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, Layers } from 'lucide-react';
+import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, Layers, Route, Clock3, LocateFixed } from 'lucide-react';
 import L from 'leaflet';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -31,6 +31,9 @@ export default function MapPickerPage() {
   const [mapboxStyle, setMapboxStyle] = useState<MapboxStyleKey>('streets');
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState<boolean>(false);
   const [isMapboxReady, setIsMapboxReady] = useState<boolean>(false);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
+  const routeGeoJsonRef = useRef<string | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -246,6 +249,45 @@ export default function MapPickerPage() {
     map.setStyle(nextStyle);
   };
 
+  const clearRoute = () => {
+    const map = mapboxMapRef.current;
+    if (!map) return;
+    if (map.getLayer('zoal-route-line')) map.removeLayer('zoal-route-line');
+    if (map.getSource('zoal-route')) map.removeSource('zoal-route');
+    routeGeoJsonRef.current = null;
+    setRouteInfo(null);
+  };
+
+  const drawRouteToSelectedLocation = async (fromLat: number, fromLng: number) => {
+    const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
+    const map = mapboxMapRef.current;
+    if (!token.startsWith('pk.') || !map) return;
+    try {
+      const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${fromLng},${fromLat};${lng},${lat}`);
+      url.searchParams.set('geometries', 'geojson');
+      url.searchParams.set('overview', 'full');
+      url.searchParams.set('access_token', token);
+      const response = await fetch(url.toString());
+      if (!response.ok) throw new Error('Directions request failed');
+      const data = await response.json();
+      const route = data?.routes?.[0];
+      if (!route?.geometry) throw new Error('No route found');
+
+      const source = map.getSource('zoal-route') as mapboxgl.GeoJSONSource | undefined;
+      const feature = { type: 'Feature', properties: {}, geometry: route.geometry } as GeoJSON.Feature<GeoJSON.LineString>;
+      if (source) source.setData(feature);
+      else {
+        map.addSource('zoal-route', { type: 'geojson', data: feature });
+        map.addLayer({ id: 'zoal-route-line', type: 'line', source: 'zoal-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#D4AF37', 'line-width': 5, 'line-opacity': 0.9 } });
+      }
+      routeGeoJsonRef.current = JSON.stringify(feature);
+      setRouteInfo({ distanceKm: Number((route.distance / 1000).toFixed(1)), durationMin: Math.max(1, Math.round(route.duration / 60)) });
+    } catch (error) {
+      console.warn('Unable to load driving route:', error);
+      setRouteInfo(null);
+    }
+  };
+
   const handleUseCurrentGPS = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -254,6 +296,7 @@ export default function MapPickerPage() {
           const newLng = position.coords.longitude;
           setLat(newLat);
           setLng(newLng);
+          setCurrentLocation({ lat: newLat, lng: newLng });
           if (mapboxMapRef.current) {
             mapboxMapRef.current.setCenter([newLng, newLat]);
             mapboxMapRef.current.setZoom(16);
@@ -309,6 +352,24 @@ export default function MapPickerPage() {
         // Browser prevented window.close()
       }
     }, 300);
+  };
+
+  const handleShowRoute = () => {
+    if (currentLocation) {
+      drawRouteToSelectedLocation(currentLocation.lat, currentLocation.lng);
+      return;
+    }
+    handleUseCurrentGPS();
+  };
+
+  useEffect(() => {
+    if (currentLocation && mapboxMapRef.current) drawRouteToSelectedLocation(currentLocation.lat, currentLocation.lng);
+    else clearRoute();
+  }, [lat, lng, currentLocation]);
+
+  const handleRecenter = () => {
+    if (currentLocation && mapboxMapRef.current) mapboxMapRef.current.flyTo({ center: [currentLocation.lng, currentLocation.lat], zoom: 16, duration: 700 });
+    else handleUseCurrentGPS();
   };
 
   const handleZoomIn = () => {
@@ -414,15 +475,28 @@ export default function MapPickerPage() {
         </div>
         )}
 
+        {isMapboxReady && routeInfo && (
+          <div className="absolute top-20 sm:top-24 right-3 sm:right-6 z-10 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
+            <div className="flex items-center gap-2 text-xs font-bold text-white"><Route className="w-4 h-4 text-[#D4AF37]" />{routeInfo.distanceKm} km</div>
+            <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-400"><Clock3 className="w-3.5 h-3.5" />{routeInfo.durationMin} min</div>
+          </div>
+        )}
+
         <div className="absolute bottom-28 sm:bottom-32 right-3 sm:right-6 z-10 flex flex-col gap-2">
           <button
             type="button"
-            onClick={handleUseCurrentGPS}
+            onClick={handleRecenter}
             className="w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer"
             title={isAr ? 'الموقع الحالي GPS' : 'Use GPS Location'}
           >
             <Compass className="w-5 h-5" />
           </button>
+
+          {isMapboxReady && (
+            <button type="button" onClick={handleShowRoute} className="w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer" title={isAr ? 'الاتجاهات' : 'Directions'}>
+              <Route className="w-5 h-5" />
+            </button>
+          )}
 
           <div className="flex flex-col bg-black/90 border border-white/10 rounded-lg overflow-hidden shadow-2xl">
             <button
