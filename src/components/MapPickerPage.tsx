@@ -123,6 +123,11 @@ export default function MapPickerPage() {
       markerInstanceRef.current = marker;
       mapInstanceRef.current = map;
 
+      // Ensure Leaflet recalculates the fullscreen container after React layout settles.
+      // This is intentionally scoped to this map instance and does not alter checkout/shipping logic.
+      requestAnimationFrame(() => map.invalidateSize());
+      const resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
+
       map.on('zoomend', () => setZoom(map.getZoom()));
       map.on('click', (e: L.LeafletMouseEvent) => {
         const { lat: newLat, lng: newLng } = e.latlng;
@@ -141,6 +146,7 @@ export default function MapPickerPage() {
       createLeafletFallback();
       return () => {
         cancelled = true;
+        window.clearTimeout(resizeTimer);
         if (mapInstanceRef.current) {
           mapInstanceRef.current.remove();
           mapInstanceRef.current = null;
@@ -357,7 +363,11 @@ export default function MapPickerPage() {
 
       {/* Main Fullscreen Leaflet Map */}
       <div className="relative flex-grow w-full h-full z-0">
-        <div ref={mapContainerRef} className="w-full h-full bg-[#0a0a0a]" />
+        <div
+          ref={mapContainerRef}
+          className="zoal-map-picker w-full h-full bg-[#0a0a0a]"
+          style={{ minHeight: '100%' }}
+        />
 
         {/* Floating Controls Overlay (Zoom & GPS) */}
         <div className="absolute bottom-28 sm:bottom-32 right-3 sm:right-6 z-10 flex flex-col gap-2">
