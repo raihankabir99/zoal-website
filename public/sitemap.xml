@@ -1,43 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://alzoal.com/</loc>
+    <loc>https://alzoal.sa/</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://alzoal.com/store</loc>
+    <loc>https://alzoal.sa/store</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://alzoal.com/portfolio</loc>
+    <loc>https://alzoal.sa/portfolio</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://alzoal.com/about</loc>
+    <loc>https://alzoal.sa/about</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://alzoal.com/blog</loc>
+    <loc>https://alzoal.sa/blog</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://alzoal.com/branches</loc>
+    <loc>https://alzoal.sa/branches</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://alzoal.com/contact</loc>
+    <loc>https://alzoal.sa/contact</loc>
     <lastmod>2026-07-26</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.4</priority>
