@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, Layers, Route, Clock3, LocateFixed } from 'lucide-react';
+import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, Layers, Route, Clock3, Search, Crosshair, Utensils, ShoppingCart, Fuel, HeartPulse, Landmark, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -33,13 +33,21 @@ export default function MapPickerPage() {
   const [isMapboxReady, setIsMapboxReady] = useState<boolean>(false);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
-  const routeGeoJsonRef = useRef<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchSuggestions, setSearchSuggestions] = useState<Array<{ mapbox_id: string; name: string; full_address?: string; place_formatted?: string; feature_type?: string; maki?: string }>>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const searchSessionRef = useRef<string>('');
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const routeGeoJsonRef = useRef<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerInstanceRef = useRef<L.Marker | null>(null);
   const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
   const mapboxMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const mapboxReadyRef = useRef(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -99,6 +107,7 @@ export default function MapPickerPage() {
     const createLeafletFallback = () => {
       if (!mapContainerRef.current || cancelled) return;
       setIsMapboxReady(false);
+      mapboxReadyRef.current = false;
       if (mapboxMarkerRef.current) {
         mapboxMarkerRef.current.remove();
         mapboxMarkerRef.current = null;
@@ -139,6 +148,28 @@ export default function MapPickerPage() {
       resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
 
       map.on('zoomend', () => setZoom(map.getZoom()));
+      const tuneGoogleLikeLabels = () => {
+        const style = map.getStyle();
+        if (!style?.layers) return;
+        for (const layer of style.layers) {
+          const id = layer.id.toLowerCase();
+          if (layer.type === 'symbol' && (id.includes('poi') || id.includes('road-label') || id.includes('place-label') || id.includes('transit'))) {
+            try {
+              if (id.includes('poi')) map.setLayoutProperty(layer.id, 'text-optional', true);
+              if (id.includes('road-label')) map.setLayoutProperty(layer.id, 'text-optional', true);
+            } catch {}
+          }
+        }
+      };
+      map.once('load', tuneGoogleLikeLabels);
+      map.on('style.load', () => {
+        tuneGoogleLikeLabels();
+        if (routeGeoJsonRef.current) {
+          const feature = routeGeoJsonRef.current;
+          if (!map.getSource('zoal-route')) map.addSource('zoal-route', { type: 'geojson', data: feature });
+          if (!map.getLayer('zoal-route-line')) map.addLayer({ id: 'zoal-route-line', type: 'line', source: 'zoal-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#D4AF37', 'line-width': 5, 'line-opacity': 0.9 } });
+        }
+      });
       map.on('click', (e: L.LeafletMouseEvent) => {
         const { lat: newLat, lng: newLng } = e.latlng;
         setLat(newLat);
@@ -188,6 +219,7 @@ export default function MapPickerPage() {
       mapboxMapRef.current = map;
       mapboxMarkerRef.current = marker;
       setIsMapboxReady(true);
+      mapboxReadyRef.current = true;
 
       map.on('zoomend', () => setZoom(map.getZoom()));
       map.on('click', (e) => {
@@ -280,11 +312,115 @@ export default function MapPickerPage() {
         map.addSource('zoal-route', { type: 'geojson', data: feature });
         map.addLayer({ id: 'zoal-route-line', type: 'line', source: 'zoal-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#D4AF37', 'line-width': 5, 'line-opacity': 0.9 } });
       }
-      routeGeoJsonRef.current = JSON.stringify(feature);
+      routeGeoJsonRef.current = feature;
       setRouteInfo({ distanceKm: Number((route.distance / 1000).toFixed(1)), durationMin: Math.max(1, Math.round(route.duration / 60)) });
     } catch (error) {
       console.warn('Unable to load driving route:', error);
       setRouteInfo(null);
+    }
+  };
+
+  const createSearchSession = () => {
+    if (!searchSessionRef.current) {
+      searchSessionRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return searchSessionRef.current;
+  };
+
+  const handleSearchInput = async (value: string) => {
+    setSearchQuery(value);
+    setIsSearchOpen(true);
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+    if (value.trim().length < 2) {
+      setSearchSuggestions([]);
+      return;
+    }
+    const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
+    if (!token.startsWith('pk.')) return;
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    setIsSearching(true);
+    try {
+      const url = new URL('https://api.mapbox.com/search/searchbox/v1/suggest');
+      url.searchParams.set('q', value.trim());
+      url.searchParams.set('language', isAr ? 'ar' : 'en');
+      url.searchParams.set('limit', '8');
+      url.searchParams.set('types', 'poi,address,street,neighborhood,locality,place');
+      url.searchParams.set('country', 'SA');
+      url.searchParams.set('proximity', `${lng},${lat}`);
+      url.searchParams.set('session_token', createSearchSession());
+      url.searchParams.set('access_token', token);
+      const response = await fetch(url.toString(), { signal: controller.signal });
+      if (!response.ok) throw new Error('Search failed');
+      const data = await response.json();
+      if (!controller.signal.aborted) setSearchSuggestions(data?.suggestions || []);
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') console.warn('Map search failed:', error);
+    } finally {
+      if (!controller.signal.aborted) setIsSearching(false);
+    }
+  };
+
+  const handleSelectSearchResult = async (suggestion: { mapbox_id: string }) => {
+    const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
+    if (!token.startsWith('pk.')) return;
+    setIsSearching(true);
+    try {
+      const url = new URL(`https://api.mapbox.com/search/searchbox/v1/retrieve/${encodeURIComponent(suggestion.mapbox_id)}`);
+      url.searchParams.set('language', isAr ? 'ar' : 'en');
+      url.searchParams.set('session_token', createSearchSession());
+      url.searchParams.set('access_token', token);
+      const response = await fetch(url.toString());
+      if (!response.ok) throw new Error('Retrieve failed');
+      const data = await response.json();
+      const feature = data?.features?.[0];
+      const coordinates = feature?.geometry?.coordinates;
+      if (!Array.isArray(coordinates) || coordinates.length < 2) return;
+      const [newLng, newLat] = coordinates;
+      setLng(newLng);
+      setLat(newLat);
+      setSearchQuery(feature?.properties?.name || suggestion.name || '');
+      setAddressPreview(feature?.properties?.full_address || feature?.properties?.place_formatted || '');
+      setSearchSuggestions([]);
+      setIsSearchOpen(false);
+      setActiveCategory(null);
+      mapboxMapRef.current?.flyTo({ center: [newLng, newLat], zoom: Math.max(mapboxMapRef.current.getZoom(), 16), duration: 700 });
+    } catch (error) {
+      console.warn('Map search selection failed:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleCategorySearch = async (category: string) => {
+    const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
+    if (!token.startsWith('pk.')) return;
+    setActiveCategory(category);
+    setIsSearching(true);
+    try {
+      const url = new URL('https://api.mapbox.com/search/searchbox/v1/category/' + encodeURIComponent(category));
+      url.searchParams.set('language', isAr ? 'ar' : 'en');
+      url.searchParams.set('limit', '10');
+      url.searchParams.set('country', 'SA');
+      url.searchParams.set('proximity', `${lng},${lat}`);
+      url.searchParams.set('access_token', token);
+      const response = await fetch(url.toString());
+      if (!response.ok) throw new Error('Category search failed');
+      const data = await response.json();
+      const feature = data?.features?.[0];
+      if (feature?.geometry?.coordinates) {
+        const [newLng, newLat] = feature.geometry.coordinates;
+        setLng(newLat ? newLat : lat);
+        setLng(newLng);
+        setAddressPreview(feature?.properties?.full_address || feature?.properties?.name || '');
+        mapboxMapRef.current?.flyTo({ center: [newLng, newLat], zoom: 16, duration: 700 });
+      }
+    } catch (error) {
+      console.warn('Category search failed:', error);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -363,9 +499,8 @@ export default function MapPickerPage() {
   };
 
   useEffect(() => {
-    if (currentLocation && mapboxMapRef.current) drawRouteToSelectedLocation(currentLocation.lat, currentLocation.lng);
-    else clearRoute();
-  }, [lat, lng, currentLocation]);
+    if (!currentLocation) clearRoute();
+  }, [currentLocation]);
 
   const handleRecenter = () => {
     if (currentLocation && mapboxMapRef.current) mapboxMapRef.current.flyTo({ center: [currentLocation.lng, currentLocation.lat], zoom: 16, duration: 700 });
@@ -426,6 +561,49 @@ export default function MapPickerPage() {
       </header>
 
       <div className="relative flex-1 min-h-0 w-full h-full z-0 touch-pan-x touch-pan-y">
+        {isMapboxReady && (
+          <div className="absolute top-[72px] sm:top-24 left-1/2 -translate-x-1/2 z-20 w-[calc(100%-1.5rem)] sm:w-[min(560px,calc(100%-3rem))]">
+            <div className="relative">
+              <div className="h-12 sm:h-14 rounded-2xl bg-white text-zinc-900 shadow-[0_8px_35px_rgba(0,0,0,0.35)] flex items-center px-3 gap-2 border border-black/10">
+                {isSearching ? <Loader2 className="w-5 h-5 text-zinc-500 animate-spin shrink-0" /> : <Search className="w-5 h-5 text-zinc-500 shrink-0" />}
+                <input
+                  value={searchQuery}
+                  onChange={(e) => handleSearchInput(e.target.value)}
+                  onFocus={() => setIsSearchOpen(true)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setIsSearchOpen(false); }}
+                  placeholder={isAr ? 'ابحث عن متجر أو مطعم أو عنوان...' : 'Search for a shop, restaurant, address...'}
+                  className="flex-1 min-w-0 bg-transparent outline-none text-sm placeholder:text-zinc-400"
+                  aria-label={isAr ? 'البحث في الخريطة' : 'Search map'}
+                />
+                {searchQuery && <button type="button" onClick={() => { setSearchQuery(''); setSearchSuggestions([]); }} className="p-1 text-zinc-400 hover:text-zinc-800"><X className="w-4 h-4" /></button>}
+              </div>
+              {isSearchOpen && searchSuggestions.length > 0 && (
+                <div className="absolute top-[52px] sm:top-[60px] left-0 right-0 bg-white rounded-2xl shadow-2xl overflow-hidden border border-black/10">
+                  {searchSuggestions.map((item) => (
+                    <button key={item.mapbox_id} type="button" onClick={() => handleSelectSearchResult(item)} className="w-full px-4 py-3 text-left hover:bg-zinc-100 border-b last:border-0 border-zinc-100 flex items-start gap-3">
+                      <MapPin className="w-4 h-4 mt-0.5 text-[#9b7b1f] shrink-0" />
+                      <span className="min-w-0"><span className="block text-sm font-semibold truncate">{item.name}</span><span className="block text-xs text-zinc-500 truncate">{item.full_address || item.place_formatted || item.feature_type}</span></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {[
+                ['cafe', isAr ? 'مقاهي' : 'Cafes', Utensils],
+                ['restaurant', isAr ? 'مطاعم' : 'Restaurants', Utensils],
+                ['grocery', isAr ? 'بقالة' : 'Grocery', ShoppingCart],
+                ['gas station', isAr ? 'وقود' : 'Fuel', Fuel],
+                ['hospital', isAr ? 'مستشفيات' : 'Hospitals', HeartPulse],
+                ['mosque', isAr ? 'مساجد' : 'Mosques', Landmark],
+              ].map(([category, label, Icon]) => (
+                <button key={String(category)} type="button" onClick={() => handleCategorySearch(String(category))} className={`shrink-0 h-9 px-3 rounded-full bg-white/95 border text-[11px] font-semibold shadow-md flex items-center gap-1.5 ${activeCategory === category ? 'border-[#D4AF37] text-black' : 'border-black/10 text-zinc-700'}`}>
+                  {React.createElement(Icon as React.ElementType, { className: 'w-3.5 h-3.5' })}{label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div
           ref={mapContainerRef}
           className="zoal-map-picker w-full h-full bg-[#0a0a0a]"
@@ -476,7 +654,7 @@ export default function MapPickerPage() {
         )}
 
         {isMapboxReady && routeInfo && (
-          <div className="absolute top-[76px] sm:top-24 end-3 sm:end-6 z-10 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
+          <div className="absolute top-[132px] sm:top-40 end-3 sm:end-6 z-10 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
             <div className="flex items-center gap-2 text-xs font-bold text-white"><Route className="w-4 h-4 text-[#D4AF37]" />{routeInfo.distanceKm} km</div>
             <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-400"><Clock3 className="w-3.5 h-3.5" />{routeInfo.durationMin} min</div>
           </div>
@@ -489,7 +667,7 @@ export default function MapPickerPage() {
             className="w-11 h-11 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer"
             title={isAr ? 'الموقع الحالي GPS' : 'Use GPS Location'}
           >
-            <Compass className="w-5 h-5" />
+            <Crosshair className="w-5 h-5" />
           </button>
 
           {isMapboxReady && (
