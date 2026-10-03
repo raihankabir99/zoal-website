@@ -171,8 +171,8 @@ export default function Checkout({
   const [showCardCvv, setShowCardCvv] = useState(false);
 
   // Location selector coordinate state
-  const [lat, setLat] = useState(24.7136); // Default to Branch A center for map view but unselected
-  const [lng, setLng] = useState(46.6753); 
+  const [lat, setLat] = useState(25.3830); // Default map center: Al Ahsa / Al Hofuf area
+  const [lng, setLng] = useState(49.5880); 
   const [pinX, setPinX] = useState(70);    // relative projection X %
   const [pinY, setPinY] = useState(25);    // relative projection Y %
   const [googleMapsLink, setGoogleMapsLink] = useState(`https://www.google.com/maps/search/?api=1&query=26.4312,50.1108`);
@@ -975,7 +975,7 @@ export default function Checkout({
         }
         alert(msg);
       },
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 120000 }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
   };
 
