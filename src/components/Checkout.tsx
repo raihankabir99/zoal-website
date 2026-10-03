@@ -256,7 +256,8 @@ export default function Checkout({
       setNominatimAddress(null);
       setHasSelectedDeliveryLocation(true);
       setGoogleMapsLink(`https://www.google.com/maps/search/?api=1&query=${newLat},${newLng}`);
-      setAccuracy('1.5m');
+      setAccuracy('Map selected');
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
 
     if (channel) {
@@ -657,7 +658,8 @@ export default function Checkout({
       setLat(pos.lat);
       setLng(pos.lng);
       setSelectedAddressId('');
-      setAccuracy(`${(1.5 + Math.random() * 2).toFixed(1)}m`);
+      setAccuracy('Map selected');
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     });
 
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -916,10 +918,6 @@ export default function Checkout({
   const handleUseCurrentLocation = () => {
     if (isLocating) return;
 
-    // Open the real map immediately from the user gesture. GPS can resolve afterwards,
-    // so a slow/blocked geolocation request can never prevent the map from opening.
-    handleOpenMapPickerPage();
-
     if (!navigator.geolocation) {
       alert(
         i18n.language === 'ar'
@@ -941,7 +939,7 @@ export default function Checkout({
         setIsGeocoding(true);
         setNominatimAddress(null);
         setHasSelectedDeliveryLocation(true);
-        const accuracyVal = position.coords.accuracy ? `${position.coords.accuracy.toFixed(1)}m` : '1.8m';
+        const accuracyVal = Number.isFinite(position.coords.accuracy) && position.coords.accuracy > 0 ? `±${position.coords.accuracy.toFixed(1)}m` : 'GPS';
         setAccuracy(accuracyVal);
         setGoogleMapsLink(`https://www.google.com/maps/search/?api=1&query=${latVal},${lngVal}`);
         
@@ -949,6 +947,9 @@ export default function Checkout({
         const visualY = ((27.5 - latVal) / (27.5 - 24.0)) * 100;
         const visualX = ((lngVal - 46.0) / (50.5 - 46.0)) * 100;
         setPinY(Math.max(5, Math.min(95, visualY)));
+        setSelectedAddressId('');
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        requestAnimationFrame(() => requestAnimationFrame(() => scrollToMap()));
         setPinX(Math.max(5, Math.min(95, visualX)));
       },
       (error) => {
@@ -974,7 +975,7 @@ export default function Checkout({
         }
         alert(msg);
       },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
     );
   };
 
