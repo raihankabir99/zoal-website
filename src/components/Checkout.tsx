@@ -659,7 +659,7 @@ export default function Checkout({
       setLng(pos.lng);
       setSelectedAddressId('');
       setAccuracy('Map selected');
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     });
 
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -670,7 +670,8 @@ export default function Checkout({
       setLat(lat);
       setLng(lng);
       setSelectedAddressId('');
-      setAccuracy(`${(1.5 + Math.random() * 2).toFixed(1)}m`);
+      setAccuracy('Map selected');
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     });
 
     mapInstanceRef.current = map;
