@@ -29,6 +29,7 @@ export default function MapPickerPage() {
   const [mapboxStyle, setMapboxStyle] = useState<MapboxStyleKey>('streets');
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState<boolean>(false);
   const [isMapboxReady, setIsMapboxReady] = useState<boolean>(false);
+  const [mapboxError, setMapboxError] = useState<string>('');
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -123,7 +124,9 @@ export default function MapPickerPage() {
     let mapLoaded = false;
 
     if (!token.startsWith('pk.')) {
-      console.error('Mapbox is not configured: VITE_MAPBOX_PUBLIC_TOKEN is missing or invalid.');
+      const message = isAr ? 'Mapbox টোকেন পাওয়া যায়নি। Vercel-এ VITE_MAPBOX_PUBLIC_TOKEN সেট করুন।' : 'Mapbox token is missing or invalid. Check VITE_MAPBOX_PUBLIC_TOKEN in Vercel.';
+      console.error(message);
+      setMapboxError(message);
       setIsMapboxReady(false);
       mapboxReadyRef.current = false;
       return () => {
@@ -134,6 +137,7 @@ export default function MapPickerPage() {
     }
 
     try {
+      setMapboxError('');
       mapboxgl.accessToken = token;
       const map = new mapboxgl.Map({
         container: mapContainerRef.current,
@@ -173,11 +177,19 @@ export default function MapPickerPage() {
         mapLoaded = true;
         if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
         setIsMapboxReady(true);
+        setMapboxError('');
         mapboxReadyRef.current = true;
         tuneGoogleLikeLabels();
+        requestAnimationFrame(() => map.resize());
+        window.setTimeout(() => map.resize(), 250);
       });
-      map.once('error', (event) => {
-        console.error('Mapbox map load error.', event?.error || event);
+      map.on('error', (event) => {
+        const message = event?.error?.message || 'Mapbox failed to load the map style or tiles.';
+        console.error('Mapbox map error.', event?.error || event);
+        if (!mapLoaded && !cancelled) {
+          setIsMapboxReady(false);
+          setMapboxError(isAr ? `মানচিত্র লোড হয়নি: ${message}` : `Mapbox map failed to load: ${message}`);
+        }
       });
       map.on('style.load', () => {
         tuneGoogleLikeLabels();
@@ -210,6 +222,7 @@ export default function MapPickerPage() {
       console.error('Mapbox initialization failed.', error);
       setIsMapboxReady(false);
       mapboxReadyRef.current = false;
+      setMapboxError(isAr ? 'Mapbox মানচিত্র শুরু করা যায়নি।' : 'Mapbox could not initialize the map.');
     }
 
     return () => {
@@ -224,7 +237,7 @@ export default function MapPickerPage() {
         mapboxMapRef.current = null;
       }
     };
-  }, []);
+  }, [isAr]);
 
   useEffect(() => {
     if (mapboxMapRef.current && mapboxMarkerRef.current) {
