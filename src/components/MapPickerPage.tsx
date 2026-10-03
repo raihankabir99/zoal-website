@@ -324,6 +324,30 @@ export default function MapPickerPage() {
     }
   };
 
+  // Automatically preview the driving route from the fixed ZOAL branch to the selected delivery location.
+  // This is intentionally independent of the customer's GPS marker: Current only supplies a selectable location.
+  useEffect(() => {
+    const map = mapboxMapRef.current;
+    if (!mapboxReadyRef.current || !map) return;
+
+    const distanceFromBranch = Math.hypot(
+      (lng - ZOAL_BRANCH.lng) * Math.cos(((lat + ZOAL_BRANCH.lat) / 2) * Math.PI / 180),
+      lat - ZOAL_BRANCH.lat
+    );
+    if (distanceFromBranch < 0.00015) {
+      clearRoute();
+      setIsDirectionsActive(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void drawRouteToSelectedLocation(ZOAL_BRANCH.lat, ZOAL_BRANCH.lng);
+      setIsDirectionsActive(true);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [lat, lng, isMapboxReady]);
+
   const createSearchSession = () => {
     if (!searchSessionRef.current) {
       searchSessionRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -469,6 +493,16 @@ export default function MapPickerPage() {
       confirmed: true,
       lat: lat,
       lng: lng,
+      branch: {
+        name: ZOAL_BRANCH.name,
+        address: ZOAL_BRANCH.address,
+        lat: ZOAL_BRANCH.lat,
+        lng: ZOAL_BRANCH.lng,
+      },
+      route: routeInfo ? {
+        distanceKm: routeInfo.distanceKm,
+        durationMin: routeInfo.durationMin,
+      } : null,
       timestamp: Date.now()
     };
 
