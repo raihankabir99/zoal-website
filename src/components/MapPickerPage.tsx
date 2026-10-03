@@ -157,15 +157,6 @@ export default function MapPickerPage() {
       mapboxMapRef.current = map;
       mapboxMarkerRef.current = marker;
 
-      const switchToLeafletIfMapboxFails = () => {
-        if (cancelled || mapLoaded) return;
-        if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
-        try { map.remove(); } catch {}
-        mapboxMapRef.current = null;
-        mapboxMarkerRef.current = null;
-        createLeafletFallback();
-      };
-
       const tuneGoogleLikeLabels = () => {
         const style = map.getStyle();
         if (!style?.layers) return;
