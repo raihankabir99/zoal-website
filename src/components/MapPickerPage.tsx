@@ -256,7 +256,7 @@ export default function MapPickerPage() {
 
       // Never leave the customer on a blank map. If Mapbox has not completed
       // its first load quickly, fall back to Leaflet/OpenStreetMap.
-      mapLoadTimer = window.setTimeout(switchToLeafletIfMapboxFails, 6000);
+      mapLoadTimer = window.setTimeout(switchToLeafletIfMapboxFails, 2500);
     } catch (error) {
       console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
       createLeafletFallback();
