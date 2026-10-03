@@ -10,18 +10,26 @@ const MAPBOX_STYLES = {
   terrain: 'mapbox://styles/mapbox/outdoors-v12',
 } as const;
 
+// Fixed ZOAL physical branch location. Customer map interactions must never move this pin.
+const ZOAL_BRANCH = {
+  name: 'ZOAL Flagship Store',
+  address: '9H9F+57P, Abu Bakr As Siddiq Rd, Almuallimeen, Al Hofuf 36361, Saudi Arabia',
+  lat: 25.36791195179952,
+  lng: 49.57307052488341,
+} as const;
+
 type MapboxStyleKey = keyof typeof MAPBOX_STYLES;
 
 export default function MapPickerPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const requestId = searchParams.get('requestId') || '';
-  const initialLat = parseFloat(searchParams.get('lat') || '25.3830');
-  const initialLng = parseFloat(searchParams.get('lng') || '49.5880');
+  const initialLat = parseFloat(searchParams.get('lat') || String(ZOAL_BRANCH.lat));
+  const initialLng = parseFloat(searchParams.get('lng') || String(ZOAL_BRANCH.lng));
   const lang = searchParams.get('lang') || 'ar';
   const isAr = lang === 'ar';
 
-  const [lat, setLat] = useState<number>(() => (Number.isFinite(initialLat) ? initialLat : 25.3830));
-  const [lng, setLng] = useState<number>(() => (Number.isFinite(initialLng) ? initialLng : 49.5880));
+  const [lat, setLat] = useState<number>(() => (Number.isFinite(initialLat) ? initialLat : ZOAL_BRANCH.lat));
+  const [lng, setLng] = useState<number>(() => (Number.isFinite(initialLng) ? initialLng : ZOAL_BRANCH.lng));
   const [zoom, setZoom] = useState<number>(15);
   const [addressPreview, setAddressPreview] = useState<string>('');
   const [isGeocoding, setIsGeocoding] = useState<boolean>(false);
@@ -46,6 +54,7 @@ export default function MapPickerPage() {
   const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
   const mapboxMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const currentLocationMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const zoalBranchMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const mapboxReadyRef = useRef(false);
 
   useEffect(() => {
@@ -160,6 +169,15 @@ export default function MapPickerPage() {
         .setLngLat([lng, lat])
         .addTo(map);
 
+      // Fixed ZOAL branch marker: visible to customers and intentionally non-draggable.
+      const branchElement = document.createElement('div');
+      branchElement.className = 'zoal-branch-marker';
+      branchElement.setAttribute('aria-label', ZOAL_BRANCH.name);
+      branchElement.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none"><div style="width:38px;height:38px;border-radius:9999px;background:#111;border:2px solid #D4AF37;box-shadow:0 0 20px rgba(212,175,55,.7);display:flex;align-items:center;justify-content:center;font-size:19px">🏪</div><div style="padding:3px 7px;border-radius:9999px;background:rgba(0,0,0,.9);border:1px solid rgba(212,175,55,.55);color:#fff;font:700 10px/1.2 Inter,Arial,sans-serif;white-space:nowrap">ZOAL Branch</div></div>';
+      zoalBranchMarkerRef.current = new mapboxgl.Marker({ element: branchElement, anchor: 'bottom' })
+        .setLngLat([ZOAL_BRANCH.lng, ZOAL_BRANCH.lat])
+        .addTo(map);
+
       mapboxMapRef.current = map;
       mapboxMarkerRef.current = marker;
 
@@ -237,6 +255,10 @@ export default function MapPickerPage() {
       if (currentLocationMarkerRef.current) {
         currentLocationMarkerRef.current.remove();
         currentLocationMarkerRef.current = null;
+      }
+      if (zoalBranchMarkerRef.current) {
+        zoalBranchMarkerRef.current.remove();
+        zoalBranchMarkerRef.current = null;
       }
       if (mapboxMapRef.current) {
         mapboxMapRef.current.remove();
