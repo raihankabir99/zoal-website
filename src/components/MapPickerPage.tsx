@@ -32,6 +32,7 @@ export default function MapPickerPage() {
   const [mapboxError, setMapboxError] = useState<string>('');
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
+  const [isDirectionsActive, setIsDirectionsActive] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchSuggestions, setSearchSuggestions] = useState<Array<{ mapbox_id: string; name: string; full_address?: string; place_formatted?: string; feature_type?: string; maki?: string }>>([]);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -44,6 +45,7 @@ export default function MapPickerPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
   const mapboxMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const currentLocationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const mapboxReadyRef = useRef(false);
 
   useEffect(() => {
@@ -232,6 +234,10 @@ export default function MapPickerPage() {
         mapboxMarkerRef.current.remove();
         mapboxMarkerRef.current = null;
       }
+      if (currentLocationMarkerRef.current) {
+        currentLocationMarkerRef.current.remove();
+        currentLocationMarkerRef.current = null;
+      }
       if (mapboxMapRef.current) {
         mapboxMapRef.current.remove();
         mapboxMapRef.current = null;
@@ -408,9 +414,17 @@ export default function MapPickerPage() {
           setLat(newLat);
           setLng(newLng);
           setCurrentLocation({ lat: newLat, lng: newLng });
-          if (mapboxMapRef.current) {
-            mapboxMapRef.current.setCenter([newLng, newLat]);
-            mapboxMapRef.current.setZoom(16);
+          const map = mapboxMapRef.current;
+          if (map) {
+            if (currentLocationMarkerRef.current) currentLocationMarkerRef.current.remove();
+            const currentElement = document.createElement('div');
+            currentElement.className = 'zoal-current-location-marker';
+            currentElement.innerHTML = '<div style="width:24px;height:24px;border-radius:9999px;background:rgba(212,175,55,.22);border:2px solid #D4AF37;box-shadow:0 0 0 5px rgba(212,175,55,.12),0 0 18px rgba(212,175,55,.55);display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;border-radius:9999px;background:#D4AF37;border:2px solid #111"></div></div>';
+            currentLocationMarkerRef.current = new mapboxgl.Marker({ element: currentElement, anchor: 'center' })
+              .setLngLat([newLng, newLat])
+              .addTo(map);
+            map.setCenter([newLng, newLat]);
+            map.setZoom(16);
           }
         },
         () => {
@@ -464,8 +478,14 @@ export default function MapPickerPage() {
   };
 
   const handleShowRoute = () => {
+    if (isDirectionsActive) {
+      clearRoute();
+      setIsDirectionsActive(false);
+      return;
+    }
     if (currentLocation) {
       drawRouteToSelectedLocation(currentLocation.lat, currentLocation.lng);
+      setIsDirectionsActive(true);
       return;
     }
     handleUseCurrentGPS();
@@ -493,8 +513,6 @@ export default function MapPickerPage() {
     setZoom(newZoom);
     if (mapboxMapRef.current) {
       mapboxMapRef.current.setZoom(newZoom);
-    } else if (mapInstanceRef.current) {
-      mapInstanceRef.current.setZoom(newZoom);
     }
   };
 
@@ -631,7 +649,7 @@ export default function MapPickerPage() {
           </div>
         )}
 
-        <div className="absolute bottom-[calc(8.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(8rem+env(safe-area-inset-bottom))] end-3 sm:end-6 z-30 flex flex-col gap-2">
+        <div className="absolute bottom-[calc(13.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(11rem+env(safe-area-inset-bottom))] end-3 sm:end-6 z-30 flex flex-col gap-2">
           <button
             type="button"
             onClick={handleRecenter}
@@ -642,8 +660,8 @@ export default function MapPickerPage() {
           </button>
 
           {isMapboxReady && (
-            <button type="button" onClick={handleShowRoute} className="w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer" title={isAr ? 'الاتجاهات' : 'Directions'} aria-label={isAr ? 'الاتجاهات' : 'Directions'}>
-              <Route className="w-5 h-5" />
+            <button type="button" onClick={handleShowRoute} className={`w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer ${isDirectionsActive ? 'border-[#D4AF37] bg-[#D4AF37]/15' : 'border-[#D4AF37]/40'}`} title={isAr ? (isDirectionsActive ? 'إيقاف الاتجاهات' : 'الاتجاهات') : (isDirectionsActive ? 'Stop directions' : 'Directions')} aria-label={isAr ? (isDirectionsActive ? 'إيقاف الاتجاهات' : 'الاتجاهات') : (isDirectionsActive ? 'Stop directions' : 'Directions')}>
+              {isDirectionsActive ? <X className="w-5 h-5" /> : <Route className="w-5 h-5" />}
             </button>
           )}
 
