@@ -5,8 +5,8 @@ import {
   Map, Check, Clock, Home, Briefcase, Star, RefreshCw, ZoomIn, ZoomOut, AlertTriangle, Eye, EyeOff,
   Plus, Maximize2, Minimize2, ExternalLink, Store, X
 } from 'lucide-react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { CartItem, Order, Product } from '../types';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../utils';
@@ -366,10 +366,10 @@ export default function Checkout({
     fetchUserAddresses();
   }, [currentUser, i18n.language]);
 
-  // Leaflet Map Refs and Expanded State
+  // Mapbox Map Refs and Expanded State
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const markerInstanceRef = useRef<L.Marker | null>(null);
+  const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+  const markerInstanceRef = useRef<mapboxgl.Marker | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
 
   // Live Nominatim Reverse Geocoding States
@@ -610,121 +610,106 @@ export default function Checkout({
     setLastUpdated(`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`);
   }, [activeAddress]);
 
-  // Initialize and mount Leaflet map when location is selected
+  // Initialize and mount Mapbox map when location is selected
   useEffect(() => {
     if (!hasSelectedDeliveryLocation || !mapContainerRef.current) return;
+
+    const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
+    if (!token.startsWith('pk.')) {
+      console.error('Mapbox is not configured: VITE_MAPBOX_PUBLIC_TOKEN is missing or invalid.');
+      return;
+    }
 
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
+      markerInstanceRef.current = null;
     }
 
-    const map = L.map(mapContainerRef.current, {
-      center: [lat, lng],
-      zoom: zoom,
-      zoomControl: false,
-      attributionControl: false
+    mapboxgl.accessToken = token;
+
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [lng, lat],
+      zoom: Math.min(20, Math.max(4, zoom)),
+      attributionControl: true,
+      dragRotate: false,
+      pitchWithRotate: false,
+      failIfMajorPerformanceCaveat: false
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20,
-      subdomains: 'abcd',
-    }).addTo(map);
+    const markerElement = document.createElement('div');
+    markerElement.className = 'custom-map-checkout-pin';
+    markerElement.innerHTML = `<div class="relative flex items-center justify-center"><div class="absolute w-10 h-10 rounded-full bg-[#D4AF37]/30 animate-ping"></div><div class="w-8 h-8 rounded-full bg-black border-2 border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.6)] flex items-center justify-center"><div class="w-3 h-3 rounded-full bg-[#D4AF37]"></div></div></div>`;
 
-    const goldIcon = L.divIcon({
-      html: `
-        <div class="relative flex items-center justify-center">
-          <div class="absolute w-8 h-8 rounded-full bg-[#D4AF37]/25 animate-ping"></div>
-          <svg viewBox="0 0 24 24" class="w-8 h-8 text-[#D4AF37] filter drop-shadow-[0_2px_10px_rgba(212,175,55,0.55)]" fill="currentColor">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-        </div>
-      `,
-      className: '',
-      iconSize: [32, 32],
-      iconAnchor: [16, 32]
+    const marker = new mapboxgl.Marker({ element: markerElement, draggable: true })
+      .setLngLat([lng, lat])
+      .addTo(map);
+
+    const updateSelectedLocation = (newLat: number, newLng: number) => {
+      setIsGeocoding(true);
+      setNominatimAddress(null);
+      setHasSelectedDeliveryLocation(true);
+      setLat(newLat);
+      setLng(newLng);
+      setSelectedAddressId('');
+      setAccuracy('Map selected');
+      setGoogleMapsLink(`https://www.google.com/maps/search/?api=1&query=${newLat},${newLng}`);
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    };
+
+    map.on('click', (e) => {
+      updateSelectedLocation(e.lngLat.lat, e.lngLat.lng);
+      marker.setLngLat([e.lngLat.lng, e.lngLat.lat]);
     });
-
-    const marker = L.marker([lat, lng], {
-      icon: goldIcon,
-      draggable: true
-    }).addTo(map);
 
     marker.on('dragend', () => {
-      const pos = marker.getLatLng();
-      setIsGeocoding(true);
-      setNominatimAddress(null);
-      setHasSelectedDeliveryLocation(true);
-      setLat(pos.lat);
-      setLng(pos.lng);
-      setSelectedAddressId('');
-      setAccuracy('Map selected');
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      const position = marker.getLngLat();
+      updateSelectedLocation(position.lat, position.lng);
     });
 
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      const { lat, lng } = e.latlng;
-      setIsGeocoding(true);
-      setNominatimAddress(null);
-      setHasSelectedDeliveryLocation(true);
-      setLat(lat);
-      setLng(lng);
-      setSelectedAddressId('');
-      setAccuracy('Map selected');
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    map.on('zoomend', () => setZoom(map.getZoom()));
+
+    map.once('load', () => {
+      window.requestAnimationFrame(() => map.resize());
+      window.setTimeout(() => map.resize(), 200);
     });
 
     mapInstanceRef.current = map;
     markerInstanceRef.current = marker;
 
-    const t1 = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
-    }, 100);
-
-    const t2 = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
-    }, 300);
-
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+      if (mapInstanceRef.current === map) {
+        marker.remove();
+        map.remove();
         mapInstanceRef.current = null;
         markerInstanceRef.current = null;
       }
     };
   }, [hasSelectedDeliveryLocation]);
 
-  // Sync state coordinates to Leaflet
+  // Sync selected coordinates to Mapbox
   useEffect(() => {
     if (mapInstanceRef.current && markerInstanceRef.current) {
-      const curLatLng = markerInstanceRef.current.getLatLng();
-      if (curLatLng.lat !== lat || curLatLng.lng !== lng) {
-        markerInstanceRef.current.setLatLng([lat, lng]);
-        mapInstanceRef.current.panTo([lat, lng]);
-      }
+      markerInstanceRef.current.setLngLat([lng, lat]);
+      mapInstanceRef.current.panTo([lng, lat]);
     }
   }, [lat, lng]);
 
-  // Sync zoom level to Leaflet
+  // Sync zoom level to Mapbox
   useEffect(() => {
     if (mapInstanceRef.current) {
       mapInstanceRef.current.setZoom(zoom);
     }
   }, [zoom]);
 
-  // Invalidate map size on expanded state changes to properly align map tiles
+  // Resize Mapbox after layout/expanded state changes
   useEffect(() => {
-    setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
+    const timer = window.setTimeout(() => {
+      mapInstanceRef.current?.resize();
     }, 200);
+    return () => window.clearTimeout(timer);
   }, [isMapExpanded]);
 
   // Action to add custom saved addresses dynamically
