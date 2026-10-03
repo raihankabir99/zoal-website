@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { MapPin, Check, X, ZoomIn, ZoomOut, Compass, CheckCircle2, Navigation, Layers, Route, Clock3, Search, Crosshair, Utensils, ShoppingCart, Fuel, HeartPulse, Landmark, Loader2 } from 'lucide-react';
-import L from 'leaflet';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import 'leaflet/dist/leaflet.css';
 
 const MAPBOX_STYLES = {
   streets: 'mapbox://styles/mapbox/streets-v12',
@@ -43,8 +41,6 @@ export default function MapPickerPage() {
   const routeGeoJsonRef = useRef<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const markerInstanceRef = useRef<L.Marker | null>(null);
   const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
   const mapboxMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const mapboxReadyRef = useRef(false);
@@ -126,73 +122,14 @@ export default function MapPickerPage() {
     let mapLoadTimer: number | null = null;
     let mapLoaded = false;
 
-    const createLeafletFallback = () => {
-      if (!mapContainerRef.current || cancelled) return;
+    if (!token.startsWith('pk.')) {
+      console.error('Mapbox is not configured: VITE_MAPBOX_PUBLIC_TOKEN is missing or invalid.');
       setIsMapboxReady(false);
       mapboxReadyRef.current = false;
-      if (mapboxMarkerRef.current) {
-        mapboxMarkerRef.current.remove();
-        mapboxMarkerRef.current = null;
-      }
-      if (mapboxMapRef.current) {
-        mapboxMapRef.current.remove();
-        mapboxMapRef.current = null;
-      }
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-
-      const map = L.map(mapContainerRef.current, {
-        center: [lat, lng],
-        zoom,
-        zoomControl: false,
-        attributionControl: false
-      });
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors',
-      }).addTo(map);
-
-      const goldIcon = L.divIcon({
-        html: `<div class="relative flex items-center justify-center"><div class="absolute w-10 h-10 rounded-full bg-[#D4AF37]/30 animate-ping"></div><div class="w-8 h-8 rounded-full bg-black border-2 border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.6)] flex items-center justify-center"><div class="w-3 h-3 rounded-full bg-[#D4AF37]"></div></div></div>`,
-        className: 'custom-map-picker-pin',
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
-      });
-
-      const marker = L.marker([lat, lng], { icon: goldIcon, draggable: true }).addTo(map);
-      markerInstanceRef.current = marker;
-      mapInstanceRef.current = map;
-
-      requestAnimationFrame(() => map.invalidateSize());
-      resizeTimer = window.setTimeout(() => map.invalidateSize(), 150);
-
-      map.on('zoomend', () => setZoom(map.getZoom()));
-      map.on('click', (e: L.LeafletMouseEvent) => {
-        const { lat: newLat, lng: newLng } = e.latlng;
-        setLat(newLat);
-        setLng(newLng);
-        marker.setLatLng([newLat, newLng]);
-      });
-      marker.on('dragend', () => {
-        const position = marker.getLatLng();
-        setLat(position.lat);
-        setLng(position.lng);
-      });
-    };
-
-    if (!token || !token.startsWith('pk.')) {
-      createLeafletFallback();
       return () => {
         cancelled = true;
         if (resizeTimer !== null) window.clearTimeout(resizeTimer);
-      if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
-          mapInstanceRef.current = null;
-        }
+        if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
       };
     }
 
@@ -249,8 +186,7 @@ export default function MapPickerPage() {
         tuneGoogleLikeLabels();
       });
       map.once('error', (event) => {
-        console.warn('Mapbox map load error; using Leaflet fallback.', event?.error || event);
-        switchToLeafletIfMapboxFails();
+        console.error('Mapbox map load error.', event?.error || event);
       });
       map.on('style.load', () => {
         tuneGoogleLikeLabels();
@@ -274,12 +210,15 @@ export default function MapPickerPage() {
         setLng(position.lng);
       });
 
-      // Never leave the customer on a blank map. If Mapbox has not completed
-      // its first load quickly, fall back to Leaflet/OpenStreetMap.
-      mapLoadTimer = window.setTimeout(switchToLeafletIfMapboxFails, 1200);
+      mapLoadTimer = window.setTimeout(() => {
+        if (!mapLoaded && !cancelled) {
+          console.warn('Mapbox did not finish loading within the expected startup window.');
+        }
+      }, 1200);
     } catch (error) {
-      console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
-      createLeafletFallback();
+      console.error('Mapbox initialization failed.', error);
+      setIsMapboxReady(false);
+      mapboxReadyRef.current = false;
     }
 
     return () => {
@@ -293,11 +232,6 @@ export default function MapPickerPage() {
         mapboxMapRef.current.remove();
         mapboxMapRef.current = null;
       }
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-      markerInstanceRef.current = null;
     };
   }, []);
 
@@ -305,11 +239,6 @@ export default function MapPickerPage() {
     if (mapboxMapRef.current && mapboxMarkerRef.current) {
       mapboxMapRef.current.panTo([lng, lat]);
       mapboxMarkerRef.current.setLngLat([lng, lat]);
-      return;
-    }
-    if (mapInstanceRef.current && markerInstanceRef.current) {
-      mapInstanceRef.current.panTo([lat, lng]);
-      markerInstanceRef.current.setLatLng([lat, lng]);
     }
   }, [lat, lng]);
 
@@ -478,8 +407,6 @@ export default function MapPickerPage() {
           if (mapboxMapRef.current) {
             mapboxMapRef.current.setCenter([newLng, newLat]);
             mapboxMapRef.current.setZoom(16);
-          } else if (mapInstanceRef.current) {
-            mapInstanceRef.current.setView([newLat, newLng], 16);
           }
         },
         () => {
@@ -554,8 +481,6 @@ export default function MapPickerPage() {
     setZoom(newZoom);
     if (mapboxMapRef.current) {
       mapboxMapRef.current.setZoom(newZoom);
-    } else if (mapInstanceRef.current) {
-      mapInstanceRef.current.setZoom(newZoom);
     }
   };
 
