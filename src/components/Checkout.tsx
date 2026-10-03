@@ -187,6 +187,7 @@ export default function Checkout({
   const [accuracy, setAccuracy] = useState('3m');
   const [hasSelectedDeliveryLocation, setHasSelectedDeliveryLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [deliveryRouteInfo, setDeliveryRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
 
   // Dynamic Saved Addresses State
   const [savedAddresses, setSavedAddresses] = useState(INITIAL_SAVED_ADDRESSES);
@@ -257,6 +258,11 @@ export default function Checkout({
       setHasSelectedDeliveryLocation(true);
       setGoogleMapsLink(`https://www.google.com/maps/search/?api=1&query=${newLat},${newLng}`);
       setAccuracy('Map selected');
+      if (data.route && Number.isFinite(Number(data.route.distanceKm)) && Number.isFinite(Number(data.route.durationMin))) {
+        setDeliveryRouteInfo({ distanceKm: Number(data.route.distanceKm), durationMin: Number(data.route.durationMin) });
+      } else {
+        setDeliveryRouteInfo(null);
+      }
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
 
@@ -1725,6 +1731,11 @@ export default function Checkout({
                                 <p className="text-[8.5px] text-zinc-500 font-mono">
                                   {activeAddress.eta}
                                 </p>
+                                {deliveryRouteInfo && (
+                                  <p className="text-[8px] text-zinc-600 font-mono mt-0.5">
+                                    {deliveryRouteInfo.distanceKm.toFixed(1)} km • {deliveryRouteInfo.durationMin} min route
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1827,6 +1838,11 @@ export default function Checkout({
                               {activeAddress.eta && (
                                 <span className="text-[10px] text-zinc-500 font-mono block">
                                   {activeAddress.eta}
+                                </span>
+                              )}
+                              {deliveryRouteInfo && (
+                                <span className="text-[9px] text-zinc-600 font-mono block">
+                                  ${deliveryRouteInfo.distanceKm.toFixed(1)} km • ${deliveryRouteInfo.durationMin} min route
                                 </span>
                               )}
                             </div>
