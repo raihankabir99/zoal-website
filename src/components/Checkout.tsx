@@ -1321,6 +1321,7 @@ export default function Checkout({
                       />
                     </div>
                   </div>
+                )}
 
                     {/* 5. Shipping Address */}
                     <div className="space-y-0.5 sm:space-y-1">
