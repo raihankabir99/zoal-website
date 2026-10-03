@@ -17,13 +17,13 @@ type MapboxStyleKey = keyof typeof MAPBOX_STYLES;
 export default function MapPickerPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const requestId = searchParams.get('requestId') || '';
-  const initialLat = parseFloat(searchParams.get('lat') || '24.7136');
-  const initialLng = parseFloat(searchParams.get('lng') || '46.6753');
+  const initialLat = parseFloat(searchParams.get('lat') || '25.3830');
+  const initialLng = parseFloat(searchParams.get('lng') || '49.5880');
   const lang = searchParams.get('lang') || 'ar';
   const isAr = lang === 'ar';
 
-  const [lat, setLat] = useState<number>(() => (Number.isFinite(initialLat) ? initialLat : 24.7136));
-  const [lng, setLng] = useState<number>(() => (Number.isFinite(initialLng) ? initialLng : 46.6753));
+  const [lat, setLat] = useState<number>(() => (Number.isFinite(initialLat) ? initialLat : 25.3830));
+  const [lng, setLng] = useState<number>(() => (Number.isFinite(initialLng) ? initialLng : 49.5880));
   const [zoom, setZoom] = useState<number>(15);
   const [addressPreview, setAddressPreview] = useState<string>('');
   const [isGeocoding, setIsGeocoding] = useState<boolean>(false);
