@@ -70,6 +70,7 @@ export default function Checkout({
   const [email, setEmail] = useState(''); // Optional now
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
+  const [region, setRegion] = useState('');
   const [address, setAddress] = useState('');
 
   // Real-time validation state
@@ -583,24 +584,18 @@ export default function Checkout({
   useEffect(() => {
     if (!hasSelectedDeliveryLocation) return;
     
-    const cName = (activeAddress.city || '').toLowerCase();
-    let originalCity = 'Empty Quarter';
-    if (activeAddress.available) {
-      if (cName.includes('dammam') || cName.includes('دمام')) originalCity = 'Branch B';
-      else if (cName.includes('khobar') || cName.includes('خبر')) originalCity = 'Khobar';
-      else if (cName.includes('hofuf') || cName.includes('هفوف')) originalCity = 'Hofuf';
-      else if (cName.includes('riyadh') || cName.includes('رياض')) originalCity = 'Branch A';
-      else if (cName.includes('jeddah') || cName.includes('جدة')) originalCity = 'Jeddah';
-      else originalCity = 'Branch B';
-    }
-    setCity(originalCity);
+    const detectedCity = String(activeAddress.city || '').trim();
+    const detectedRegion = String(activeAddress.region || '').trim();
 
+    // Map/reverse-geocoding is the source of truth for the displayed location.
+    if (detectedCity) setCity(detectedCity);
+    if (detectedRegion) setRegion(detectedRegion);
+
+    // Saudi Arabia is fixed operationally, so it is not shown in the address field.
     const parts = [
       activeAddress.street,
       activeAddress.district,
-      activeAddress.city,
-      activeAddress.region,
-      activeAddress.country
+      detectedCity
     ].filter(Boolean);
 
     if (parts.length > 0) {
@@ -1066,7 +1061,7 @@ export default function Checkout({
           customerName: name.trim(),
           customerEmail: email.trim() || settings.email,
           customerPhone: phone.trim(),
-          address: `${address.trim()}, ${city}, Saudi Arabia`,
+          address: `${address.trim()}${city ? `, ${city}` : ''}`,
           termsAccepted: true
         })
       })
@@ -1122,7 +1117,7 @@ export default function Checkout({
       latitude: lat,
       longitude: lng,
       mapLocationLink: googleMapsLink,
-      region: city,
+      region: region || activeAddress.region || '',
       city: city || activeAddress.city,
       district: activeAddress.district || '',
       postalCode: '',
@@ -1293,57 +1288,39 @@ export default function Checkout({
                   )}
                 </div>
 
-                {/* 4. City / Region */}
+                {/* 4. City + Region / Province — populated from the selected map location */}
                 {!isDigitalOnlyOrder && (
-                  <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                     <div className="space-y-0.5 sm:space-y-1">
                       <label htmlFor="checkout-city" className="text-[9px] sm:text-[10px] text-zinc-400 uppercase tracking-widest font-semibold block mb-0.5 sm:mb-1">
-                        {i18n.language === 'ar' ? 'المدينة / المنطقة' : 'City / Region'} <span className="text-gold-pure">*</span>
+                        {i18n.language === 'ar' ? 'المدينة' : 'City'} <span className="text-gold-pure">*</span>
                       </label>
-                      <select
+                      <input
                         id="checkout-city"
+                        type="text"
                         value={city}
-                        onChange={(e) => {
-                          const selectedCity = e.target.value;
-                          setCity(selectedCity);
-                          // Auto-center coordinates based on selected city
-                          const selCityLower = (selectedCity || '').toLowerCase();
-                          const zone = (deliveryZones || DEFAULT_ZONES).find(
-                            (z) => (z.city || '').toLowerCase() === selCityLower
-                          );
-                          if (zone) {
-                            let nLat = 26.4312;
-                            let nLng = 50.1108;
-                            if (selCityLower === 'hofuf') { nLat = 25.3783; nLng = 49.5866; }
-                            else if (selCityLower === 'khobar') { nLat = 26.2172; nLng = 50.1971; }
-                            else if (selCityLower === 'riyadh') { nLat = 24.7136; nLng = 46.6753; }
-                            else if (selCityLower === 'jeddah') { nLat = 21.4858; nLng = 39.1925; }
-                            setLat(nLat);
-                            setLng(nLng);
-                            setGoogleMapsLink(`https://www.google.com/maps/search/?api=1&query=${nLat},${nLng}`);
-                          }
-                        }}
-                        className="w-full bg-black border border-zinc-800 sm:border-white/5 rounded-sm h-9 sm:h-auto min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm text-zinc-300 focus:outline-none focus:border-gold-pure/80 focus:ring-1 focus:ring-gold-pure/20 sm:focus:border-gold-pure/45 sm:focus:ring-0 transition-colors cursor-pointer max-w-full min-w-0"
-                      >
-                        {(deliveryZones || DEFAULT_ZONES).map((z) => {
-                          let cityName = z.city;
-                          let regionName = z.region || z.city;
-                          const zCityLower = (z.city || '').toLowerCase();
-                          if (i18n.language === 'ar') {
-                            if (zCityLower === 'hofuf') { cityName = 'الهفوف'; regionName = 'الهفوف والمناطق المجاورة'; }
-                            else if (zCityLower === 'branch b') { cityName = 'الدمام / الخبر (المنطقة الشرقية)'; regionName = 'المنطقة الشرقية'; }
-                            else if (zCityLower === 'khobar') { cityName = 'الخبر'; regionName = 'المنطقة الشرقية'; }
-                            else if (zCityLower === 'branch a') { cityName = 'الرياض'; regionName = 'المنطقة الوسطى'; }
-                            else if (zCityLower === 'jeddah') { cityName = 'جدة'; regionName = 'المنطقة الغربية'; }
-                          }
-                          return (
-                            <option key={z.id} value={z.city}>
-                              {cityName} ({regionName})
-                            </option>
-                          );
-                        })}
-                      </select>
+                        readOnly
+                        required
+                        placeholder={i18n.language === 'ar' ? 'حدد الموقع من الخريطة' : 'Select a location on the map'}
+                        className="w-full bg-black border border-zinc-800 sm:border-white/5 rounded-sm min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm text-zinc-300 focus:outline-none focus:border-gold-pure/45 transition-colors cursor-default max-w-full min-w-0"
+                      />
                     </div>
+
+                    <div className="space-y-0.5 sm:space-y-1">
+                      <label htmlFor="checkout-region" className="text-[9px] sm:text-[10px] text-zinc-400 uppercase tracking-widest font-semibold block mb-0.5 sm:mb-1">
+                        {i18n.language === 'ar' ? 'المنطقة / المحافظة' : 'Region / Province'} <span className="text-gold-pure">*</span>
+                      </label>
+                      <input
+                        id="checkout-region"
+                        type="text"
+                        value={region}
+                        readOnly
+                        required
+                        placeholder={i18n.language === 'ar' ? 'تُحدد تلقائياً من الموقع' : 'Detected automatically from map'}
+                        className="w-full bg-black border border-zinc-800 sm:border-white/5 rounded-sm min-h-[36px] sm:min-h-[40px] px-2.5 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm text-zinc-300 focus:outline-none focus:border-gold-pure/45 transition-colors cursor-default max-w-full min-w-0"
+                      />
+                    </div>
+                  </div>
 
                     {/* 5. Shipping Address */}
                     <div className="space-y-0.5 sm:space-y-1">
