@@ -1842,7 +1842,7 @@ export default function Checkout({
                               )}
                               {deliveryRouteInfo && (
                                 <span className="text-[9px] text-zinc-600 font-mono block">
-                                  ${deliveryRouteInfo.distanceKm.toFixed(1)} km • ${deliveryRouteInfo.durationMin} min route
+                                  {deliveryRouteInfo.distanceKm.toFixed(1)} km • {deliveryRouteInfo.durationMin} min route
                                 </span>
                               )}
                             </div>
