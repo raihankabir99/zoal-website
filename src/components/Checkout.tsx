@@ -921,6 +921,10 @@ export default function Checkout({
   const handleUseCurrentLocation = () => {
     if (isLocating) return;
 
+    // Open the real map immediately from the user gesture. GPS can resolve afterwards,
+    // so a slow/blocked geolocation request can never prevent the map from opening.
+    handleOpenMapPickerPage();
+
     if (!navigator.geolocation) {
       alert(
         i18n.language === 'ar'
