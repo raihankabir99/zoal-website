@@ -560,8 +560,8 @@ export default function MapPickerPage() {
 
       <div className="relative flex-1 min-h-0 w-full h-full z-0 touch-pan-x touch-pan-y">
         {isMapboxReady && (
-          <div className="absolute top-[72px] sm:top-24 left-1/2 -translate-x-1/2 z-20 w-[calc(100%-1.5rem)] sm:w-[min(560px,calc(100%-3rem))]">
-            <div className="relative">
+          <div className="absolute top-[72px] sm:top-24 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] sm:w-[min(560px,calc(100%-3rem))] pointer-events-none">
+            <div className="relative pointer-events-auto">
               <div className="h-12 sm:h-14 rounded-2xl bg-white text-zinc-900 shadow-[0_8px_35px_rgba(0,0,0,0.35)] flex items-center px-3 gap-2 border border-black/10">
                 {isSearching ? <Loader2 className="w-5 h-5 text-zinc-500 animate-spin shrink-0" /> : <Search className="w-5 h-5 text-zinc-500 shrink-0" />}
                 <input
@@ -609,7 +609,7 @@ export default function MapPickerPage() {
         />
 
         {isMapboxReady && (
-        <div className="absolute top-[76px] sm:top-24 start-3 sm:start-6 z-10">
+        <div className="absolute top-[76px] sm:top-24 start-3 sm:start-6 z-30">
           <div className="relative">
             <button
               type="button"
@@ -652,24 +652,24 @@ export default function MapPickerPage() {
         )}
 
         {isMapboxReady && routeInfo && (
-          <div className="absolute top-[132px] sm:top-40 end-3 sm:end-6 z-10 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
+          <div className="absolute top-[132px] sm:top-40 end-3 sm:end-6 z-30 bg-black/90 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl px-3 py-2.5 min-w-40">
             <div className="flex items-center gap-2 text-xs font-bold text-white"><Route className="w-4 h-4 text-[#D4AF37]" />{routeInfo.distanceKm} km</div>
             <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-400"><Clock3 className="w-3.5 h-3.5" />{routeInfo.durationMin} min</div>
           </div>
         )}
 
-        <div className="absolute bottom-[150px] sm:bottom-32 end-3 sm:end-6 z-10 flex flex-col gap-2">
+        <div className="absolute bottom-[calc(8.75rem+env(safe-area-inset-bottom))] sm:bottom-[calc(8rem+env(safe-area-inset-bottom))] end-3 sm:end-6 z-30 flex flex-col gap-2">
           <button
             type="button"
             onClick={handleRecenter}
             className="w-11 h-11 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer"
-            title={isAr ? 'الموقع الحالي GPS' : 'Use GPS Location'}
+            title={isAr ? 'الموقع الحالي GPS' : 'Use GPS Location'} aria-label={isAr ? 'الموقع الحالي GPS' : 'Current location / Recenter'}
           >
             <Crosshair className="w-5 h-5" />
           </button>
 
           {isMapboxReady && (
-            <button type="button" onClick={handleShowRoute} className="w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer" title={isAr ? 'الاتجاهات' : 'Directions'}>
+            <button type="button" onClick={handleShowRoute} className="w-10 h-10 sm:w-11 sm:h-11 bg-black/90 hover:bg-zinc-900 text-[#D4AF37] border border-[#D4AF37]/40 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all cursor-pointer" title={isAr ? 'الاتجاهات' : 'Directions'} aria-label={isAr ? 'الاتجاهات' : 'Directions'}>
               <Route className="w-5 h-5" />
             </button>
           )}
@@ -697,7 +697,7 @@ export default function MapPickerPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-[68px] sm:top-16 left-3 right-3 sm:left-4 sm:right-4 z-30 bg-[#D4AF37] text-black p-3.5 rounded-sm shadow-2xl border border-white/20 flex items-center justify-between"
+          className="absolute top-[68px] sm:top-16 left-3 right-3 sm:left-4 sm:right-4 z-40 bg-[#D4AF37] text-black p-3.5 rounded-sm shadow-2xl border border-white/20 flex items-center justify-between"
         >
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-black shrink-0" />
