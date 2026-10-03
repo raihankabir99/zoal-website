@@ -54,43 +54,63 @@ export default function MapPickerPage() {
     const fetchAddress = async () => {
       setIsGeocoding(true);
       const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
-      try {
-        if (token && token.startsWith('pk.')) {
-          const url = new URL('https://api.mapbox.com/search/geocode/v6/reverse');
-          url.searchParams.set('longitude', String(lng));
-          url.searchParams.set('latitude', String(lat));
-          url.searchParams.set('language', isAr ? 'ar' : 'en');
-          url.searchParams.set('limit', '1');
-          url.searchParams.set('access_token', token);
-          const response = await fetch(url.toString());
-          if (!response.ok) throw new Error('Mapbox reverse geocoding failed');
-          const data = await response.json();
-          const feature = data?.features?.[0];
-          const address = feature?.properties?.full_address || feature?.properties?.place_formatted || feature?.properties?.name;
-          if (address) {
-            if (!isCancelled) setAddressPreview(address);
-            return;
-          }
-        }
+      const fallbackText = isAr
+        ? `الموقع المحدد (${lat.toFixed(4)}, ${lng.toFixed(4)})`
+        : `Selected Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-        const fallbackResponse = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=${isAr ? 'ar' : 'en'}`
+      const withTimeout = async (url: string, timeoutMs: number) => {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) throw new Error('Geocoding request failed');
+          return await response.json();
+        } finally {
+          window.clearTimeout(timer);
+        }
+      };
+
+      try {
+        // Keep the address lookup bounded and never let it block map interaction.
+        const mapboxPromise = token.startsWith('pk.')
+          ? (() => {
+              const url = new URL('https://api.mapbox.com/search/geocode/v6/reverse');
+              url.searchParams.set('longitude', String(lng));
+              url.searchParams.set('latitude', String(lat));
+              url.searchParams.set('language', isAr ? 'ar' : 'en');
+              url.searchParams.set('limit', '1');
+              url.searchParams.set('access_token', token);
+              return withTimeout(url.toString(), 1800);
+            })()
+          : Promise.reject(new Error('No Mapbox token'));
+
+        const nominatimPromise = withTimeout(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=${isAr ? 'ar' : 'en'}`,
+          2200
         );
-        if (!fallbackResponse.ok) throw new Error('Fallback geocoding network error');
-        const fallbackData = await fallbackResponse.json();
-        if (!isCancelled && fallbackData?.display_name) {
-          setAddressPreview(fallbackData.display_name);
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          setAddressPreview(isAr ? `الموقع المحدد (${lat.toFixed(4)}, ${lng.toFixed(4)})` : `Selected Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-        }
+
+        const result = await Promise.any([
+          mapboxPromise.then((data: any) => {
+            const feature = data?.features?.[0];
+            const address = feature?.properties?.full_address || feature?.properties?.place_formatted || feature?.properties?.name;
+            if (!address) throw new Error('No Mapbox address');
+            return address;
+          }),
+          nominatimPromise.then((data: any) => {
+            if (!data?.display_name) throw new Error('No fallback address');
+            return data.display_name;
+          })
+        ]);
+
+        if (!isCancelled) setAddressPreview(result);
+      } catch {
+        if (!isCancelled) setAddressPreview(fallbackText);
       } finally {
         if (!isCancelled) setIsGeocoding(false);
       }
     };
 
-    const timer = setTimeout(fetchAddress, 400);
+    const timer = window.setTimeout(fetchAddress, 100);
     return () => {
       isCancelled = true;
       clearTimeout(timer);
@@ -256,7 +276,7 @@ export default function MapPickerPage() {
 
       // Never leave the customer on a blank map. If Mapbox has not completed
       // its first load quickly, fall back to Leaflet/OpenStreetMap.
-      mapLoadTimer = window.setTimeout(switchToLeafletIfMapboxFails, 2500);
+      mapLoadTimer = window.setTimeout(switchToLeafletIfMapboxFails, 1200);
     } catch (error) {
       console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
       createLeafletFallback();
