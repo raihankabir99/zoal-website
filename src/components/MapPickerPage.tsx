@@ -678,6 +678,8 @@ export default function MapPickerPage() {
             <button
               type="button"
               onClick={handleZoomIn}
+              aria-label={isAr ? 'تكبير الخريطة' : 'Zoom in'}
+              title={isAr ? 'تكبير الخريطة' : 'Zoom in'}
               className="p-2.5 sm:p-3 hover:bg-zinc-800 text-white border-b border-white/10 transition-colors cursor-pointer"
             >
               <ZoomIn className="w-4 h-4" />
@@ -685,6 +687,8 @@ export default function MapPickerPage() {
             <button
               type="button"
               onClick={handleZoomOut}
+              aria-label={isAr ? 'تصغير الخريطة' : 'Zoom out'}
+              title={isAr ? 'تصغير الخريطة' : 'Zoom out'}
               className="p-2.5 sm:p-3 hover:bg-zinc-800 text-white transition-colors cursor-pointer"
             >
               <ZoomOut className="w-4 h-4" />
