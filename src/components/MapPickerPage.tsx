@@ -103,6 +103,8 @@ export default function MapPickerPage() {
     const token = (import.meta.env.VITE_MAPBOX_PUBLIC_TOKEN || '').trim();
     let cancelled = false;
     let resizeTimer: number | null = null;
+    let mapLoadTimer: number | null = null;
+    let mapLoaded = false;
 
     const createLeafletFallback = () => {
       if (!mapContainerRef.current || cancelled) return;
@@ -166,6 +168,7 @@ export default function MapPickerPage() {
       return () => {
         cancelled = true;
         if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
         if (mapInstanceRef.current) {
           mapInstanceRef.current.remove();
           mapInstanceRef.current = null;
@@ -196,8 +199,15 @@ export default function MapPickerPage() {
 
       mapboxMapRef.current = map;
       mapboxMarkerRef.current = marker;
-      setIsMapboxReady(true);
-      mapboxReadyRef.current = true;
+
+      const switchToLeafletIfMapboxFails = () => {
+        if (cancelled || mapLoaded) return;
+        if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
+        try { map.remove(); } catch {}
+        mapboxMapRef.current = null;
+        mapboxMarkerRef.current = null;
+        createLeafletFallback();
+      };
 
       const tuneGoogleLikeLabels = () => {
         const style = map.getStyle();
@@ -211,7 +221,17 @@ export default function MapPickerPage() {
           }
         }
       };
-      map.on('load', tuneGoogleLikeLabels);
+      map.once('load', () => {
+        mapLoaded = true;
+        if (mapLoadTimer !== null) window.clearTimeout(mapLoadTimer);
+        setIsMapboxReady(true);
+        mapboxReadyRef.current = true;
+        tuneGoogleLikeLabels();
+      });
+      map.once('error', (event) => {
+        console.warn('Mapbox map load error; using Leaflet fallback.', event?.error || event);
+        switchToLeafletIfMapboxFails();
+      });
       map.on('style.load', () => {
         tuneGoogleLikeLabels();
         if (routeGeoJsonRef.current) {
@@ -233,6 +253,10 @@ export default function MapPickerPage() {
         setLat(position.lat);
         setLng(position.lng);
       });
+
+      // Never leave the customer on a blank map. If Mapbox has not completed
+      // its first load quickly, fall back to Leaflet/OpenStreetMap.
+      mapLoadTimer = window.setTimeout(switchToLeafletIfMapboxFails, 6000);
     } catch (error) {
       console.warn('Mapbox initialization failed; using Leaflet fallback.', error);
       createLeafletFallback();
