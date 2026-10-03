@@ -7,6 +7,7 @@ import { SEED_MOCK_ORDERS } from './data';
 import { BlogPost } from './types/blog';
 import { useTranslation } from 'react-i18next';
 import PremiumBrandedLoader from './components/common/PremiumBrandedLoader';
+import MapPickerPage from './components/MapPickerPage';
 
 // Static / High Priority Core Viewport Imports (for zero-shift, immediate initial paint)
 import Navbar from './components/Navbar';
@@ -113,7 +114,6 @@ const DataDeletion = lazyWithRetry(() => import('./components/DataDeletion'));
 const NotFound = lazyWithRetry(() => import('./components/NotFound'));
 const TrackOrder = lazyWithRetry(() => import('./components/TrackOrder'));
 const PaymentSimulation = lazyWithRetry(() => import('./components/PaymentSimulation'));
-const MapPickerPage = lazyWithRetry(() => import('./components/MapPickerPage'));
 
 // Premium, On-Brand Suspense Loader
 const PremiumLoader = ({ message, fullScreen, inline }: { message?: string; fullScreen?: boolean; inline?: boolean }) => (
