@@ -141,6 +141,36 @@ app.use(xssSanitizerMiddleware);
 // Validate requests to prevent Cross-Site Request Forgery (CSRF)
 app.use(csrfProtectionMiddleware);
 
+// WhatsApp Cloud API webhook verification/receiver.
+// Kept before the global /api rate limiter so Meta webhook delivery is not
+// throttled by application-user rate limiting.
+app.get('/api/webhooks/whatsapp', (req, res) => {
+  const mode = String(req.query['hub.mode'] || '');
+  const token = String(req.query['hub.verify_token'] || '');
+  const challenge = String(req.query['hub.challenge'] || '');
+  const expectedToken = String(process.env.WHATSAPP_VERIFY_TOKEN || '');
+
+  if (!expectedToken) {
+    return res.status(503).json({ error: 'WhatsApp webhook verification is not configured.' });
+  }
+
+  const tokenMatches = Buffer.byteLength(token) === Buffer.byteLength(expectedToken)
+    && timingSafeEqual(Buffer.from(token), Buffer.from(expectedToken));
+
+  if (mode !== 'subscribe' || !challenge || !tokenMatches) {
+    return res.status(403).json({ error: 'WhatsApp webhook verification failed.' });
+  }
+
+  return res.status(200).send(challenge);
+});
+
+app.post('/api/webhooks/whatsapp', (req, res) => {
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ error: 'Invalid WhatsApp webhook payload.' });
+  }
+  return res.status(200).json({ received: true });
+});
+
 // Establish rate-limiting on API endpoints to prevent brute-forcing and DoS
 app.use('/api', rateLimiterMiddleware(120, 15 * 60 * 1000)); // Max 120 requests per 15 mins
 
